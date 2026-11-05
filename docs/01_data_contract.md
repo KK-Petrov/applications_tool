@@ -23,8 +23,14 @@ All user data lives in one folder, `data_dir`, set in `config/project.yaml` → 
 ```
 - IDs are lowercase slugs `[a-z0-9-]{2,60}`, unique within their folder, never reused after deletion.
 - All YAML is read and written with ruamel.yaml round-trip mode so the user's comments and key order survive.
+  Files are block style (no `{…}`/`[…]` flow collections except empty ones), scalars are never wrapped and a
+  file keeps its LF or CRLF line endings; a file still in flow style is converted once on its first save
+  (DECISIONS #16, #19). The examples below use flow style only for brevity. Limitation (ruamel): a comment
+  written *inside* a multi-line flow collection is lost when that file is converted; comments elsewhere survive.
 - Writes are atomic: write `<file>.tmp`, then `os.replace`. A failed validation never overwrites a file.
 - Dates are ISO `YYYY-MM-DD`; local date-times are `YYYY-MM-DDTHH:MM` **without** offset, always paired with an IANA zone field.
+- Stored timestamps (when something happened: `generated_at`, `saved_at`, `synced_at`, `evaluated_at`) are
+  ISO 8601 **with** their UTC offset, e.g. `2026-11-04T14:05:00-05:00`; a value without an offset is invalid (DECISIONS #18).
 
 ## 2. settings.yaml
 | Field | Type | Notes |
@@ -96,7 +102,7 @@ letters:                          # key = programme_id; absent key = not asked f
   princeton-mfin: {status: draft_ready, requested_on: null, confirmed_on: null,
                    submitted_on: null, thanked_on: null, last_contact: null}
 emails:                           # generated drafts, newest last
-  - {generated_at: 2026-10-31T10:12, programmes: [princeton-mfin], subject: "...", body: "...",
+  - {generated_at: 2026-10-31T10:12:00-04:00, programmes: [princeton-mfin], subject: "...", body: "...",
      marked_sent_on: null}
 notes: null
 ```

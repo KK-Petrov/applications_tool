@@ -13,9 +13,19 @@ term: Fall 2025
 interaction: Asked questions after every lecture
 tone: formal
 letters:
-  princeton-mfin: {status: draft_ready, requested_on: null, confirmed_on: null,
-                   submitted_on: null, thanked_on: null, last_contact: null}
-  booth-mif: {status: requested, requested_on: 2026-11-02, confirmed_on: null,
-              submitted_on: null, thanked_on: null, last_contact: 2026-11-02}
+  princeton-mfin:
+    status: draft_ready
+    requested_on: null
+    confirmed_on: null
+    submitted_on: null
+    thanked_on: null
+    last_contact: null
+  booth-mif:
+    status: requested
+    requested_on: 2026-11-02
+    confirmed_on: null
+    submitted_on: null
+    thanked_on: null
+    last_contact: 2026-11-02
 emails: []
 notes: null

@@ -6,13 +6,12 @@ Python (rule 13) and stored under ``exact_checks``. Written from Phase 4b.
 
 from __future__ import annotations
 
-from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
 from pydantic import ConfigDict, Field, field_validator
 
-from hub.models.common import DataModel
+from hub.models.common import AwareTimestamp, DataModel
 
 
 class CriterionName(StrEnum):
@@ -58,7 +57,7 @@ class Evaluation(DataModel):
     unused_biography: list[UnusedBiography] = Field(default_factory=list)
     summary: str = Field(max_length=500)
     exact_checks: ExactChecks
-    evaluated_at: datetime
+    evaluated_at: AwareTimestamp
 
     @field_validator("criteria")
     @classmethod

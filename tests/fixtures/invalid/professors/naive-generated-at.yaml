@@ -1,0 +1,16 @@
+# Invalid: a stored timestamp without its UTC offset (DECISIONS #18)
+id: naive-generated-at
+name: Prof. Invented Person
+email: i.person@example.org
+university: RSM
+course: Invented course
+course_description: Invented.
+tone: formal
+letters: {}
+emails:
+  - generated_at: 2026-10-31T10:12
+    programmes:
+      - princeton-mfin
+    subject: Invented subject
+    body: Invented body.
+    marked_sent_on: null

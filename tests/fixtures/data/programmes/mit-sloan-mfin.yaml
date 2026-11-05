@@ -4,7 +4,10 @@ name: MIT Sloan Master of Finance
 short_name: MIT Sloan MFin
 school: Massachusetts Institute of Technology
 unit: MIT Sloan School of Management
-aliases: [MIT, Sloan, MIT Sloan]
+aliases:
+  - MIT
+  - Sloan
+  - MIT Sloan
 status: not_started
 verification: unverified
 verification_note: Researched, not checked
@@ -25,27 +28,91 @@ deadlines:
 letters_required: null
 letters_note: "[number of letters to verify]"
 requirements:
-  - {id: application, label: Online application, note: null, done: false}
-  - {id: cv, label: Resume, note: null, done: false}
-  - {id: essay, label: Essay question, note: null, done: false}
-  - {id: short-essay, label: Short essay question, note: null, done: false}
-  - {id: gmat, label: GMAT score (select the Focus Edition in the application), note: null, done: false}
-  - {id: letters, label: Letters of recommendation, note: "[verify]", done: false}
-  - {id: fee, label: "Application fee $150", note: null, done: false}
+  - id: application
+    label: Online application
+    note: null
+    done: false
+  - id: cv
+    label: Resume
+    note: null
+    done: false
+  - id: essay
+    label: Essay question
+    note: null
+    done: false
+  - id: short-essay
+    label: Short essay question
+    note: null
+    done: false
+  - id: gmat
+    label: GMAT score (select the Focus Edition in the application)
+    note: null
+    done: false
+  - id: letters
+    label: Letters of recommendation
+    note: "[verify]"
+    done: false
+  - id: fee
+    label: "Application fee $150"
+    note: null
+    done: false
 steps:
-  - {order: 1, label: Create an account on the MIT Sloan application portal, note: null, done: false}
-  - {order: 2, label: Register recommenders, note: null, done: false}
-  - {order: 3, label: Upload resume and transcripts; share GMAT score with MIT Sloan, note: null, done: false}
-  - {order: 4, label: Finalise and evaluate both essays, note: null, done: false}
-  - {order: 5, label: "Pay fee and submit by 5 Jan 2027", note: null, done: false}
+  - order: 1
+    label: Create an account on the MIT Sloan application portal
+    note: null
+    done: false
+  - order: 2
+    label: Register recommenders
+    note: null
+    done: false
+  - order: 3
+    label: Upload resume and transcripts; share GMAT score with MIT Sloan
+    note: null
+    done: false
+  - order: 4
+    label: Finalise and evaluate both essays
+    note: null
+    done: false
+  - order: 5
+    label: "Pay fee and submit by 5 Jan 2027"
+    note: null
+    done: false
 documents:
-  - {id: gmat, label: GMAT score report, method: GMAC → MIT Sloan, status: not_requested, updated: null, note: null}
-  - {id: transcript-rsm, label: "Transcript, RSM", method: "Upload [verify]", status: not_requested, updated: null, note: null}
-  - {id: transcript-uva, label: "Transcript, UVA exchange", method: "Upload [verify]", status: not_requested, updated: null, note: null}
+  - id: gmat
+    label: GMAT score report
+    method: GMAC → MIT Sloan
+    status: not_requested
+    updated: null
+    note: null
+  - id: transcript-rsm
+    label: "Transcript, RSM"
+    method: "Upload [verify]"
+    status: not_requested
+    updated: null
+    note: null
+  - id: transcript-uva
+    label: "Transcript, UVA exchange"
+    method: "Upload [verify]"
+    status: not_requested
+    updated: null
+    note: null
 interviews: []
 essays:
-  - {id: essay, title: Essay question, prompt: "[prompt to verify]", word_limit: null}
-  - {id: short-essay, title: Short essay question, prompt: "[prompt to verify]", word_limit: null}
-curriculum: {summary: "12- to 18-month STEM-designated programme. [Course list: run research]", courses: []}
-ai_policy: {text: null, source_url: null}
-fee: {amount: 150, currency: USD, note: null}
+  - id: essay
+    title: Essay question
+    prompt: "[prompt to verify]"
+    word_limit: null
+  - id: short-essay
+    title: Short essay question
+    prompt: "[prompt to verify]"
+    word_limit: null
+curriculum:
+  summary: "12- to 18-month STEM-designated programme. [Course list: run research]"
+  courses: []
+ai_policy:
+  text: null
+  source_url: null
+fee:
+  amount: 150
+  currency: USD
+  note: null

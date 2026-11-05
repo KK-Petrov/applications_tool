@@ -126,13 +126,10 @@ def _plain(value: Any) -> Any:
     return value
 
 
-def _to_yaml(value: Any, flow: bool = False) -> Any:
-    """Plain value → ruamel node; multi-line text becomes a literal block so it stays readable."""
+def _to_yaml(value: Any) -> Any:
+    """Plain value → ruamel node (block style); multi-line text becomes a literal block."""
     if isinstance(value, dict):
-        node = CommentedMap((k, _to_yaml(v)) for k, v in value.items())
-        if flow:
-            node.fa.set_flow_style()
-        return node
+        return CommentedMap((k, _to_yaml(v)) for k, v in value.items())
     if isinstance(value, list):
         return CommentedSeq(_to_yaml(v) for v in value)
     if isinstance(value, str):
@@ -150,13 +147,23 @@ def _same(current: Any, new: Any) -> bool:
         return type(current) is type(new) and current == new
     if isinstance(current, datetime) is not isinstance(new, datetime):
         return False
+    if isinstance(current, datetime):  # same instant written with another offset is still a change
+        return current == new and current.utcoffset() == new.utcoffset()
     if isinstance(current, date) is not isinstance(new, date):
         return False
     return current == new
 
 
-def _is_flow(node: Any) -> bool:
-    return isinstance(node, CommentedMap | CommentedSeq) and bool(node.fa.flow_style())
+def to_block_style(node: Any) -> None:
+    """Turn every collection in a ruamel tree into block style, in place (DECISIONS #19).
+
+    ruamel cannot keep the layout of multi-line flow mappings, but block style round-trips line for
+    line, so a one-field change stays a one-line diff. Empty collections are still written ``[]``/``{}``.
+    """
+    if isinstance(node, CommentedMap | CommentedSeq):
+        node.fa.set_block_style()
+        for child in node.values() if isinstance(node, CommentedMap) else node:
+            to_block_style(child)
 
 
 def _merge_map(target: CommentedMap, source: dict[str, Any]) -> bool:
@@ -176,7 +183,7 @@ def _merge_map(target: CommentedMap, source: dict[str, Any]) -> bool:
         elif isinstance(current, CommentedSeq) and isinstance(value, list):
             changed |= _merge_seq(current, value)
         elif not _same(current, value):
-            target[key] = _to_yaml(value, flow=_is_flow(current))
+            target[key] = _to_yaml(value)
             changed = True
     return changed
 
@@ -187,7 +194,6 @@ def _item_id(item: Any) -> Any:
 
 def _merge_seq(target: CommentedSeq, source: list[Any]) -> bool:
     """Make ``target`` equal ``source``. Items with an ``id`` are matched by id, others by position."""
-    flow_items = any(_is_flow(item) for item in target)
     keyed = all(_item_id(i) is not None for i in [*target, *source]) and bool(target) and bool(source)
     changed = False
     if keyed:
@@ -200,7 +206,7 @@ def _merge_seq(target: CommentedSeq, source: list[Any]) -> bool:
         for item in source:
             node = existing.get(_item_id(item))
             if node is None:
-                target.append(_to_yaml(item, flow=flow_items))
+                target.append(_to_yaml(item))
                 changed = True
             else:
                 changed |= _merge_map(node, item)
@@ -216,7 +222,7 @@ def _merge_seq(target: CommentedSeq, source: list[Any]) -> bool:
         changed = True
     for index, item in enumerate(source):
         if index >= len(target):
-            target.append(_to_yaml(item, flow=flow_items))
+            target.append(_to_yaml(item))
             changed = True
             continue
         current = target[index]
@@ -225,7 +231,7 @@ def _merge_seq(target: CommentedSeq, source: list[Any]) -> bool:
         elif isinstance(current, CommentedSeq) and isinstance(item, list):
             changed |= _merge_seq(current, item)
         elif not _same(current, item):
-            target[index] = _to_yaml(item, flow=_is_flow(current))
+            target[index] = _to_yaml(item)
             changed = True
     return changed
 
@@ -234,12 +240,24 @@ def _yaml() -> YAML:
     """A round-trip YAML instance matching the layout of the seed files."""
     yaml = YAML()
     yaml.preserve_quotes = True
-    yaml.width = 4096  # never re-wrap long lines
+    yaml.width = NO_WRAP  # never wrap a scalar, however long
     yaml.indent(mapping=2, sequence=4, offset=2)
+    yaml.default_flow_style = False  # new nodes are block style (DECISIONS #19)
     yaml.representer.add_representer(  # write "null" explicitly, as the seed files do
         type(None), lambda rep, _: rep.represent_scalar("tag:yaml.org,2002:null", "null")
     )
+    yaml.representer.add_representer(datetime, _represent_timestamp)
     return yaml
+
+
+NO_WRAP = 2**30
+
+
+def _represent_timestamp(representer: Any, value: datetime) -> Any:
+    """Stored timestamps as unquoted ISO 8601 with ``T`` and the UTC offset (DECISIONS #18)."""
+    if value.tzinfo is None:
+        raise ValueError("stored timestamps must carry a UTC offset")
+    return representer.represent_scalar("tag:yaml.org,2002:timestamp", value.isoformat())
 
 
 class Store:
@@ -296,11 +314,13 @@ class Store:
         rel = self._rel(path)
         data = _plain(_dump(model))
         tree = self._read_tree(path) if path.exists() else None
+        crlf = path.exists() and b"\r\n" in path.read_bytes()  # keep the file's own line endings
         if tree is None:
             tree = _to_yaml(data)
             changed = True
         else:
             changed = _merge_map(tree, data)
+        to_block_style(tree)  # a file still in flow style is reformatted once, on its first real save
         self._validate(rel, type(model), tree)  # a failed validation never overwrites a file
         if not changed:
             return False
@@ -312,6 +332,8 @@ class Store:
         except YAMLError as exc:
             raise DataError(rel, None, f"could not be saved safely; nothing was written ({exc})") from None
         self._validate(rel, type(model), reparsed)
+        if crlf:
+            text = text.replace("\n", "\r\n")
         self.write_bytes_atomic(path, text.encode("utf-8"))
         log.info("saved %s", rel)
         return True

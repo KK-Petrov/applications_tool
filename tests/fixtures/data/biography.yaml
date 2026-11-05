@@ -4,7 +4,8 @@ entries:
     category: test
     title: Invented test score 700
     detail: Invented detail
-    tags: [quantitative]
+    tags:
+      - quantitative
     state: actual
     dates: null
   - id: cum-laude

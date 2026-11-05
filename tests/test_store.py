@@ -47,7 +47,8 @@ def test_dropped_list_item_is_gone_after_save(data_dir: Path, config) -> None:
     reloaded = store.load_programme(path)
     assert [r.id for r in reloaded.requirements] == [i for i in before_ids if i != "gmat"]
     text = path.read_text(encoding="utf-8")
-    assert "GMAT score report, note" not in text  # the dropped requirement's line
+    requirements_block = text[text.index("requirements:") : text.index("steps:")]
+    assert "id: gmat" not in requirements_block  # the dropped requirement (block style, DECISIONS #19)
     assert text.startswith("# Seed data researched 30 Oct 2026.")
 
 

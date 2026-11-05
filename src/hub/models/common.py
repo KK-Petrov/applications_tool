@@ -4,6 +4,8 @@
 - ``LocalDateTime``: a wall-clock time ``YYYY-MM-DDTHH:MM`` with **no** offset; it is always paired with
   an IANA zone field next to it, and is written back in exactly that form.
 - ``IanaZone``: a zone name ``zoneinfo`` knows (e.g. ``America/New_York``).
+- ``AwareTimestamp``: when something happened (saved, generated, synced, evaluated), stored as ISO 8601
+  with its UTC offset, e.g. ``2026-11-04T14:05:00-05:00`` (DECISIONS #18).
 """
 
 from __future__ import annotations
@@ -16,6 +18,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import (
     AfterValidator,
+    AwareDatetime,
     BaseModel,
     BeforeValidator,
     ConfigDict,
@@ -65,6 +68,19 @@ LocalDateTime = Annotated[
     PlainSerializer(lambda v: v.strftime(LOCAL_DATETIME_FORMAT), return_type=str),
 ]
 IanaZone = Annotated[str, AfterValidator(_check_zone)]
+
+
+def _plain_datetime(value: datetime) -> datetime:
+    """Rebuild as a plain ``datetime``: ruamel's ``TimeStamp`` subclass loses its zone on deepcopy and is
+    written in its own format, so it must never live inside a model."""
+    return datetime(
+        value.year, value.month, value.day, value.hour, value.minute, value.second, value.microsecond,
+        tzinfo=value.tzinfo, fold=value.fold,
+    )  # fmt: skip
+
+
+# A stored instant: ISO 8601 with its UTC offset; naive values are rejected.
+AwareTimestamp = Annotated[AwareDatetime, AfterValidator(_plain_datetime)]
 Email = Annotated[str, AfterValidator(_check_email)]
 Url = Annotated[str, StringConstraints(pattern=r"^https?://\S+$")]
 

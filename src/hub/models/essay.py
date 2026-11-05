@@ -5,19 +5,18 @@ docs/01 §6–7. Folder loaders arrive in Phase 4a; the models are fixed now so 
 
 from __future__ import annotations
 
-from datetime import datetime
 from enum import StrEnum
 
 from pydantic import Field, ValidationInfo, field_validator
 
-from hub.models.common import DataModel, Slug, unique_ids
+from hub.models.common import AwareTimestamp, DataModel, Slug, unique_ids
 
 
 class Version(DataModel):
     """One immutable saved draft ``v<n>.md``."""
 
     n: int = Field(ge=1)
-    saved_at: datetime
+    saved_at: AwareTimestamp
     words: int = Field(ge=0)
 
 

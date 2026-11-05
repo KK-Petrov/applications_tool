@@ -4,7 +4,10 @@ name: Princeton Master in Finance
 short_name: Princeton MFin
 school: Princeton University
 unit: Bendheim Center for Finance
-aliases: [Princeton, Bendheim, BCF]
+aliases:
+  - Princeton
+  - Bendheim
+  - BCF
 status: not_started
 verification: unverified
 verification_note: Last cycle's date
@@ -28,36 +31,121 @@ deadlines:
 letters_required: 3
 letters_note: Without full-time work experience, two letters must be academic
 requirements:
-  - {id: application, label: "Online application, Princeton Graduate School", note: null, done: false}
-  - {id: cv, label: Resume / CV, note: null, done: false}
-  - {id: transcripts, label: Transcripts, note: null, done: false}
-  - {id: letters, label: Three letters of recommendation, note: Two academic without full-time work experience, done: false}
-  - {id: gmat, label: GMAT score report, note: "[verify whether optional this cycle]", done: false}
-  - {id: academic-purpose, label: Statement of academic purpose, note: null, done: false}
-  - {id: contribution, label: Statement on contributing to Princeton's scholarly community, note: null, done: false}
-  - {id: english, label: English-language test or waiver, note: "[verify]", done: false}
-  - {id: fee, label: Application fee, note: "[amount to verify]", done: false}
+  - id: application
+    label: "Online application, Princeton Graduate School"
+    note: null
+    done: false
+  - id: cv
+    label: Resume / CV
+    note: null
+    done: false
+  - id: transcripts
+    label: Transcripts
+    note: null
+    done: false
+  - id: letters
+    label: Three letters of recommendation
+    note: Two academic without full-time work experience
+    done: false
+  - id: gmat
+    label: GMAT score report
+    note: "[verify whether optional this cycle]"
+    done: false
+  - id: academic-purpose
+    label: Statement of academic purpose
+    note: null
+    done: false
+  - id: contribution
+    label: Statement on contributing to Princeton's scholarly community
+    note: null
+    done: false
+  - id: english
+    label: English-language test or waiver
+    note: "[verify]"
+    done: false
+  - id: fee
+    label: Application fee
+    note: "[amount to verify]"
+    done: false
 steps:
-  - {order: 1, label: Create an account on the Graduate School portal, note: null, done: false}
-  - {order: 2, label: Register recommenders early, note: Princeton calls the deadline strict, done: false}
-  - {order: 3, label: Upload CV and transcripts; report GMAT, note: null, done: false}
-  - {order: 4, label: Finalise and evaluate both statements, note: null, done: false}
-  - {order: 5, label: "Pay fee and submit by 15 Dec, 11:59 pm ET", note: null, done: false}
-  - {order: 6, label: Math assessment test, note: "Last cycle: first Saturday after the deadline", done: false}
-  - {order: 7, label: Decision; reply by 15 April, note: null, done: false}
+  - order: 1
+    label: Create an account on the Graduate School portal
+    note: null
+    done: false
+  - order: 2
+    label: Register recommenders early
+    note: Princeton calls the deadline strict
+    done: false
+  - order: 3
+    label: Upload CV and transcripts; report GMAT
+    note: null
+    done: false
+  - order: 4
+    label: Finalise and evaluate both statements
+    note: null
+    done: false
+  - order: 5
+    label: "Pay fee and submit by 15 Dec, 11:59 pm ET"
+    note: null
+    done: false
+  - order: 6
+    label: Math assessment test
+    note: "Last cycle: first Saturday after the deadline"
+    done: false
+  - order: 7
+    label: Decision; reply by 15 April
+    note: null
+    done: false
 documents:
-  - {id: gmat, label: GMAT official score report, method: GMAC → Princeton, status: not_requested, updated: null, note: null}
-  - {id: transcript-rsm, label: "Transcript, RSM", method: "Upload [verify]", status: not_requested, updated: null, note: null}
-  - {id: transcript-uva, label: "Transcript, UVA exchange", method: "Upload [verify]", status: not_requested, updated: null, note: null}
-  - {id: english, label: English test or waiver, method: "Waiver request [verify]", status: not_requested, updated: null, note: null}
+  - id: gmat
+    label: GMAT official score report
+    method: GMAC → Princeton
+    status: not_requested
+    updated: null
+    note: null
+  - id: transcript-rsm
+    label: "Transcript, RSM"
+    method: "Upload [verify]"
+    status: not_requested
+    updated: null
+    note: null
+  - id: transcript-uva
+    label: "Transcript, UVA exchange"
+    method: "Upload [verify]"
+    status: not_requested
+    updated: null
+    note: null
+  - id: english
+    label: English test or waiver
+    method: "Waiver request [verify]"
+    status: not_requested
+    updated: null
+    note: null
 interviews:
-  - {id: math-test, kind: assessment, label: Math assessment test, start_local: 2026-12-19T10:00,
-     tz: America/New_York, estimated: true, status: scheduled, notes: "Date and time estimated from last cycle's pattern"}
+  - id: math-test
+    kind: assessment
+    label: Math assessment test
+    start_local: 2026-12-19T10:00
+    tz: America/New_York
+    estimated: true
+    status: scheduled
+    notes: "Date and time estimated from last cycle's pattern"
 essays:
-  - {id: academic-purpose, title: Statement of academic purpose, prompt: "[prompt to verify]", word_limit: null}
-  - {id: contribution, title: Contribution statement, prompt: "[prompt to verify]", word_limit: null}
+  - id: academic-purpose
+    title: Statement of academic purpose
+    prompt: "[prompt to verify]"
+    word_limit: null
+  - id: contribution
+    title: Contribution statement
+    prompt: "[prompt to verify]"
+    word_limit: null
 curriculum:
   summary: Emphasis on financial economics, data analysis and technology; electives available from Princeton ORFE; four semesters.
   courses: []
-ai_policy: {text: null, source_url: null}
-fee: {amount: null, currency: USD, note: "[amount to verify]"}
+ai_policy:
+  text: null
+  source_url: null
+fee:
+  amount: null
+  currency: USD
+  note: "[amount to verify]"

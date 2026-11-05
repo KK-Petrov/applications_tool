@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 
 from pydantic import RootModel
 
-from hub.models.common import DataModel
+from hub.models.common import AwareTimestamp, DataModel
 
 
 class CalendarMapEntry(DataModel):
     event_id: str
     hash: str  # sha256 of the event body
-    synced_at: datetime
+    synced_at: AwareTimestamp
 
 
 class CalendarMap(RootModel[dict[str, CalendarMapEntry]]):

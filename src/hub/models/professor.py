@@ -7,7 +7,7 @@ from enum import StrEnum
 
 from pydantic import Field
 
-from hub.models.common import DataModel, Email, LocalDateTime, Slug
+from hub.models.common import AwareTimestamp, DataModel, Email, Slug
 
 COURSE_DESCRIPTION_MAX_CHARS = 20_000  # docs/01 §4
 
@@ -40,7 +40,7 @@ class Letter(DataModel):
 class GeneratedEmail(DataModel):
     """A request-email draft. Copy-paste only: the app never sends it (rule 9)."""
 
-    generated_at: LocalDateTime
+    generated_at: AwareTimestamp
     programmes: list[Slug]
     subject: str
     body: str
