@@ -29,6 +29,7 @@ If code and spec disagree, stop and ask.
 - Layout: `src/hub/` (package: `app.py`, `models/`, `store.py`, `rules/`, `ai/`, `google/`, `cli.py`, `templates/`, `static/`),
   `tests/` (`fixtures/`, `fakes/`, `e2e/`, `evals/`), `.claude/skills/` (the AI skills), `seed/`, `config/`, `docs/`.
 - Generated output goes to `reports/` (gitignored). Secrets and OAuth tokens go to `.secrets/` (gitignored).
+- Data folder: `storage.data_dir` in `config/project.yaml`; the env var `HUB_DATA_DIR` overrides it (tests always set it to a temp folder; handy for a scratch copy). There is no `.env.example` (DECISIONS #17).
 
 ## Commands (tasks.py is the single entry point: `uv run python tasks.py <target>`)
 `dev` (app at http://127.0.0.1:8765) · `init-data` · `test-fast` (< 60 s, no e2e, no live) · `test` (all but live) ·

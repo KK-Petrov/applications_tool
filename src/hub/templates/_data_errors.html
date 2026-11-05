@@ -1,0 +1,11 @@
+{% if data_errors %}
+<div class="banner" role="alert">
+  <h2>{{ data_errors | length }} data file{{ "s" if data_errors | length != 1 }} could not be loaded</h2>
+  <ul>
+    {% for err in data_errors %}
+    <li><code>{{ err.path }}</code>{% if err.field %} → <code>{{ err.field }}</code>{% endif %}: {{ err.message }}</li>
+    {% endfor %}
+  </ul>
+  <p>Other files loaded normally. Fix the file named above and reload the page.</p>
+</div>
+{% endif %}

@@ -1,0 +1,33 @@
+# Invalid: unknown key inside a deadline
+id: unknown-key
+name: Example Master in Finance
+short_name: Example MFin
+school: Example University
+unit: Example School
+aliases: [Example]
+status: not_started
+verification: unverified
+verification_note: Invented fixture
+verified_on: null
+portal_url: null
+sources:
+  - {url: https://www.example.com/apply, title: Example apply page, checked: 2026-10-30}
+deadlines:
+  - id: main
+    label: Application deadline
+    due_local: 2026-12-15T23:59
+    tz: America/New_York
+    time_known: true
+    timezone_name: Eastern
+    verification: unverified
+    source_url: https://www.example.com/apply
+letters_required: 2
+letters_note: null
+requirements: []
+steps: []
+documents: []
+interviews: []
+essays: []
+curriculum: {summary: null, courses: []}
+ai_policy: {text: null, source_url: null}
+fee: {amount: null, currency: USD, note: null}

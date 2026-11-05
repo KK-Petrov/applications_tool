@@ -1,0 +1,16 @@
+# Test fixture: invented biography entries.
+entries:
+  - id: test-score
+    category: test
+    title: Invented test score 700
+    detail: Invented detail
+    tags: [quantitative]
+    state: actual
+    dates: null
+  - id: cum-laude
+    category: honour
+    title: Cum laude (expected)
+    detail: null
+    tags: []
+    state: anticipated
+    dates: Jun 2027

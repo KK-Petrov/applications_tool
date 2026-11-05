@@ -1,0 +1,11 @@
+# Invalid: letter status is not in the enum
+id: bad-letter-status
+name: Prof. Invented Person
+email: i.person@example.org
+university: RSM
+course: Invented course
+course_description: Invented.
+tone: formal
+letters:
+  princeton-mfin: {status: maybe}
+emails: []

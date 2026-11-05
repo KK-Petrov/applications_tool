@@ -1,0 +1,12 @@
+<div class="header-row">
+  <p class="today mono">{{ today_label }}</p>
+  {# Placeholder: the selector is wired to POST /display-tz in Phase 1 (US-2). #}
+  <form class="zone-form" method="post" action="/display-tz">
+    <label for="display-tz">Times in:</label>
+    <select id="display-tz" name="display_tz">
+      {% for zone in display_zones %}
+      <option value="{{ zone.tz }}"{% if zone.tz == display_tz %} selected{% endif %}>{{ zone.label }}</option>
+      {% endfor %}
+    </select>
+  </form>
+</div>

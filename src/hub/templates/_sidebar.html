@@ -1,0 +1,14 @@
+<aside class="sidebar">
+  <p class="brand">Application Hub</p>
+  <nav aria-label="Main">
+    <ul>
+      {% for item in nav %}
+      <li><a href="{{ item.href }}"{% if item.key == page.key %} aria-current="page"{% endif %}>{{ item.label }}</a></li>
+      {% endfor %}
+    </ul>
+  </nav>
+  <div class="sidebar-footer">
+    <p>Reminders sync to Google Calendar “{{ calendar_name }}” · Daily digest at first login</p>
+    <p>Last sync: <span class="mono">{{ last_sync }}</span></p>
+  </div>
+</aside>

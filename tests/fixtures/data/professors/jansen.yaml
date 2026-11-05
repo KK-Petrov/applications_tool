@@ -1,0 +1,21 @@
+# Test fixture: invented professor.
+id: jansen
+name: Prof. Dr. Eva Jansen
+surname: Jansen
+email: e.jansen@example.org
+university: RSM
+course: Corporate Finance (FIN-101)
+course_description: |
+  An invented course description used only in tests.
+  It spans two lines on purpose.
+grade: "8.5 / 10"
+term: Fall 2025
+interaction: Asked questions after every lecture
+tone: formal
+letters:
+  princeton-mfin: {status: draft_ready, requested_on: null, confirmed_on: null,
+                   submitted_on: null, thanked_on: null, last_contact: null}
+  booth-mif: {status: requested, requested_on: 2026-11-02, confirmed_on: null,
+              submitted_on: null, thanked_on: null, last_contact: 2026-11-02}
+emails: []
+notes: null

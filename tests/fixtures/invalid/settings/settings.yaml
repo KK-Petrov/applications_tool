@@ -1,0 +1,7 @@
+# Invalid: owner_email is not an email address
+owner_name: Alex Example
+owner_email: not-an-email
+display_tz: America/New_York
+reminder_tz: America/New_York
+calendar_id: null
+google_connected: false

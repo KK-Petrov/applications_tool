@@ -5,6 +5,9 @@ storage:
   # source: user decision (30 Oct 2026). Set by the user after cloning; tests override it.
   data_dir: "C:/Users/kaloy/OneDrive/Documents/Application information"
   log_max_bytes: 1000000          # rotating log size; source: recommended
+  log_backup_count: 2             # rotated log files kept; source: recommended (DECISIONS #11)
+  write_retries: 3                # atomic-replace attempts when OneDrive briefly locks a file; source: recommended (DECISIONS #11)
+  write_retry_delay_s: 0.2        # wait between attempts, multiplied by the attempt number
 
 app:
   host: 127.0.0.1                 # local only; source: recommended

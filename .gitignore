@@ -13,8 +13,9 @@ dist/
 .claude/.skip-stop-tests
 .claude/settings.local.json
 data/
+# Test fixtures use invented people only and must be committed (DECISIONS #9)
+!tests/fixtures/data/
 .secrets/
 reports/
 playwright-report/
 test-results/
-.venv/

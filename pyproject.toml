@@ -1,0 +1,63 @@
+[project]
+name = "application-hub"
+version = "0.1.0"
+description = "Local web app that tracks US quantitative finance master's applications."
+readme = "START_HERE.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn>=0.32",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.12",
+    "pydantic>=2.9",
+    "ruamel.yaml>=0.18",
+    "tzdata>=2024.2",
+    "jsonschema>=4.23",
+    "google-api-python-client>=2.150",
+    "google-auth-oauthlib>=1.2",
+    "typer>=0.12",
+]
+
+[project.scripts]
+hub = "hub.cli:app"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-playwright>=0.5",
+    "axe-playwright-python>=0.1.4",
+    "ruff>=0.7",
+    "httpx>=0.27",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hub"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "e2e: end-to-end browser tests (Playwright); excluded from test-fast",
+    "live: real Google or Claude calls; never run in test-fast or test",
+]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+src = ["src", "tests"]
+# Kit files (hooks, specs, prompts) are not project code; keep them as delivered.
+extend-exclude = [".claude", "docs", "prompts", "supervisor"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["hub"]
+known-local-folder = ["paths"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B011"]

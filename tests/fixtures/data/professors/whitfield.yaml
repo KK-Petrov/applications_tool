@@ -1,0 +1,16 @@
+# Test fixture: invented professor with no surname override.
+id: whitfield
+name: Prof. Sam Whitfield
+email: s.whitfield@example.org
+university: UVA McIntire
+course: Derivatives (COMM-4720)
+course_description: Invented one-line description.
+grade: null
+term: null
+interaction: null
+tone: warm
+letters: {}
+emails:
+  - {generated_at: 2026-10-31T10:12, programmes: [princeton-mfin], subject: "Request for a letter of recommendation",
+     body: "Dear Professor Whitfield,\n\nInvented body.\n", marked_sent_on: null}
+notes: Invented note.
