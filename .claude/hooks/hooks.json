@@ -1,0 +1,43 @@
+{
+  "lint": {
+    ".py": [
+      {
+        "cmd": [
+          "ruff",
+          "format",
+          "--quiet",
+          "{file}"
+        ]
+      },
+      {
+        "cmd": [
+          "ruff",
+          "check",
+          "--fix",
+          "--quiet",
+          "{file}"
+        ]
+      }
+    ]
+  },
+  "test_fast": {
+    "command": [
+      "uv",
+      "run",
+      "python",
+      "tasks.py",
+      "test-fast"
+    ],
+    "watch": [
+      "src",
+      "tests"
+    ],
+    "timeout": 120,
+    "requires_file": "tasks.py"
+  },
+  "criteria": {
+    "file": "config/criteria.json",
+    "lock": "config/criteria.lock.json",
+    "decisions": "docs/DECISIONS.md"
+  }
+}

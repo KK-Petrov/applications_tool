@@ -1,0 +1,51 @@
+# Seed data researched 30 Oct 2026 from a third-party site only. Verify everything on Columbia's own pages.
+id: columbia-msfe
+name: Columbia MS in Financial Economics
+short_name: Columbia MSFE
+school: Columbia University
+unit: Columbia Business School
+aliases: [Columbia, Columbia Business School, CBS]
+status: not_started
+verification: unverified
+verification_note: Third-party source
+verified_on: null
+portal_url: null
+sources:
+  - url: https://applybuds.com/program-details/columbia-university-ms-financial-economics
+    title: ApplyBuds, Columbia MS in Financial Economics (third party)
+    checked: 2026-10-30
+deadlines:
+  - id: main
+    label: Application deadline
+    due_local: 2027-01-15T23:59
+    tz: America/New_York
+    time_known: false
+    verification: unverified
+    source_url: https://applybuds.com/program-details/columbia-university-ms-financial-economics
+letters_required: 2
+letters_note: Up to five letters accepted; submitted by recommenders through the online application
+requirements:
+  - {id: application, label: Online application, note: null, done: false}
+  - {id: cv, label: Resume, note: null, done: false}
+  - {id: essays, label: Two essays, note: null, done: false}
+  - {id: letters, label: Two letters of recommendation, note: null, done: false}
+  - {id: gmat, label: GMAT score report (official vs unofficial to verify), note: null, done: false}
+  - {id: transcripts, label: Unofficial transcripts for review, note: null, done: false}
+  - {id: fee, label: Application fee, note: "[amount to verify]", done: false}
+steps:
+  - {order: 1, label: Create an account on the Columbia MS programs portal, note: null, done: false}
+  - {order: 2, label: Register recommenders, note: null, done: false}
+  - {order: 3, label: Upload resume and transcripts; report GMAT, note: null, done: false}
+  - {order: 4, label: Finalise and evaluate both essays, note: null, done: false}
+  - {order: 5, label: Submit by the deadline, note: "[date to verify]", done: false}
+documents:
+  - {id: gmat, label: GMAT score report, method: "GMAC → Columbia [official or unofficial to verify]", status: not_requested, updated: null, note: null}
+  - {id: transcript-rsm, label: "Transcript, RSM", method: Upload (unofficial for review), status: not_requested, updated: null, note: null}
+  - {id: transcript-uva, label: "Transcript, UVA exchange", method: Upload (unofficial for review), status: not_requested, updated: null, note: null}
+interviews: []
+essays:
+  - {id: essay-1, title: Essay 1, prompt: "[prompt to verify]", word_limit: null}
+  - {id: essay-2, title: Essay 2, prompt: "[prompt to verify]", word_limit: null}
+curriculum: {summary: "Two-year STEM-designated programme at Columbia Business School. [Course list: run research]", courses: []}
+ai_policy: {text: null, source_url: null}
+fee: {amount: null, currency: USD, note: "[amount to verify]"}

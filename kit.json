@@ -1,0 +1,647 @@
+{
+  "project": {
+    "name": "Application Hub",
+    "slug": "application-hub",
+    "one_liner": "A local web app that tracks US master's applications (deadlines, requirements, documents, interviews), manages recommenders in a sheet and drafts request emails, evaluates essays and CVs, and pushes reminders to a Google Calendar that syncs to the iPhone.",
+    "maturity": "prototype",
+    "primary_types": [
+      "Interactive app"
+    ],
+    "secondary_types": [
+      "AI-powered app",
+      "Service and integration"
+    ],
+    "traits": [
+      "external systems",
+      "sensitive data"
+    ]
+  },
+  "environment": {
+    "os": "windows",
+    "editor": "vscode",
+    "languages": [
+      "python"
+    ],
+    "frontend_dir": "."
+  },
+  "prerequisites": [
+    "Claude Code, installed and signed in with your Claude subscription (`claude` works in a terminal)",
+    "Python 3.12 and uv (`uv --version` works)",
+    "Git for Windows",
+    "Python 3 on PATH as `python` (for the hooks)",
+    "A Google account that is also added to the iPhone (Settings → Calendar → Accounts); needed from Phase 3"
+  ],
+  "commands": {
+    "setup": "uv sync && uv run playwright install chromium",
+    "test_fast": [
+      "uv",
+      "run",
+      "python",
+      "tasks.py",
+      "test-fast"
+    ],
+    "test": "uv run python tasks.py test",
+    "validate": "uv run python tasks.py validate"
+  },
+  "test_fast": {
+    "watch": [
+      "src",
+      "tests"
+    ],
+    "timeout": 120,
+    "requires_file": "tasks.py"
+  },
+  "lint": null,
+  "permissions_allow": [
+    "Bash(uv run:*)",
+    "Bash(uv sync:*)",
+    "Bash(uv add:*)",
+    "Bash(python tasks.py:*)"
+  ],
+  "phases": [
+    {
+      "id": "0",
+      "slug": "scaffold",
+      "title": "Scaffold",
+      "builds": "Repo layout, tasks.py, data schemas and loader, seed programmes, app shell with sidebar, test harness",
+      "you_see": "`uv run python tasks.py dev` opens an empty Application Hub with the sidebar",
+      "sessions": "1",
+      "effort": "medium",
+      "reviewers": []
+    },
+    {
+      "id": "1",
+      "slug": "programmes-dashboard",
+      "title": "Programmes and dashboard",
+      "builds": "Dashboard, programme page (requirements, steps, documents, interviews, curriculum), add/edit programme, time zones, verification",
+      "you_see": "Your four programmes with deadlines in ET or Rotterdam time",
+      "sessions": "1–2",
+      "effort": "medium",
+      "reviewers": [
+        "ui-reviewer",
+        "data-integrity-reviewer"
+      ],
+      "first_visual": true
+    },
+    {
+      "id": "2a",
+      "slug": "recommender-sheet",
+      "title": "Recommender sheet",
+      "builds": "Sheet with per-programme status cells, filters, Add professor page, detail panel",
+      "you_see": "All professors at a glance; statuses change with one click",
+      "sessions": "1",
+      "effort": "medium",
+      "reviewers": [
+        "ui-reviewer",
+        "data-integrity-reviewer"
+      ]
+    },
+    {
+      "id": "2b",
+      "slug": "email-generator",
+      "title": "Recommendation email generator",
+      "builds": "Claude Code wrapper, /rec-email skill, email eval set and graders, Generate button",
+      "you_see": "A tailored, formal request email per professor",
+      "sessions": "1–2",
+      "effort": "high",
+      "reviewers": [
+        "ai-output-reviewer"
+      ]
+    },
+    {
+      "id": "3",
+      "slug": "reminders-calendar",
+      "title": "Reminders, calendar and digest",
+      "builds": "Reminder engine, Google Calendar sync, Gmail digest to yourself, Task Scheduler setup",
+      "you_see": "Reminders on your iPhone; a daily digest email",
+      "sessions": "1–2",
+      "effort": "high",
+      "reviewers": [
+        "data-integrity-reviewer"
+      ]
+    },
+    {
+      "id": "4a",
+      "slug": "essays-checks",
+      "title": "Biography bank, essays, CVs and exact checks",
+      "builds": "Biography bank, essay and CV versions, word count, wrong-school check",
+      "you_see": "Drafts stored by version with exact checks",
+      "sessions": "1",
+      "effort": "medium",
+      "reviewers": [
+        "ui-reviewer",
+        "data-integrity-reviewer"
+      ]
+    },
+    {
+      "id": "4b",
+      "slug": "evaluator",
+      "title": "AI essay and CV evaluator",
+      "builds": "/evaluate skill, rubric output, essay eval set, Evaluate button",
+      "you_see": "Rubric feedback on a draft",
+      "sessions": "1–2",
+      "effort": "high",
+      "reviewers": [
+        "ai-output-reviewer"
+      ]
+    },
+    {
+      "id": "5",
+      "slug": "research-polish",
+      "title": "Programme research and polish",
+      "builds": "/research-programme skill, Research button, README, final end-to-end pass",
+      "you_see": "A new programme added in under five minutes",
+      "sessions": "1",
+      "effort": "medium",
+      "reviewers": [
+        "ui-reviewer",
+        "ai-output-reviewer"
+      ]
+    }
+  ],
+  "criteria": [
+    {
+      "id": "C-0-01",
+      "phase": "0",
+      "title": "From a fresh clone on Windows, setup and the full test suite pass",
+      "method": "automated",
+      "gate": true,
+      "verify": "fresh clone, then `uv sync && uv run playwright install chromium && uv run python tasks.py test`",
+      "source": "recommended"
+    },
+    {
+      "id": "C-0-02",
+      "phase": "0",
+      "title": "Fast tests finish quickly",
+      "method": "automated",
+      "gate": true,
+      "metric": "test_fast_seconds",
+      "comparator": "<",
+      "threshold": 60,
+      "unit": "s",
+      "verify": "time `uv run python tasks.py test-fast`",
+      "why": "They run after every Claude turn",
+      "source": "recommended"
+    },
+    {
+      "id": "C-0-03",
+      "phase": "0",
+      "title": "No personal data or secrets in the repository; the data folder and token files are outside Git",
+      "method": "automated",
+      "gate": true,
+      "verify": "`uv run pytest tests/test_privacy.py` (scans tracked files for email addresses other than example.com/example.org, tokens, and data/ paths; checks .gitignore)",
+      "source": "recommended"
+    },
+    {
+      "id": "C-0-04",
+      "phase": "0",
+      "title": "Every seed file validates against the schema; an invalid file produces an error naming the file and field",
+      "method": "automated",
+      "gate": true,
+      "verify": "`uv run pytest tests/test_schema.py`",
+      "source": "recommended"
+    },
+    {
+      "id": "C-1-01",
+      "phase": "1",
+      "title": "No deadline is displayed without its time zone and a source link; unverified data is always visibly marked",
+      "method": "automated",
+      "gate": true,
+      "verify": "`uv run pytest tests/e2e/test_programmes.py -k provenance`",
+      "source": "recommended"
+    },
+    {
+      "id": "C-1-02",
+      "phase": "1",
+      "title": "Time-zone conversion is correct on the 20 reference cases, including daylight-saving changeovers",
+      "method": "automated",
+      "gate": true,
+      "metric": "tz_cases_failed",
+      "comparator": "==",
+      "threshold": 0,
+      "unit": "count",
+      "verify": "`uv run pytest tests/test_timezones.py`",
+      "why": "A deadline shown an hour or a day off is the costliest error the tool can make",
+      "source": "recommended"
+    },
+    {
+      "id": "C-1-03",
+      "phase": "1",
+      "title": "Days-left values match docs/02 §2 on boundary cases",
+      "method": "automated",
+      "gate": true,
+      "verify": "`uv run pytest tests/test_countdown.py`",
+      "source": "recommended"
+    },
+    {
+      "id": "C-1-04",
+      "phase": "1",
+      "title": "Programme user stories pass end to end (US-1 to US-5 in docs/03 §2)",
+      "method": "automated",
+      "gate": true,
+      "verify": "`uv run pytest tests/e2e/test_programmes.py`",
+      "source": "recommended"
+    },
+    {
+      "id": "C-1-05",
+      "phase": "1",
+      "title": "No serious or critical accessibility violations on any page",
+      "method": "automated",
+      "gate": true,
+      "metric": "axe_serious_violations",
+      "comparator": "==",
+      "threshold": 0,
+      "unit": "count",
+      "verify": "`uv run pytest tests/e2e/test_a11y.py`",
+      "why": "WCAG 2.2 AA; keeps the tool usable on a small laptop screen",
+      "source": "recommended"
+    },
+    {
+      "id": "C-1-06",
+      "phase": "1",
+      "title": "Dashboard and programme page match the agreed mockup and read clearly",
+      "method": "human",
+      "gate": true,
+      "verify": "phase 1 prompt, You check",
+      "source": "user"
+    },
+    {
+      "id": "C-2a-01",
+      "phase": "2a",
+      "title": "Recommender user stories pass end to end (US-6 to US-9), including a 3,000-character pasted course description saved verbatim",
+      "method": "automated",
+      "gate": true,
+      "verify": "`uv run pytest tests/e2e/test_recommenders.py`",
+      "source": "recommended"
+    },
+    {
+      "id": "C-2a-02",
+      "phase": "2a",
+      "title": "Letter coverage counts and next actions match docs/02 §4 on the fixture set",
+      "method": "automated",
+      "gate": true,
+      "verify": "`uv run pytest tests/test_letters.py`",
+      "source": "recommended"
+    },
+    {
+      "id": "C-2a-03",
+      "phase": "2a",
+      "title": "The sheet stays fast with many professors",
+      "method": "automated",
+      "gate": true,
+      "metric": "sheet_render_ms_40_professors",
+      "comparator": "<",
+      "threshold": 1000,
+      "unit": "ms",
+      "verify": "`uv run pytest tests/e2e/test_recommenders.py -k performance`",
+      "why": "The user will have many professors; the sheet must stay a quick glance",
+      "source": "recommended"
+    },
+    {
+      "id": "C-2b-01",
+      "phase": "2b",
+      "title": "Every generated email validates against its JSON schema",
+      "method": "automated",
+      "gate": true,
+      "metric": "email_schema_failures",
+      "comparator": "==",
+      "threshold": 0,
+      "unit": "count",
+      "verify": "`uv run python tasks.py eval-email` → reports/eval_email.json: schema_failures",
+      "why": "The app reads the output by machine",
+      "source": "recommended"
+    },
+    {
+      "id": "C-2b-02",
+      "phase": "2b",
+      "title": "Every eval email names the right professor and course, lists each selected programme with its exact stored deadline, and mentions no unselected programme",
+      "method": "automated",
+      "gate": true,
+      "metric": "email_fact_failures",
+      "comparator": "==",
+      "threshold": 0,
+      "unit": "count",
+      "verify": "`uv run python tasks.py eval-email` → reports/eval_email.json: fact_failures",
+      "why": "A wrong deadline or name in a request to a professor is unrecoverable",
+      "source": "recommended"
+    },
+    {
+      "id": "C-2b-03",
+      "phase": "2b",
+      "title": "Eval emails are 180–280 words, open with 'Dear Professor {surname},' and never state an anticipated achievement as achieved",
+      "method": "automated",
+      "gate": true,
+      "metric": "email_form_failures",
+      "comparator": "==",
+      "threshold": 0,
+      "unit": "count",
+      "verify": "`uv run python tasks.py eval-email` → reports/eval_email.json: form_failures",
+      "why": "Formal register and honesty about the anticipated cum laude",
+      "source": "user"
+    },
+    {
+      "id": "C-2b-04",
+      "phase": "2b",
+      "title": "No unsupported claims in eval emails, and the claim grader flags all 3 planted calibration emails",
+      "method": "automated",
+      "gate": true,
+      "metric": "unsupported_claims",
+      "comparator": "==",
+      "threshold": 0,
+      "unit": "count",
+      "verify": "`uv run python tasks.py eval-email` → reports/eval_email.json: unsupported_claims, grader_calibration_passed",
+      "why": "The user requires accuracy over embellishment",
+      "source": "user"
+    },
+    {
+      "id": "C-2b-05",
+      "phase": "2b",
+      "title": "Failure paths (Claude Code missing, timeout, invalid output) show a clear message and write nothing",
+      "method": "automated",
+      "gate": true,
+      "verify": "`uv run pytest tests/test_claude_cli.py`",
+      "source": "recommended"
+    },
+    {
+      "id": "C-2b-06",
+      "phase": "2b",
+      "title": "Five generated emails read as something the user would send",
+      "method": "human",
+      "gate": true,
+      "verify": "phase 2b prompt, You check",
+      "source": "user"
+    },
+    {
+      "id": "C-3-01",
+      "phase": "3",
+      "title": "The reminder engine reproduces the worked example and all 30 rows of the golden reminder table",
+      "method": "automated",
+      "gate": true,
+      "verify": "`uv run pytest tests/test_reminders.py`",
+      "source": "recommended"
+    },
+    {
+      "id": "C-3-02",
+      "phase": "3",
+      "title": "Calendar sync is idempotent: two runs create no duplicates; a changed deadline updates events; resolved reminders are removed (against the fake Google API)",
+      "method": "automated",
+      "gate": true,
+      "verify": "`uv run pytest tests/test_calendar_sync.py`",
+      "source": "recommended"
+    },
+    {
+      "id": "C-3-03",
+      "phase": "3",
+      "title": "The digest matches its golden file and can only be sent to the owner address in settings",
+      "method": "automated",
+      "gate": true,
+      "verify": "`uv run pytest tests/test_digest.py`",
+      "source": "recommended"
+    },
+    {
+      "id": "C-3-04",
+      "phase": "3",
+      "title": "Live smoke test creates, updates and deletes one test event in the Applications calendar",
+      "method": "automated",
+      "gate": true,
+      "verify": "`uv run python tasks.py live -k calendar`",
+      "source": "recommended"
+    },
+    {
+      "id": "C-3-05",
+      "phase": "3",
+      "title": "Reminders appear on the iPhone in Apple Calendar with alerts",
+      "method": "human",
+      "gate": true,
+      "verify": "phase 3 prompt, You check",
+      "source": "user"
+    },
+    {
+      "id": "C-3-06",
+      "phase": "3",
+      "title": "No code path can send email to any address other than the owner's",
+      "method": "automated",
+      "gate": true,
+      "verify": "`uv run pytest tests/test_no_outbound_email.py`",
+      "source": "user"
+    },
+    {
+      "id": "C-4a-01",
+      "phase": "4a",
+      "title": "The wrong-school check catches all 20 planted mentions with no false positives on 10 clean essays",
+      "method": "automated",
+      "gate": true,
+      "metric": "wrong_school_misses_plus_false_positives",
+      "comparator": "==",
+      "threshold": 0,
+      "unit": "count",
+      "verify": "`uv run pytest tests/test_wrong_school.py`",
+      "why": "A competitor's name in an essay is the classic reuse error",
+      "source": "recommended"
+    },
+    {
+      "id": "C-4a-02",
+      "phase": "4a",
+      "title": "Word count matches the rule in docs/02 §7 on all 15 fixtures",
+      "method": "automated",
+      "gate": true,
+      "verify": "`uv run pytest tests/test_word_count.py`",
+      "source": "recommended"
+    },
+    {
+      "id": "C-4a-03",
+      "phase": "4a",
+      "title": "Biography, essay, version and CV user stories pass end to end (US-11 to US-14)",
+      "method": "automated",
+      "gate": true,
+      "verify": "`uv run pytest tests/e2e/test_essays.py tests/e2e/test_biography.py`",
+      "source": "recommended"
+    },
+    {
+      "id": "C-4b-01",
+      "phase": "4b",
+      "title": "Every evaluation validates against its schema and rates all four rubric criteria with a reason",
+      "method": "automated",
+      "gate": true,
+      "metric": "evaluation_schema_failures",
+      "comparator": "==",
+      "threshold": 0,
+      "unit": "count",
+      "verify": "`uv run python tasks.py eval-essay` → reports/eval_essay.json: schema_failures",
+      "why": "The app reads the output by machine",
+      "source": "recommended"
+    },
+    {
+      "id": "C-4b-02",
+      "phase": "4b",
+      "title": "Planted flaws detected in the essay eval set",
+      "method": "automated",
+      "gate": true,
+      "metric": "planted_flaws_detected",
+      "comparator": ">=",
+      "threshold": 8,
+      "unit": "of 10",
+      "verify": "`uv run python tasks.py eval-essay` → reports/eval_essay.json: planted_flaws_detected",
+      "baseline": "the exact checks alone catch only the word-limit and wrong-school flaws (2 of 10)",
+      "why": "Feedback must find real problems, not only restate the draft",
+      "source": "recommended"
+    },
+    {
+      "id": "C-4b-03",
+      "phase": "4b",
+      "title": "The evaluator never rewrites: no comment exceeds 60 words or contains a replacement paragraph",
+      "method": "automated",
+      "gate": true,
+      "verify": "`uv run python tasks.py eval-essay` → reports/eval_essay.json: rewrite_violations",
+      "source": "user"
+    },
+    {
+      "id": "C-4b-04",
+      "phase": "4b",
+      "title": "False alarms on clean essays (accuracy rated weak on a clean essay)",
+      "method": "reported",
+      "gate": false,
+      "metric": "clean_essay_false_alarms",
+      "unit": "of 3",
+      "verify": "`uv run python tasks.py eval-essay` → reports/eval_essay.json: clean_essay_false_alarms",
+      "source": "recommended"
+    },
+    {
+      "id": "C-4b-05",
+      "phase": "4b",
+      "title": "Three evaluations of the user's own drafts are useful and fair",
+      "method": "human",
+      "gate": true,
+      "verify": "phase 4b prompt, You check",
+      "source": "user"
+    },
+    {
+      "id": "C-5-01",
+      "phase": "5",
+      "title": "Researching two programmes yields schema-valid files where every filled field has a source URL and the programme is marked unverified",
+      "method": "automated",
+      "gate": true,
+      "verify": "`uv run python tasks.py live -k research`",
+      "source": "recommended"
+    },
+    {
+      "id": "C-5-02",
+      "phase": "5",
+      "title": "The full end-to-end suite passes (US-1 to US-17)",
+      "method": "automated",
+      "gate": true,
+      "verify": "`uv run python tasks.py test`",
+      "source": "recommended"
+    },
+    {
+      "id": "C-5-03",
+      "phase": "5",
+      "title": "Following README.md alone, the user sets up, syncs and uses the tool",
+      "method": "human",
+      "gate": true,
+      "verify": "phase 5 prompt, You check",
+      "source": "recommended"
+    }
+  ],
+  "reviewers": [
+    {
+      "name": "ui-reviewer",
+      "run_when": "after changing pages, templates or styles"
+    },
+    {
+      "name": "data-integrity-reviewer",
+      "run_when": "after changing schemas, deadlines, time zones, reminders, sync, statuses or privacy handling"
+    },
+    {
+      "name": "ai-output-reviewer",
+      "run_when": "after changing a skill, prompt, schema, eval set or grader"
+    }
+  ],
+  "rules": [
+    "**Never send email to anyone but the owner.** Request emails are copy-paste only; the only outbound email is the digest to `settings.owner_email`.",
+    "**Deadlines carry their time zone and source.** Every deadline is stored as a local time plus an IANA time zone plus a source URL; no code path drops either.",
+    "**Unverified stays visible.** Researched or third-party data is `unverified` until the user clicks Mark verified; never set `verified` in code or skills.",
+    "**Real data lives outside the repository.** Read and write user data only through the configured `data_dir`; fixtures and tests use invented people at example.com.",
+    "**Exact checks in code, judgement in the AI.** Word counts, wrong-school detection, deadlines and dates are computed in Python, never asked of the model.",
+    "**The AI comments, never rewrites.** Essay and CV feedback points at problems; it never produces replacement text.",
+    "**No invented facts in generated text.** Emails and feedback may only use facts present in the biography bank, the professor record or the programme data.",
+    "**Secrets stay unread.** Never open, print or copy `.secrets/` (OAuth client and token files) or paste their contents into the conversation; code reads them only at runtime through `config.google` paths."
+  ],
+  "decisions": [
+    {
+      "decision": "Python FastAPI with server-rendered Jinja templates and HTMX; no JavaScript framework",
+      "reason": "One language, simple on Windows, enough for a single-user tool",
+      "spec": "03 §1"
+    },
+    {
+      "decision": "Data stored as YAML and Markdown files in a configurable data folder (OneDrive recommended)",
+      "reason": "Readable and editable by the user and by Claude Code; OneDrive gives backup",
+      "spec": "01 §1"
+    },
+    {
+      "decision": "AI features call Claude Code (`claude -p`) with project skills on the user's subscription, not the API",
+      "reason": "Single user; no API key; the same skills work interactively",
+      "spec": "04 §1"
+    },
+    {
+      "decision": "Reminders go to a dedicated Google Calendar 'Applications', reached on the iPhone through the Google account in iOS settings",
+      "reason": "Reliable sync with alerts; subscriptions refresh slowly and may drop alerts",
+      "spec": "05 §2"
+    },
+    {
+      "decision": "Daily digest by Gmail API to the owner's own address, run by Windows Task Scheduler at login",
+      "reason": "User choice; works without a server",
+      "spec": "05 §4"
+    },
+    {
+      "decision": "Local Git only; no GitHub",
+      "reason": "User choice; Git gives per-phase checkpoints",
+      "spec": "00 §5"
+    },
+    {
+      "decision": "Berkeley Haas out of scope for now; addable through Add programme",
+      "reason": "User choice",
+      "spec": "00 §5"
+    }
+  ],
+  "limitations": [
+    "Calendar sync and the digest only run while the laptop is on; events already on the phone keep their alerts.",
+    "Programme data is only as reliable as the user's verification against the source; admissions portals are not read.",
+    "AI feedback is diagnostic and not a prediction of what an admissions committee will think.",
+    "Button-triggered AI use draws on the subscription's separate Agent SDK credit.",
+    "CVs and essays are handled as pasted text; .docx and PDF import is out of scope."
+  ],
+  "model_note": "Checked 30 Oct 2026: Claude Code offers effort levels from low to max. Use high effort for Phases 2b, 3 and 4b and for every planning and acceptance step; medium for the rest. Switch to a stronger model only if a phase keeps failing for reasoning reasons.",
+  "stale_terms": [
+    "School Hub"
+  ],
+  "planned_files": [
+    "tasks.py",
+    "README.md",
+    "pyproject.toml",
+    ".claude/skills/rec-email/SKILL.md",
+    ".claude/skills/grade-claims/SKILL.md",
+    ".claude/skills/evaluate/SKILL.md",
+    ".claude/skills/research-programme/SKILL.md"
+  ],
+  "gitignore_extra": [
+    "data/",
+    ".secrets/",
+    "reports/",
+    "playwright-report/",
+    "test-results/",
+    ".venv/"
+  ],
+  "vscode_extensions_extra": [
+    "charliermarsh.ruff",
+    "ms-python.python"
+  ],
+  "supervisor": {
+    "enabled": true,
+    "user_style": "Direct, confident and specific; recommendation first; accuracy over embellishment; formal register for anything sent to professors.",
+    "environment_notes": [
+      "Windows native with VS Code; uv for Python",
+      "Claude Code runs on the user's Claude subscription"
+    ]
+  }
+}
