@@ -3,7 +3,7 @@
 storage:
   # Absolute path to the user's data folder. Recommended: a folder inside OneDrive for automatic backup.
   # source: user decision (30 Oct 2026). Set by the user after cloning; tests override it.
-  data_dir: "C:/Users/<you>/OneDrive/ApplicationHub"
+  data_dir: "C:/Users/kaloy/OneDrive/Documents/Application information"
   log_max_bytes: 1000000          # rotating log size; source: recommended
 
 app:
