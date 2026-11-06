@@ -1,0 +1,33 @@
+# Case 6 (tuning): the biography has an anticipated cum laude, which must stay "expected". Invented data.
+number: 6
+held_out: false
+programmes:
+  - booth-mif
+anticipated:
+  - cum laude
+biography_extra:
+  - id: cum-laude
+    category: honour
+    title: Cum laude (expected)
+    detail: Expected at graduation in June 2027 if the current average holds
+    tags: []
+    state: anticipated
+    dates: Jun 2027
+professor:
+  id: kowalski
+  name: Prof. Anna Kowalski
+  title: Professor
+  surname: Kowalski
+  email: a.kowalski@example.org
+  university: RSM
+  course: Corporate Finance (FIN-2020)
+  course_description: |
+    Capital budgeting, the cost of capital, capital structure (Modigliani–Miller, trade-off and pecking
+    order theories), payout policy, and company valuation with discounted cash flows and multiples.
+  grade: "9.5 / 10"
+  term: 2024-2025 block 1
+  interaction: Asked to present my group's valuation of a listed Dutch retailer to the class
+  tone: formal
+  letters:
+    booth-mif:
+      status: not_asked

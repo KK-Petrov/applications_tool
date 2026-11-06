@@ -1,7 +1,8 @@
 """Typed access to ``config/project.yaml``, the single home of every tunable parameter.
 
 ``HUB_DATA_DIR`` (environment variable) overrides ``storage.data_dir``; tests always set it so they
-never touch the owner's real data folder.
+never touch the owner's real data folder. ``HUB_CLAUDE_PATH`` overrides ``claude.path``; tests set it to
+the fake Claude Code so they never reach the real CLI.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from ruamel.yaml import YAML
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = REPO_ROOT / "config" / "project.yaml"
 DATA_DIR_ENV = "HUB_DATA_DIR"
+CLAUDE_PATH_ENV = "HUB_CLAUDE_PATH"  # overrides claude.path; every non-live test points it at the fake
 
 
 class _Section(BaseModel):
@@ -104,17 +106,32 @@ class RemindersConfig(_Section):
 
 
 class EmailConfig(_Section):
+    """The request email (docs/04 §2): word range, subject and the deadline wording given to the model."""
+
     min_words: int
     max_words: int
-    subject_template: str
+    subject_template: str  # {programme_type}
+    programme_type: str
     sign_off: str
+    deadline_format: str  # {day} {month_long} {year} {time} {zone}, in the school's zone
+    deadline_date_only_format: str  # a deadline whose time is not confirmed: the date only
+
+    @property
+    def subject(self) -> str:
+        """The subject line, built in Python; the skill copies it exactly."""
+        return self.subject_template.format(programme_type=self.programme_type)
 
 
 class ClaudeConfig(_Section):
+    """Headless Claude Code (docs/04 §1.1). ``path`` null → ``claude`` on PATH; env HUB_CLAUDE_PATH wins."""
+
+    backend: Literal["cli"]  # the AI backend (docs/04 §1.2); "api" could be added later
     path: str | None
-    timeout_s: int
-    research_timeout_s: int
+    timeout_s: int = Field(gt=0)
+    research_timeout_s: int = Field(gt=0)
     usage_log: str
+    max_turns: int = Field(ge=1)  # lockdown: turn cap per call
+    eval_concurrency: int = Field(ge=1)  # parallel live calls in tasks.py eval-email
 
 
 class EvaluationConfig(_Section):
@@ -205,6 +222,9 @@ def load_config(path: Path | None = None, env: Mapping[str, str] | None = None) 
     override = env.get(DATA_DIR_ENV)
     if override:
         raw.setdefault("storage", {})["data_dir"] = override
+    claude_path = env.get(CLAUDE_PATH_ENV)
+    if claude_path:
+        raw.setdefault("claude", {})["path"] = claude_path
     try:
         cfg = Config.model_validate(raw)
     except ValidationError as exc:

@@ -1,0 +1,69 @@
+# Case 5 (tuning): a pasted 3,000+ character course description; two programmes. Invented data.
+number: 5
+held_out: false
+programmes:
+  - princeton-mfin
+  - columbia-msfe
+professor:
+  id: lindqvist
+  name: Prof. Erik Lindqvist
+  title: Professor
+  surname: Lindqvist
+  email: e.lindqvist@example.org
+  university: RSM
+  course: Financial Econometrics (FEC-2220)
+  course_description: |
+    Course description (from the course guide)
+
+    Financial Econometrics introduces the statistical tools that are used to model financial data and
+    to test financial theories. The course is aimed at second-year bachelor students who have completed
+    Statistics I and II and Mathematics for Economists. It combines weekly lectures with computer labs in
+    which students apply the methods to real data in R.
+
+    Learning objectives. After completing the course, students are able to: (1) describe the stylised
+    facts of asset returns, such as fat tails, volatility clustering and the leverage effect; (2) estimate
+    and interpret linear regression models with time-series data, including tests for autocorrelation
+    and heteroskedasticity and the use of robust standard errors; (3) specify, estimate and forecast
+    ARMA models for returns and other financial series; (4) estimate GARCH-type models for conditional
+    volatility and use them to compute Value at Risk; (5) test the predictability of returns and the
+    efficient market hypothesis; (6) conduct and interpret an event study; (7) evaluate the out-of-sample
+    performance of forecasting models and report results in a short empirical paper.
+
+    Week 1: Returns, prices and the stylised facts of financial data. Simple and log returns, annualising,
+    distributions, normality tests.
+    Week 2: The linear regression model revisited. OLS assumptions with time-series data, inference,
+    Newey–West standard errors.
+    Week 3: Univariate time-series models. Stationarity, autocorrelation functions, AR, MA and ARMA
+    models, information criteria, unit-root tests.
+    Week 4: Forecasting. Point and interval forecasts, rolling and expanding windows, forecast evaluation
+    with mean squared error and the Diebold–Mariano test.
+    Week 5: Volatility modelling I. ARCH and GARCH models, maximum likelihood estimation, diagnostic
+    checks.
+    Week 6: Volatility modelling II. Asymmetric models (EGARCH, GJR-GARCH), Student-t innovations,
+    volatility forecasting and Value at Risk backtesting.
+    Week 7: Event studies and return predictability. Abnormal returns, cumulative abnormal returns,
+    significance tests, and predictive regressions with valuation ratios.
+
+    Assessment. Individual written exam (60%), group empirical assignment (30%) and lab participation
+    (10%). The group assignment asks students to forecast the volatility of a stock index, compare at
+    least three models out of sample and write a report of at most 3,000 words.
+
+    Literature. Brooks, Introductory Econometrics for Finance (4th edition); Tsay, Analysis of Financial
+    Time Series (selected chapters); and lecture notes on the course website.
+
+    Workload. The course is worth 6 ECTS, which corresponds to about 168 hours of study: 28 hours of
+    lectures, 14 hours of computer labs, about 60 hours for the group assignment and the remainder for
+    self-study and exam preparation. Attendance at the computer labs is strongly recommended, because the
+    lab exercises prepare students for the group assignment and for the exam questions on R output.
+
+    Teaching staff. Lectures by the course coordinator; computer labs by teaching assistants. Office hours
+    are held weekly during the teaching period.
+  grade: "8.9 / 10"
+  term: 2024-2025 block 4
+  interaction: null
+  tone: formal
+  letters:
+    princeton-mfin:
+      status: not_asked
+    columbia-msfe:
+      status: not_asked

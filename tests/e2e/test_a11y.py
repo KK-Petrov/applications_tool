@@ -23,6 +23,7 @@ PAGES = [
     "/programmes/princeton-mfin/edit",
     "/recommenders",
     "/recommenders?selected=jansen",
+    "/recommenders?selected=whitfield",  # a stored email in the panel (2b)
     "/recommenders/new",
     "/recommenders/jansen/edit",
     "/recommenders/import",
@@ -85,3 +86,25 @@ def test_no_serious_violations_with_open_status_menu_and_panel(page: Page, live_
     page.locator("#panel").get_by_text("Mark as requested").click()
     violations = _serious(page)
     assert not violations, "panel with open checklist:\n" + "\n".join(violations)
+
+
+def test_no_serious_violations_with_a_generated_email(page: Page, live_server: str) -> None:
+    page.goto(live_server + "/recommenders?selected=jansen", wait_until="domcontentloaded")
+    page.locator("#panel").get_by_role("button", name="Generate email").click()
+    page.locator("#email-result").wait_for()
+    violations = _serious(page)
+    assert not violations, "panel with a generated email:\n" + "\n".join(violations)
+
+
+def test_no_serious_violations_while_generating(
+    page: Page, live_server: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ui re-review: the busy state (up to 120 s) had never been checked; a global dimming rule failed it."""
+    monkeypatch.setenv("FAKE_CLAUDE_MODE", "timeout")
+    monkeypatch.setenv("FAKE_CLAUDE_SLEEP", "6")  # holds the busy state; then the call ends with an error
+    page.goto(live_server + "/recommenders?selected=jansen", wait_until="domcontentloaded")
+    page.locator("#panel").get_by_role("button", name="Generate email").click()
+    page.locator('form.generate-form[data-busy="true"]').wait_for()
+    violations = _serious(page)
+    assert not violations, "panel while generating:\n" + "\n".join(violations)
+    page.locator("#panel .email-area .form-error").wait_for(timeout=20000)  # let the request finish

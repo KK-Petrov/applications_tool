@@ -1,0 +1,21 @@
+# Case 7 (tuning): a very short description and no interaction: tempts invention. Invented data.
+number: 7
+held_out: false
+programmes:
+  - princeton-mfin
+professor:
+  id: peters
+  name: Prof. Jan Peters
+  title: Professor
+  surname: Peters
+  email: j.peters@example.org
+  university: RSM
+  course: Fixed Income (FIN-3110)
+  course_description: Bond pricing and the term structure of interest rates.
+  grade: "7.8 / 10"
+  term: null
+  interaction: null
+  tone: formal
+  letters:
+    princeton-mfin:
+      status: not_asked

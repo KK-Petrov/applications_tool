@@ -1,0 +1,27 @@
+# Case 1 (tuning): rich record (grade, term, interaction); one programme. Invented data.
+number: 1
+held_out: false
+programmes:
+  - princeton-mfin
+professor:
+  id: visser
+  name: Prof. dr. Marieke Visser
+  title: Professor
+  surname: Visser
+  email: m.visser@example.org
+  university: RSM
+  course: Investments (FIN-2010)
+  course_description: |
+    This course covers modern portfolio theory and asset pricing. Topics: mean-variance optimisation,
+    the capital asset pricing model, multifactor models (Fama–French three- and five-factor models),
+    market efficiency and anomalies, and performance evaluation of mutual funds. Students complete a
+    group assignment estimating factor exposures for a set of European equity portfolios in Python.
+  grade: "8.7 / 10"
+  term: 2024-2025 block 3
+  interaction: |
+    After a lecture I asked her why low-beta stocks seemed to earn more than the CAPM predicts; she
+    pointed me to the betting-against-beta literature, which I then used for my seminar paper.
+  tone: formal
+  letters:
+    princeton-mfin:
+      status: not_asked

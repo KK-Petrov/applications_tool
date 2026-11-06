@@ -7,7 +7,7 @@ Estimated sessions are the kit's recommendation. `/phase` and `/resume` add 1 to
 | 0 Scaffold | Done | 1 | 1 | medium | 2026-11-05 | C-0-01 PASS (real-clone sim, 130 tests); C-0-02 PASS (test-fast 8.9 s); C-0-03 PASS (15); C-0-04 PASS (21); You check confirmed by user; follow-up 2026-11-05 (block style, aware timestamps) | – (minor limitations in Phase notes) |
 | 1 Programmes and dashboard | Done with known issues | 1–2 | 1 | medium | 2026-11-05 | C-1-01 to C-1-05 PASS (20/20 tz cases, axe 0 serious); C-1-06 confirmed by user; 369 tests, fast 25 s; both reviewers READY | low items in Phase notes |
 | 2a Recommender sheet | Done with known issues | 1 | 1 | medium | 2026-11-06 | C-2a-01 PASS (US-6 to US-9, 14 e2e); C-2a-02 PASS (40 cases, priorities 1–8); C-2a-03 PASS (115–290 ms worst warm load, limit 1000); You check confirmed by user; 510 tests, test-fast 26.6 → ~14 s with xdist (8 workers); data-integrity READY, ui READY | minor items in Phase notes |
-| 2b Recommendation email generator | Not started | 1–2 | 0 | high | | | |
+| 2b Recommendation email generator | In progress (awaiting You check C-2b-06) | 1–2 | 2 | high | 2026-11-06 | C-2b-01 to C-2b-04 PASS (final eval, 10 cases: schema/fact/form/unsupported 0, tuning 1–7 and held-out 8–10 both 0; calibration 3/3; $1.48); C-2b-05 PASS; lockdown proved live (#47); 673+1 tests, test-fast 17.5 s; data-integrity READY, ai-output READY; ui: NOT READY ×3 → all FAILs fixed with guard tests (#53–#55), 4th review not run | see Phase notes |
 | 2c Programme research and course import | Not started | 2 | 0 | high | | | |
 | 3 Reminders, calendar and digest | Not started | 1–2 | 0 | high | | | |
 | 4a Biography bank, essays, CVs and exact checks | Not started | 1 | 0 | medium | | | |
@@ -22,8 +22,57 @@ Actual ÷ estimated sessions over finished phases: 0.75 (Phase 0: 1 ÷ 1; Phase 
 ## Hand-offs
 <!-- /handoff writes a section here: Done / Half-done / Left / Open questions / Next first step -->
 
+### Phase 2b hand-off (2026-11-06, end of session 1) — resolved in session 2 (see Phase notes)
+State at hand-off: `uv run python tasks.py test-fast` 551 passed, 27 failed (15.2 s). All 27 failures are tests written first for the UI (step 11), which hasn't started: 14 + 2 route-level C-2b-05 tests in tests/test_claude_cli.py, 10 in tests/test_email_routes.py, and the disclosed 2a change in tests/test_recommender_routes.py::test_add_form_fields (expects "Save and generate email" enabled). E2e not run this session; US-10 and the new a11y tests will fail until the UI exists. Criteria guard OK (38 match the lock). Lint clean.
+
+- **Done** (tested):
+  - Step 0, permissions: `.claude/settings.json` (DECISIONS #46; canary-proved deny forms).
+  - Wrapper with headless lockdown: `src/hub/ai/claude_cli.py`. The 19 wrapper tests in tests/test_claude_cli.py pass, including the process-tree kill on timeout. Live check `uv run python tasks.py live tests/test_claude_live.py -k "skill_expansion or lockdown"`: 2 passed; evidence in `reports/live_lockdown.json` (DECISIONS #47).
+  - Config: `email.subject_template`, `programme_type`, `deadline_format`, `deadline_date_only_format`; `claude.max_turns`, `eval_concurrency`; the `HUB_CLAUDE_PATH` override (`src/hub/config.py`, `config/project.yaml`).
+  - Models: `Professor.title`, `GeneratedEmail.warnings` (`src/hub/models/professor.py`).
+  - Rules: `src/hub/rules/words.py`, `rules/names.py`, `rules/timezones.py::format_deadline_text`.
+  - Payloads `src/hub/ai/payloads.py` (tests/test_payloads.py 12 passed). Exact checks `src/hub/ai/email_checks.py` (tests/test_email_checks.py 31 passed).
+  - Schemas: `src/hub/ai/schemas/rec_email.json`, `grade_claims.json`.
+  - Skills: `.claude/skills/rec-email/`, `grade-claims/`, `probe-skill/`, `probe-lockdown/`.
+  - Fake and recordings: `tests/fakes/fake_claude.py`, `tests/fakes/record.py`, `tests/fakes/recordings/{rec-email,grade-claims}.json` (account fields stripped).
+  - Eval set: `tests/evals/email/` (cases 01–10, calibration 1–3, `evalset.py`, `graders.py`, `run.py`; 17 offline tests pass), with data in `tests/fixtures/email_eval/`. `tasks.py eval-email` is wired up.
+  - **Final eval run** (`uv run python tasks.py eval-email`, all 10 cases): schema_failures 0, fact_failures 0, form_failures 0, unsupported_claims 0, grader_calibration_passed true (3/3), grader_errors 0, subject_mismatches 0. Tuning cases 1–7: all 0. Held-out 8–10: all 0. Words 214–242. Cost $1.13. Reports: `reports/eval_email.json`, `.md`. Earlier tuning runs (cases 1–7 only) are in `reports/tuning-1`, `reports/tuning-2`: both passed. Between them, SKILL.md was tightened for case 7 (no invented lessons) and case 1 (no relative dates such as "currently").
+- **Tests changed with disclosure:**
+  - `tests/test_recommender_routes.py::test_add_form_fields`: the 2a placeholder button was disabled; it now expects a submit button (`then=generate`).
+  - `tests/test_claude_cli.py` (new this session, before passing): the prompt assertion changed from `-p "/rec-email …"` to `--append-system-prompt-file …/rec-email/SKILL.md` when the lockdown excluded settings sources (#47). The lockdown test gained `--setting-sources ""`.
+  - `tests/test_email_checks.py` (new): the `_body` helper glued the extra sentence to the filler; it now adds a space. Nothing was loosened.
+  - `tests/conftest.py`: an autouse `HUB_CLAUDE_PATH` fake for every non-live test, and the `config` fixture points Claude at the fake with a temporary usage log.
+  - `tests/test_security.py`: the generate route was added to the foreign-Origin list.
+- **Half-done:**
+  - Title field: only the model field exists. The form field (`src/hub/professor_form.py` FIELD_LABELS / SINGLE_LINE / check_fields / form_from_professor; `templates/pages/professor_form.html`) is not built.
+  - `hub email-payload` CLI (DECISIONS #48 (6)): not written yet, though rec-email SKILL.md already refers to it (`src/hub/cli.py`).
+- **Left:**
+  - Step 11, the UI (US-10):
+    - `POST /recommenders/{id}/email` in `src/hub/routes/recommenders.py`: a sync route run in the threadpool. It reloads the professor fresh and appends a `GeneratedEmail` with Python warnings (`payloads.deadline_warnings` first, then `email_checks.app_warnings`, then the model's). Ticked `not_asked` letters become `draft_ready`. Choices are To ask / Draft ready letters only; nothing ticked gives "Tick at least one programme".
+    - HTMX: re-render `#panel` with `#email-result`, swapping the row and the totals out of band. No-JS: 303 to `/recommenders?selected=<id>`. A failure shows the message inline; no-JS gets 409.
+    - The panel shows the latest stored email: subject, body (line breaks kept) and warnings, with the unverified ones in an urgent `role="alert"` block. Buttons: Copy subject, Copy body, Regenerate, Refine in Claude Code (copies `claude "/rec-email <id>"`), and Mark as requested pre-filled with the email's programmes. Mark as requested also stamps the latest email's `marked_sent_on`.
+    - "Save and generate email" becomes `type="submit" name="then" value="generate"`. On failure: 303 with `email_error=<kind>`, and the page shows "Professor saved. The email was not generated: …".
+    - Clipboard code goes in `static/js/app.js`; CSS uses tokens only.
+  - Docs: docs/03 §1 route note, docs/04 §1.1 lockdown flags and §2.2 subject, docs/01 §4 (`title`, `warnings`); add `hub email-payload` to CLAUDE.md Commands.
+  - End of phase:
+    - Run `tasks.py test` (incl. e2e US-10, a11y C-1-05) and the reviewers: ai-output-reviewer, ui-reviewer, data-integrity-reviewer.
+    - Rerun `tests/fakes/record.py` only if a skill changes; rerun `tasks.py eval-email` if SKILL.md changes.
+    - Present the You-check (C-2b-06).
+  - Criteria not yet passing: **C-2b-05** (route-level tests wait for the UI; wrapper level passes). **C-2b-06** (human). C-2b-01 to C-2b-04 pass on the final eval run.
+- **Open questions** (for the You-check, no decision blocking): the emails follow one template closely (the same research-assistant sentence in most), and "from Jan–Jun 2026" copies the biography's abbreviation literally. Are both acceptable, or should the skill vary them and spell out months?
+- **Next first step:** `/resume 2b`, then add the Title field to `professor_form.py` and the form template, and make tests/test_email_routes.py::test_title_field_on_add_and_edit and test_blank_title_means_professor pass. After that, build `POST /recommenders/{id}/email` against tests/test_email_routes.py and the route-level tests in tests/test_claude_cli.py.
+
 ## Phase notes
 <!-- At the end of each phase: what was built, how to run it, metrics, open issues. -->
+
+### Phase 2b: Recommendation email generator (2026-11-06, sessions 1–2)
+- **Built:** `ai/skills.py` (`run_skill`, the only AI entry point; shared tool allow-list, schema check, four error kinds, usage log; backend chosen by `claude.backend`, #50) and `ai/claude_cli.py` (the `cli` backend, locked down: no tools but structured output, no settings files, no MCP, no hooks, turn cap; #47); `ai/payloads.py`, `ai/email_checks.py` (exact checks shared by the app and the graders), schemas; skills `rec-email`, `grade-claims` (+ probes); `rules/words.py`, `rules/names.py`, `format_deadline_text`; `Professor.title`, `GeneratedEmail.warnings`; US-10 UI (generate / regenerate in the panel, Save and generate on Add/Edit, copy buttons, Refine command, Mark as requested stamping the draft); `hub email-payload`; eval set `tests/evals/email/` + `tests/fixtures/email_eval/`; fake Claude `tests/fakes/` with recordings; `tasks.py eval-email`.
+- **Results:** final `uv run python tasks.py eval-email` (all 10 cases, current SKILL.md): schema_failures 0, fact_failures 0 (stricter check: each deadline on its programme's line, #52), form_failures 0 (incl. spelled-out months, #49), unsupported_claims 0, grader_calibration_passed true (3/3), grader_errors 0, subject_mismatches 0; tuning 1–7 all 0, held-out 8–10 all 0; words 219–252; $1.48. Earlier runs on other SKILL.md versions also passed (5 runs, 44 emails, 0 gated failures). Live check `tasks.py live -k "skill_expansion or lockdown"` 2 passed (only StructuredOutput tool; markers absent; control run created both). `tasks.py test` 670 + 1 passed; fast ~17 s; the real usage log was unchanged by the full suite (no test reaches the real CLI).
+- **Reviewers:** data-integrity READY (6 WARNs: test gaps fixed with tests; two items for the user, below). ai-output READY for C-2b-01 to -05 (issues fixed: deadline pairing, invented example, surname warning; #52). ui-reviewer NOT READY (generating state silent and losing focus; contradictory Save-and-generate message) → fixed (#53) → re-review NOT READY (indicator flash 6/19 runs; late live region) → fixed (#54; confirmed 12/12 runs, 0 visible frames) → re-review NOT READY (busy state: 4 serious axe contrast hits from the global .htmx-request dimming) → fixed (#55) with a mid-request axe test (failed before, 5/5 suite runs pass after); no fourth review run.
+- **Tests changed with disclosure:** see the hand-off section above (session 1). Session 2: e2e locator in the Phase 2a test `test_mark_as_requested_from_the_panel` scoped to the Mark as requested list (the panel now has a second "Princeton MFin" checkbox; intent unchanged; **needs the user's OK**); US-10 e2e: clipboard compared after CRLF→LF (Windows clipboard) and the label locator scoped; `test_email_routes.py`: subject compared HTML-escaped, a letter created by the test itself read with `.get()`; `test_claude_cli.py`: Save-and-generate messages changed with #53 (and now also assert the alert never says "Nothing was saved"); `fake_claude.py` reads/writes UTF-8 (it garbled "–" under cp1252).
+- **Open for the user:** (1) `Bash(uv run hub:*)` lets any session run `hub email-payload` unprompted, which prints real professor and biography data (data-integrity top issue; settings change only with the user's approval). (2) Mark as requested stamps a draft's `marked_sent_on` when *any* ticked programme is in the draft; docs/01 §4 may mean *all*. (3) Wording sameness across emails (#49): closings and months fixed; openings and the research-assistant sentence still repeat because each email is written without seeing the others (Decision needed in the acceptance report). (4) One real rec-email call in reports/ai_usage.jsonl (21:32 UTC, $0.08) could not be attributed; the full suite does not make real calls.
+- **Known, accepted for now:** a no-JS refresh of a failed generation posts again (Phase 5 PRG item, #45); each eval case is judged on one email (n = 1).
+- **Run:** `uv run python tasks.py dev` → http://127.0.0.1:8765/recommenders → select a professor → Generate email.
 
 ### Phase 2a: Recommender sheet (2026-11-06, session 1)
 - **Task 0 (tests):** pytest-xdist, 8 workers (fastest of auto/4/8, median of 3: 11.7/11.7/10.2 s); `serial` marker for timing gates (second, non-parallel pass); warning above `performance.test_fast_warn_seconds` (45 s). test-fast 26.6 s → 11.1 s at the time (348 tests); full `test` 78 s → ~21 s. Isolation: audit clean; e2e server now receives its bound socket (port race fixed); security tests share one app per module whose teardown proves no write (DECISIONS #38).

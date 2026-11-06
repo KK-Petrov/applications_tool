@@ -1,0 +1,26 @@
+# Case 9 (held out): two programmes whose deadlines are in different zones (ET and CT). Invented data.
+number: 9
+held_out: true
+programmes:
+  - princeton-mfin
+  - booth-mif
+professor:
+  id: vermeer
+  name: Prof. Ingrid Vermeer
+  title: Professor
+  surname: Vermeer
+  email: i.vermeer@example.org
+  university: RSM
+  course: Portfolio Management (FIN-3500)
+  course_description: |
+    Strategic and tactical asset allocation, portfolio construction with constraints, risk budgeting,
+    factor investing, and the measurement and attribution of portfolio performance.
+  grade: "8.0 / 10"
+  term: 2025-2026 block 2
+  interaction: null
+  tone: formal
+  letters:
+    princeton-mfin:
+      status: not_asked
+    booth-mif:
+      status: not_asked

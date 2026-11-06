@@ -1,0 +1,27 @@
+# Case 8 (held out): UVA professor, title "Dr.", term "Fall 2026" (in progress, no grade yet). Invented data.
+number: 8
+held_out: true
+programmes:
+  - mit-sloan-mfin
+  - columbia-msfe
+professor:
+  id: hale
+  name: Dr. Rebecca Hale
+  title: Dr.
+  surname: Hale
+  email: r.hale@example.org
+  university: UVA McIntire
+  course: Quantitative Trading Strategies (COMM 4710)
+  course_description: |
+    Design, backtesting and evaluation of systematic trading strategies: momentum, mean reversion and
+    pairs trading; transaction costs and capacity; overfitting and out-of-sample testing; risk
+    management and position sizing. Students work in teams on a strategy they present in class.
+  grade: null
+  term: Fall 2026
+  interaction: Presented our team's pairs-trading backtest in week 8 and answered her questions on transaction costs
+  tone: formal
+  letters:
+    mit-sloan-mfin:
+      status: not_asked
+    columbia-msfe:
+      status: not_asked

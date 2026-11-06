@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["unsupported_claims"],
+  "properties": {
+    "unsupported_claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["quote", "reason"],
+        "properties": {"quote": {"type": "string"}, "reason": {"type": "string"}}
+      }
+    }
+  }
+}

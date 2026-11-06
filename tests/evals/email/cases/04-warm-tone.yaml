@@ -1,0 +1,24 @@
+# Case 4 (tuning): warm tone. Invented data.
+number: 4
+held_out: false
+programmes:
+  - columbia-msfe
+professor:
+  id: rossi
+  name: Prof. Sofia Rossi
+  title: Professor
+  surname: Rossi
+  email: s.rossi@example.org
+  university: RSM
+  course: Behavioural Finance (FIN-3300)
+  course_description: |
+    How psychology shapes financial decisions and prices: prospect theory, mental accounting,
+    overconfidence, herding, limits to arbitrage, and the evidence on investor sentiment. The course
+    combines lectures with weekly case discussions.
+  grade: "8.2 / 10"
+  term: 2025-2026 block 2
+  interaction: Led the case discussion on the 1998 collapse of Long-Term Capital Management
+  tone: warm
+  letters:
+    columbia-msfe:
+      status: not_asked

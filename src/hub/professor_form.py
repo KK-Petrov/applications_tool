@@ -23,7 +23,8 @@ from hub.rules.letters import ASKABLE
 UNIVERSITIES = ("RSM", "UVA McIntire")  # the form's choices (docs/01 §4); anything else is "Other"
 OTHER = "Other"
 TONES = {Tone.FORMAL.value: "Formal", Tone.WARM.value: "Slightly warmer"}
-SINGLE_LINE = ("name", "email", "course", "grade", "term", "university_other")
+SINGLE_LINE = ("name", "title", "email", "course", "grade", "term", "university_other")
+DEFAULT_TITLE = "Professor"  # "Dear Professor {surname},"; the form shows it and a blank field means it
 LETTER_DATES = ("requested_on", "confirmed_on", "submitted_on", "thanked_on")
 LETTER_DATE_LABELS = {
     "requested_on": "Requested on",
@@ -33,6 +34,7 @@ LETTER_DATE_LABELS = {
 }
 FIELD_LABELS = {
     "name": "Name",
+    "title": "Title",
     "email": "Email",
     "university": "University",
     "university_other": "Other institution",
@@ -73,7 +75,7 @@ class ProfessorForm:
 
 def new_form() -> ProfessorForm:
     values = dict.fromkeys(FIELD_LABELS, "")
-    values.update(university=UNIVERSITIES[0], tone=Tone.FORMAL.value)
+    values.update(university=UNIVERSITIES[0], tone=Tone.FORMAL.value, title=DEFAULT_TITLE)
     return ProfessorForm(values, [])
 
 
@@ -81,6 +83,7 @@ def form_from_professor(p: Professor) -> ProfessorForm:
     known = p.university in UNIVERSITIES
     values = {
         "name": p.name,
+        "title": p.title,
         "email": p.email,
         "university": p.university if known else OTHER,
         "university_other": "" if known else p.university,
@@ -151,6 +154,7 @@ def check_fields(values: dict[str, str]) -> tuple[dict[str, Any], list[tuple[str
         errors.append(("tone", "must be Formal or Slightly warmer"))
     clean = {
         "name": values.get("name", "").strip(),
+        "title": values.get("title", "").strip() or DEFAULT_TITLE,
         "email": email,
         "university": university,
         "course": values.get("course", "").strip(),

@@ -44,6 +44,8 @@ class GeneratedEmail(DataModel):
     programmes: list[Slug]
     subject: str
     body: str
+    # shown with the draft; unverified-deadline warnings first (DECISIONS #48)
+    warnings: list[str] = Field(default_factory=list)
     marked_sent_on: date | None = None
 
 
@@ -53,6 +55,7 @@ class Professor(DataModel):
     id: Slug
     name: str
     surname: str | None = None  # default: last token of ``name``
+    title: str = "Professor"  # "Dear {title} {surname},"; e.g. "Dr." (Phase 2b, DECISIONS #48)
     email: Email
     university: str
     course: str

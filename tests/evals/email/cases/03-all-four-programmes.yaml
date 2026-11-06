@@ -1,0 +1,33 @@
+# Case 3 (tuning): all four programmes. Invented data.
+number: 3
+held_out: false
+programmes:
+  - princeton-mfin
+  - mit-sloan-mfin
+  - booth-mif
+  - columbia-msfe
+professor:
+  id: mulder
+  name: Prof. Hendrik Mulder
+  title: Professor
+  surname: Mulder
+  email: h.mulder@example.org
+  university: RSM
+  course: Derivatives and Risk Management (FIN-3030)
+  course_description: |
+    Pricing and use of forwards, futures, swaps and options. Binomial trees, the Black–Scholes–Merton
+    model, the Greeks and delta hedging, implied volatility, interest rate derivatives, and the
+    measurement of market risk with Value at Risk and expected shortfall.
+  grade: "9.0 / 10"
+  term: 2025-2026 block 1
+  interaction: Wrote a delta-hedging simulation for the course project and discussed its results with him in class
+  tone: formal
+  letters:
+    princeton-mfin:
+      status: not_asked
+    mit-sloan-mfin:
+      status: not_asked
+    booth-mif:
+      status: not_asked
+    columbia-msfe:
+      status: not_asked

@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["subject", "body", "used_biography_ids", "warnings"],
+  "properties": {
+    "subject": {"type": "string", "maxLength": 140},
+    "body": {"type": "string"},
+    "used_biography_ids": {"type": "array", "items": {"type": "string"}},
+    "warnings": {"type": "array", "items": {"type": "string"}}
+  }
+}

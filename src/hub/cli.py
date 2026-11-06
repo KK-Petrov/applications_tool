@@ -44,6 +44,39 @@ def init_data_command(
     typer.echo("Created settings.yaml." if report.settings_created else "settings.yaml kept as it is.")
 
 
+@app.command("email-payload")
+def email_payload(
+    professor_id: str = typer.Argument(..., help="The professor's file id, e.g. mulder."),
+    programme: list[str] = typer.Option(  # noqa: B008
+        None, "--programme", help="A programme id to include (repeatable). Default: To ask and Draft ready."
+    ),
+) -> None:
+    """Print the /rec-email input for a professor as JSON, for "Refine in Claude Code" (writes nothing)."""
+    import json
+    from datetime import UTC, datetime
+
+    from hub.ai.payloads import rec_email_payload
+    from hub.rules.letters import ASKABLE
+    from hub.store import Store
+
+    cfg = load_config()
+    snapshot = Store.from_config(cfg).load_all()
+    professor = next((p for p in snapshot.professors if p.id == professor_id), None)
+    if professor is None or snapshot.settings is None:
+        what = f"No professor {professor_id!r}" if professor is None else "settings.yaml could not be loaded"
+        typer.echo(f"{what}. Nothing to print.", err=True)
+        raise typer.Exit(1)
+    wanted = programme or [pid for pid, x in professor.letters.items() if x.status in ASKABLE]
+    chosen = [p for p in snapshot.programmes if p.id in wanted]
+    if not chosen:
+        typer.echo("No programme to include: give --programme, or set a letter to To ask first.", err=True)
+        raise typer.Exit(1)
+    payload = rec_email_payload(
+        professor, chosen, snapshot.biography, snapshot.settings.owner_name, datetime.now(UTC), cfg
+    )
+    typer.echo(json.dumps(payload, indent=2, ensure_ascii=False))
+
+
 def _not_yet(phase: str) -> None:
     typer.echo(f"Not yet implemented (Phase {phase}).")
     raise typer.Exit(1)

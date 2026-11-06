@@ -1,7 +1,7 @@
 {#- One sheet row (docs/03 §4.3). Status cell = a disclosure button with a menu of statuses; each choice
     is a real submit button, so it works without JavaScript; with HTMX it swaps this row. -#}
 {% set prof = r.professor %}
-<tr id="row-{{ prof.id }}"{% if selected and selected.id == prof.id %} class="selected" aria-current="true"{% endif %}>
+<tr id="row-{{ prof.id }}"{% if selected and selected.id == prof.id %} class="selected" aria-current="true"{% endif %}{% if oob_row %} hx-swap-oob="true"{% endif %}>
   <th scope="row" class="prof-name">
     <a href="{{ sheet_url(sheet, selected=prof.id) }}#panel" hx-get="/recommenders/{{ prof.id }}/panel" hx-include="#sheet-controls" hx-target="#panel" hx-swap="outerHTML" hx-push-url="{{ sheet_url(sheet, selected=prof.id) }}" data-select-row="{{ prof.id }}">{{ prof.name }}</a>
   </th>

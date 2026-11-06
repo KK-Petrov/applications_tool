@@ -23,7 +23,7 @@ App binds to `127.0.0.1:8765` only.
 | `GET /recommenders/new`, `POST /recommenders` | Add professor |
 | `GET /recommenders/{id}/panel` | Detail panel partial |
 | `POST /recommenders/{id}/letters/{programme_id}` | Set letter status (partial: the cell + the row's next action) |
-| `POST /recommenders/{id}/email` | Generate email (Phase 2b) |
+| `POST /recommenders/{id}/email` | Generate email (Phase 2b): HTMX gets the panel, with the row and totals out of band; no-JS redirects to the panel; a failure shows its message in the panel and writes nothing |
 | `GET /recommenders/course-suggestions?name=` | Add professor: courses whose lecturers match the name (partial, 2c) |
 | `GET /courses` | Courses list (minimal, 2c; shown in full on the biography bank page in 4a) |
 | `GET /courses/import`, `POST /courses/import`, `POST /courses/import/save` | Import courses: upload or paste, preview, accept per row or all (2c) |
@@ -102,7 +102,8 @@ highlights, Linked items (recommenders x/required, essays evaluated, AI-use poli
 ### 4.4 Add professor — form fields in docs/01 §4: Name, Email ("Used to address the email; not shown in
 the sheet"), University select, Course, Course description (large textarea, ≥ 8 rows, hint "Paste it straight
 from the course guide or syllabus"), Grade, Term, Specific interaction, programme checkboxes with deadlines,
-Tone (Formal default / Slightly warmer). Buttons: Save and generate email (2b), Save, Cancel.
+Tone (Formal default / Slightly warmer). Buttons: Save, Save and generate email (2b), Cancel (Save first
+so that Enter never starts a generation; DECISIONS #51). Title (default "Professor") from Phase 2b.
 Phase 2c (DECISIONS #44): Title (default "Professor", pre-filled from a title in the name); Email optional;
 linked courses (chips, removable). Typing a name shows suggested courses whose lecturers match the surname;
 choosing one links it and fills course, description, grade and term; everything stays editable and

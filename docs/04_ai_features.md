@@ -12,14 +12,26 @@ def run_skill(skill: str, payload: dict, schema: dict, *, tools: list[str] | Non
 # SkillResult: data: dict, cost_usd: float | None, duration_s: float, session_id: str
 # Raises SkillError(kind, message) with kind in {not_installed, timeout, failed, invalid_output}
 ```
-Command (argv list, never a shell string):
+The app calls `hub.ai.skills.run_skill` (same signature plus `config=`), which hands the call to the
+backend named by `claude.backend` (§1.2); `src/hub/ai/claude_cli.py` is the `cli` backend.
+Command (argv list, never a shell string), locked down (DECISIONS #47):
 ```
-{claude.path} -p "/{skill} The input is the JSON document on stdin." \
+{claude.path} -p "The input is the JSON document on stdin." \
+  --append-system-prompt-file .claude/skills/{skill}/SKILL.md --setting-sources "" \
   --output-format json --json-schema '{schema JSON}' \
-  --permission-mode dontAsk [--allowedTools "WebSearch,WebFetch"]
+  --permission-mode dontAsk --permission-prompts none \
+  --tools "{the skill's tools, e.g. WebSearch,WebFetch; empty for rec-email}" \
+  --disallowedTools "{every other tool: Bash, PowerShell, Edit, Write, Read, …}" \
+  --strict-mcp-config --settings '{"disableAllHooks": true}' --no-session-persistence \
+  --max-turns {claude.max_turns}
 ```
-- `cwd` = repository root, so project skills load. Do **not** use `--bare`: bare mode ignores the
-  subscription login and skills.
+No settings file applies to these calls (not the project's `.claude/settings.json`), so project skills
+don't load either: the skill reaches the model as its SKILL.md (`--append-system-prompt-file`). The Phase 2b
+live check proved that a call can't run a command or write a file, and that a control run without these
+flags can (`uv run python tasks.py live -k "skill_expansion or lockdown"`).
+- `cwd` = repository root. No settings source is loaded, so project skills don't load; the skill's
+  SKILL.md is passed with `--append-system-prompt-file` (DECISIONS #47). Do **not** use `--bare`: bare mode
+  ignores the subscription login.
 - stdin = `json.dumps(payload)` (well under the 10 MB stdin cap).
 - `claude.path` from config; default resolves `claude` via `shutil.which` (on Windows this may be `claude.cmd`).
 - Parse stdout JSON; the result is `structured_output`. Missing, `is_error: true`, or failing local
@@ -30,8 +42,22 @@ Command (argv list, never a shell string):
 - Tests replace the binary with `tests/fakes/fake_claude.py` (via `claude.path`), which replays recorded
   outputs from `tests/fakes/recordings/` and can simulate each failure. Live calls only under the `live`
   marker and in `tasks.py eval-*`.
-- Verify in Phase 2b with one live call that a user-invoked skill named at the start of a `-p` prompt is
-  expanded; if not, fall back to `--append-system-prompt-file .claude/skills/{skill}/SKILL.md` and log a decision.
+- Verified in Phase 2b: a skill named at the start of `-p` expands only when project settings load; the
+  lockdown loads none, so the fallback `--append-system-prompt-file` is used (DECISIONS #47).
+
+### 1.2 Backends (DECISIONS #50)
+`run_skill` (`src/hub/ai/skills.py`) is the only AI entry point the app imports, with `SkillResult` and
+`SkillError`. It checks the skill's tool allow-list (`SKILL_TOOLS`), calls the backend named by
+`claude.backend`, validates the reply against the schema, words the four errors and writes the usage log.
+A backend implements `call(skill, payload, schema, tools, timeout_s, config) -> BackendReply` (the
+structured output, cost, session id, its raw result) and raises `SkillError` through the shared helpers
+(`not_installed`, `timed_out`, `failed`, `invalid_output`). Only `cli` exists. An `api` backend would plug in
+like this, without changing callers: SKILL.md as the system prompt; the payload (JSON) as the user message;
+the schema as the structured-output format; tools only from `SKILL_TOOLS` (WebSearch/WebFetch as server
+tools for research-programme, nothing for the others); a timeout mapped to `timed_out`; API errors mapped to
+`failed`; a missing key or package to `not_installed`. It must pass `tests/test_ai_backend_contract.py`
+(payload + schema → validated dict; only the four error kinds, each ending "Nothing was saved."; a usage line
+without the payload; nothing written to data_dir on failure) after adding a harness there.
 
 ## 2. Skill: `/rec-email`
 ### 2.1 Input payload (built in Python by `src/hub/ai/payloads.py`)
@@ -45,9 +71,14 @@ Command (argv list, never a shell string):
                  "deadline_text": "15 December 2026, 11:59 pm ET", "submission": "via the Graduate School portal",
                  "letters_note": "…"}],
  "biography": [{"id": "gmat", "category": "test", "title": "…", "detail": "…", "state": "actual"}],
- "constraints": {"min_words": 180, "max_words": 280}}
+ "constraints": {"min_words": 180, "max_words": 280,
+                 "subject": "Request for a letter of recommendation: master's programmes in finance",
+                 "sign_off": "Kind regards,"}}
 ```
-`deadline_text` is formatted in Python in the **school's** zone; the model must copy it exactly.
+`deadline_text` is formatted in Python in the **school's** zone (`email.deadline_format`); the model must copy
+it exactly. A deadline whose time is not confirmed is given as its date only ("7 January 2027"), with a
+warning (DECISIONS #48). `submission` is null (no stored field says how letters are submitted). The subject
+is built in Python from `email.subject_template` and `email.programme_type` and copied by the model.
 Only programmes ticked for this letter are included. `courses` holds every course linked through
 `course_ids` (docs/01 §10), or the professor's manual course and description when none is linked
 (DECISIONS #44). `surname` is the salutation form (docs/02 §9: "Van den Berg" standing alone).
@@ -59,12 +90,16 @@ Only programmes ticked for this letter are included. `courses` holds every cours
    (c) why these programmes, from goal/experience entries; (d) the programmes and deadlines as a short
    list, copied exactly; (e) offer of CV, transcript and a short summary of points the professor could
    speak to; ask whether the professor feels able to write a strong letter; thanks.
-3. 180–280 words in the body. Subject: `Request for a letter of recommendation: {programme type} applications`.
+3. 180–280 words in the body. Subject: `constraints.subject`, i.e. `Request for a letter of recommendation:
+   master's programmes in finance` (DECISIONS #48).
 4. Use only facts in the payload. Never invent grades, projects, conversations, rankings or praise.
    Anticipated entries are written as anticipated ("I expect to graduate cum laude").
 5. If the payload lacks a grade or interaction, write around it and add a warning such as
    "No specific interaction given; paragraph (b) relies on the course description only."
 6. Never mention programmes not in the payload.
+7. Word the opening and closing sentences anew for each professor; no fixed stock sentence; structure and
+   facts unchanged. Months are written in full ("from January to June 2026"), never changing the date
+   (DECISIONS #49).
 
 ### 2.3 Output schema (`src/hub/ai/schemas/rec_email.json`)
 ```json
@@ -97,7 +132,12 @@ cum laude; 7. very short description (sparse, tempts invention); 8. UVA professo
   programme's `short_name` **and** its exact `deadline_text`; or contains any unselected programme's
   short name, school or alias.
 - `form_failures`: body word count (docs/02 §7) outside 180–280; salutation not exactly `Dear {title} {surname},`;
-  an anticipated entry stated as achieved (regex for its title without "expect"/"anticipat"/"on track").
+  an anticipated entry stated as achieved (regex for its title without "expect"/"anticipat"/"on track");
+  an abbreviated month name (Jan, Feb, …, Sept, Dec) other than a word of the professor's or owner's name
+  (DECISIONS #49).
+- `subject_mismatches` (reported, not gated): the subject differs from `constraints.subject`.
+- Payloads are built by the app's builder from the cases and frozen programme copies in
+  `tests/fixtures/email_eval/` (DECISIONS #48); cases 8–10 are held out from tuning and reported separately.
 - `unsupported_claims`: total from `/grade-claims` over the 10 emails; `grader_calibration_passed`: all 3 calibration emails flagged.
 Writes `reports/eval_email.json` and a readable `reports/eval_email.md` with each email for the human check.
 

@@ -108,3 +108,22 @@ def format_today(now_utc: datetime, tz: str) -> str:
 def local_today(now_utc: datetime, tz: str) -> date:
     """Today's calendar date in ``tz``."""
     return now_utc.astimezone(ZoneInfo(tz)).date()
+
+
+def format_deadline_text(
+    due_local: datetime, tz: str, time_known: bool, time_cfg: TimeConfig, pattern: str, date_only: str
+) -> str:
+    """A deadline as the request email states it, in the **school's** zone: ``15 December 2026, 11:59 pm ET``.
+
+    The model copies this text exactly (docs/04 §2.1). A deadline whose time is not confirmed is given as its
+    date only (``7 January 2027``), never with the assumed time (DECISIONS #48). A local time inside a DST gap
+    is printed as the instant it becomes (docs/02 §1).
+    """
+    instant = to_instant(due_local, tz)
+    local = instant.utc.astimezone(ZoneInfo(tz))
+    fields = {"day": local.day, "month_long": MONTHS_LONG[local.month - 1], "year": local.year}
+    if not time_known:
+        return date_only.format(**fields)
+    return pattern.format(
+        **fields, time=format_clock(local, tz, time_cfg), zone=abbreviation(tz, instant.utc, time_cfg)
+    )

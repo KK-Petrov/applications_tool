@@ -1,0 +1,48 @@
+# Invented owner biography for the email eval (docs/04 §4). Case 6 adds an anticipated cum laude.
+entries:
+  - id: bsc-iba
+    category: education
+    title: BSc International Business Administration, Rotterdam School of Management
+    detail: Finance specialisation; current average 8.3 / 10
+    tags:
+      - finance
+    state: actual
+    dates: 2023–2027
+  - id: exchange-uva
+    category: education
+    title: Exchange semester at the University of Virginia McIntire School of Commerce
+    detail: Courses in quantitative trading and fixed income
+    tags: []
+    state: actual
+    dates: Fall 2026
+  - id: gmat
+    category: test
+    title: GMAT Focus Edition 705
+    detail: Quantitative Reasoning 88th percentile
+    tags:
+      - quantitative
+    state: actual
+    dates: Sep 2026
+  - id: ra-empirical
+    category: experience
+    title: Research assistant, empirical finance group
+    detail: Cleaned stock return data and ran event studies for a working paper on dividend announcements
+    tags:
+      - research
+      - quantitative
+    state: actual
+    dates: Jan–Jun 2026
+  - id: goal-quant
+    category: goal
+    title: Work as a quantitative researcher in asset management
+    detail: Build and test systematic investment strategies
+    tags: []
+    state: actual
+    dates: null
+  - id: python
+    category: skill
+    title: Python and R for data analysis
+    detail: pandas, statsmodels, tidyverse
+    tags: []
+    state: actual
+    dates: null

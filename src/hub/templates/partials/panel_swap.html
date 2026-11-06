@@ -1,0 +1,3 @@
+{#- HTMX reply to Generate email (US-10): the panel, then the row and the totals out of band. -#}
+{% include "partials/recommender_panel.html" %}
+<template>{% with oob_row=True, oob_totals=False %}{% include "partials/recommender_row.html" %}{% endwith %}{% with oob_totals=True %}{% include "partials/recommender_totals.html" %}{% endwith %}</template>

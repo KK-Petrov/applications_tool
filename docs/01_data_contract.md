@@ -94,7 +94,7 @@ Validation: every deadline needs `tz` and `source_url`; `due_local` must parse; 
 id: mulder
 name: Prof. Mulder                # display name; surname = last token, override with `surname`
 surname: Mulder
-title: Professor                  # used in "Dear {title} {surname},"; default "Professor", e.g. "Dr."
+title: Professor                  # used in "Dear {title} {surname},"; default "Professor", e.g. "Dr." (2b; DECISIONS #48)
 email: m.mulder@example.org       # optional (null → "Email missing"); never shown in the sheet
 university: RSM                   # free text; the form offers RSM / UVA McIntire / Other
 course_ids: []                    # links to courses.yaml (§10); with links, course and
@@ -111,7 +111,9 @@ letters:                          # key = programme_id; absent key = not asked f
                    submitted_on: null, thanked_on: null, last_contact: null}
 emails:                           # generated drafts, newest last
   - {generated_at: 2026-10-31T10:12:00-04:00, programmes: [princeton-mfin], subject: "...", body: "...",
-     marked_sent_on: null}
+     warnings: ["Princeton MFin's deadline is unverified — check it before sending"], marked_sent_on: null}
+     # warnings: shown with the draft, unverified deadlines first (DECISIONS #48); marked_sent_on: stamped by
+     # Mark as requested when its programmes include this draft's (US-10)
 notes: null
 ```
 Letter `status` ∈ `not_asked | draft_ready | requested | confirmed | submitted | declined`.

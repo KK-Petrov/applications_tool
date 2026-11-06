@@ -20,6 +20,11 @@
         <span class="hint" id="f-name-hint">As you would write it, e.g. Prof. Dr. Eva Jansen</span>
       </div>
       <div class="field">
+        <label for="f-title">Title</label>
+        <input id="f-title" name="title" type="text" value="{{ f.title }}" aria-describedby="f-title-hint"{% if state.has_error("title") %} aria-invalid="true"{% endif %}>
+        <span class="hint" id="f-title-hint">Used in “Dear {title} {surname},”, e.g. Professor or Dr.</span>
+      </div>
+      <div class="field">
         <label for="f-email">Email</label>
         <input id="f-email" name="email" type="email" value="{{ f.email }}" required aria-describedby="f-email-hint"{% if state.has_error("email") %} aria-invalid="true"{% endif %}>
         <span class="hint" id="f-email-hint">Used to address the email; not shown in the sheet</span>
@@ -107,10 +112,12 @@
   </section>
 
   <div class="form-actions">
-    <span title="Generating the request email arrives in Phase 2b"><button class="button button-secondary" type="button" disabled aria-describedby="gen-hint">Save and generate email</button></span>
+    {#- Save comes first so that Enter saves; generating calls Claude Code and costs time (DECISIONS #51). -#}
     <button class="button button-primary" type="submit">Save</button>
+    <button class="button button-secondary" type="submit" name="then" value="generate" aria-describedby="gen-hint">Save and generate email</button>
     <a class="button button-secondary" href="{% if existing %}/recommenders?selected={{ existing.id }}{% else %}/recommenders{% endif %}">Cancel</a>
-    <span class="hint" id="gen-hint">Generating the request email arrives in Phase 2b.</span>
+    <span class="hint" id="gen-hint">Generating asks Claude Code for a draft of the request email for the ticked To ask programmes; it can take up to {{ claude_timeout }} s.</span>
+    <span class="generating-note" role="status" data-generating-text="Saving, then generating with Claude Code — this can take up to {{ claude_timeout }} s…"></span>
   </div>
 </form>
 {% endblock %}

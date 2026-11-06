@@ -1,0 +1,24 @@
+# Case 2 (tuning): no grade, no interaction; one programme. Invented data.
+number: 2
+held_out: false
+programmes:
+  - mit-sloan-mfin
+professor:
+  id: smit
+  name: Prof. Laura Smit
+  title: Professor
+  surname: Smit
+  email: l.smit@example.org
+  university: RSM
+  course: Financial Accounting (ACC-1010)
+  course_description: |
+    Introduction to financial reporting under IFRS: the balance sheet, income statement and cash flow
+    statement, accrual accounting, revenue recognition, inventories, fixed assets and depreciation, and
+    the analysis of financial statements with ratios.
+  grade: null
+  term: 2023-2024 block 1
+  interaction: null
+  tone: formal
+  letters:
+    mit-sloan-mfin:
+      status: not_asked

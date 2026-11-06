@@ -1,4 +1,4 @@
-"""C-2a-01 (US-6 to US-9, docs/03 §2) and C-2a-03 (sheet speed), end to end in a real browser.
+"""C-2a-01 (US-6 to US-9, docs/03 §2), US-10 (2b) and C-2a-03 (sheet speed), end to end in a browser.
 
 The app runs against a temporary copy of tests/fixtures/data (professors jansen and whitfield) with the
 clock fixed at Friday 30 October 2026, 12:00 New York. US-8 adds the letters fixture's professors.
@@ -22,7 +22,7 @@ from hub.config import load_config
 from hub.models.professor import Letter, LetterStatus, Professor
 from hub.store import Store
 
-from helpers import BASE, FIXED_NOW, FormClient, long_description
+from helpers import BASE, FIXED_NOW, RECORDINGS, FormClient, long_description
 from paths import FIXTURES, REPO_ROOT
 
 pytestmark = pytest.mark.e2e
@@ -186,11 +186,57 @@ def test_mark_as_requested_from_the_panel(page: Page, live_server: str, data_dir
     page.goto(live_server + "/recommenders?selected=jansen", wait_until="domcontentloaded")
     panel = page.locator("#panel")
     panel.get_by_text("Mark as requested").click()
-    expect(panel.get_by_label("Princeton MFin")).to_be_checked()
+    # Phase 2b (disclosed): scoped to the checklist, as the panel now also has a Generate email checklist
+    expect(panel.locator("details.mark-requested").get_by_label("Princeton MFin")).to_be_checked()
     panel.get_by_role("button", name="Mark ticked as requested").click()
     page.wait_for_url("**/recommenders?selected=jansen")
     _shows(page, "jansen", "princeton-mfin", "requested", "Requested")
     assert str(_professor(data_dir, "jansen")["letters"]["princeton-mfin"]["requested_on"]) == "2026-10-30"
+
+
+# ---- US-10 (Phase 2b) -------------------------------------------------------------------------------
+
+
+def test_us10_generate_copy_and_mark_requested(page: Page, live_server: str, data_dir: Path) -> None:
+    """Generate shows subject, body and warnings; Copy copies; Mark as requested sets the letters."""
+    recorded = json.loads((RECORDINGS / "rec-email.json").read_text(encoding="utf-8"))["structured_output"]
+    page.context.grant_permissions(["clipboard-read", "clipboard-write"], origin=live_server)
+    page.goto(live_server + "/recommenders?selected=jansen", wait_until="domcontentloaded")
+    panel = page.locator("#panel")
+    panel.get_by_role("button", name="Generate email").click()
+    result = panel.locator("#email-result")
+    expect(result).to_contain_text(recorded["subject"])
+    expect(result).to_contain_text(recorded["body"].splitlines()[0])
+    expect(result.get_by_role("alert")).to_contain_text("Princeton MFin's deadline is unverified")
+    _shows(page, "jansen", "princeton-mfin", "draft_ready", "Draft ready")  # the row follows the draft
+    for button, expected in (
+        ("Copy body", recorded["body"]),
+        ("Copy subject", recorded["subject"]),
+        ("Refine in Claude Code", 'claude "/rec-email jansen"'),
+    ):
+        result.get_by_role("button", name=button).click()
+        copied = page.evaluate("navigator.clipboard.readText()")
+        assert copied.replace("\r\n", "\n") == expected, button  # the Windows clipboard stores CRLF
+    panel.locator("details.mark-requested summary").click()
+    # scoped: the generate checklist above also has a "Princeton MFin" box (disclosed, written this phase)
+    expect(panel.locator("details.mark-requested").get_by_label("Princeton MFin", exact=True)).to_be_checked()
+    panel.get_by_role("button", name="Mark ticked as requested").click()
+    _shows(page, "jansen", "princeton-mfin", "requested", "Requested")
+    stored = _professor(data_dir, "jansen")
+    assert str(stored["letters"]["princeton-mfin"]["requested_on"]) == "2026-10-30"
+    assert str(stored["emails"][-1]["marked_sent_on"]) == "2026-10-30"
+
+
+def test_us10_generation_failure_is_shown_in_the_panel(
+    page: Page, live_server: str, data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FAKE_CLAUDE_MODE", "exit")
+    before = (data_dir / "professors" / "jansen.yaml").read_bytes()
+    page.goto(live_server + "/recommenders?selected=jansen", wait_until="domcontentloaded")
+    page.locator("#panel").get_by_role("button", name="Generate email").click()
+    expect(page.locator("#panel")).to_contain_text("Claude Code stopped with an error")
+    expect(page.locator("#panel")).to_contain_text("Nothing was saved.")
+    assert (data_dir / "professors" / "jansen.yaml").read_bytes() == before
 
 
 # ---- C-2a-03: performance ------------------------------------------------------------------------
@@ -316,3 +362,25 @@ def test_mark_as_requested_after_a_click_keeps_search_filter_and_sort(
     page.wait_for_url("**selected=okafor**")
     for part in ("q=prof", "filter=needs_action", "sort=name"):
         assert part in page.url, page.url
+
+
+def test_us10_idle_indicator_is_hidden_and_focus_moves_to_the_draft(page: Page, live_server: str) -> None:
+    """ui-reviewer: the idle "Generating…" text was in the accessibility tree; after a draft, focus and an
+    announcement must go to it (not to <body> or the panel top)."""
+    page.goto(live_server + "/recommenders?selected=jansen", wait_until="domcontentloaded")
+    indicator = page.locator("#generating-jansen")
+    assert indicator.evaluate("e => getComputedStyle(e).visibility") == "hidden"
+    page.locator("#panel").get_by_role("button", name="Generate email").click()
+    result = page.locator("#email-result")
+    expect(result).to_be_focused()
+    expect(page.locator("#live-status")).to_have_text("The draft email is ready below.")
+    assert page.locator("#generating-jansen").evaluate("e => getComputedStyle(e).visibility") == "hidden"
+
+
+def test_us10_live_region_is_in_the_page_before_any_action(page: Page, live_server: str) -> None:
+    """ui re-review: a live region created and filled in the same tick is often not read."""
+    page.goto(live_server + "/recommenders?selected=jansen", wait_until="domcontentloaded")
+    region = page.locator("#live-status")
+    expect(region).to_have_count(1)
+    expect(region).to_have_attribute("aria-live", "polite")
+    expect(region).to_have_text("")

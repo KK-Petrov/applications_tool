@@ -162,6 +162,8 @@ NEW_WRITE_ROUTES = {
         {"data": {"csv_text": "name,email\r\nProf. X Evil,x@example.com\r\n"}},
     ),
     "mark as requested": ("/recommenders/jansen/mark-requested", {"data": {"programmes": "princeton-mfin"}}),
+    # Phase 2b
+    "generate email": ("/recommenders/jansen/email", {"data": {"programmes": "princeton-mfin"}}),
 }
 
 

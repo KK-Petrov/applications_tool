@@ -60,14 +60,22 @@ reminders:                        # offsets in days before the deadline's local 
 email:
   min_words: 180                  # source: recommended; long enough for the five parts, short enough to read
   max_words: 280
-  subject_template: "Request for a letter of recommendation: {programme_type} applications"
+  subject_template: "Request for a letter of recommendation: {programme_type}"   # source: user (Phase 2b approval)
+  programme_type: "master's programmes in finance"   # covers MFin, MiF and MSFE; source: user (Phase 2b approval)
   sign_off: "Kind regards,"
+  # deadline_text in the request email, in the school's zone (docs/04 §2.1). {month_long} = "December".
+  # A deadline whose time is not confirmed is written with date_only (DECISIONS, Phase 2b).
+  deadline_format: "{day} {month_long} {year}, {time} {zone}"   # 15 December 2026, 11:59 pm ET
+  deadline_date_only_format: "{day} {month_long} {year}"        # 7 January 2027
 
 claude:
-  path: null                      # null → shutil.which("claude"); tests point this at tests/fakes/fake_claude.py
+  backend: cli                    # AI backend: only "cli" (headless Claude Code) exists; docs/04 §1.2 (DECISIONS #50)
+  path: null                      # null → shutil.which("claude"); env HUB_CLAUDE_PATH overrides (tests: tests/fakes/fake_claude.py)
   timeout_s: 120
   research_timeout_s: 300
   usage_log: reports/ai_usage.jsonl
+  max_turns: 3                    # headless lockdown: turn cap per call (DECISIONS, Phase 2b); source: user
+  eval_concurrency: 3             # parallel live calls in tasks.py eval-email; source: recommended (rate limits)
 
 evaluation:
   ratings: [strong, adequate, weak]

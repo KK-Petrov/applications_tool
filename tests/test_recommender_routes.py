@@ -184,7 +184,9 @@ def test_add_form_fields(client: FormClient) -> None:
         assert f">{option}</option>" in html
     assert "15 Dec 2026" in html  # programme checkboxes show their deadlines
     button = re.search(r"<button[^>]*>\s*Save and generate email", html).group(0)
-    assert "disabled" in button
+    # Phase 2b (disclosed change): the 2a placeholder was disabled; it now submits the form with then=generate
+    assert "disabled" not in button
+    assert 'type="submit"' in button and 'name="then"' in button and 'value="generate"' in button
     assert "Formal" in html and "Slightly warmer" in html
 
 

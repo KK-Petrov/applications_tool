@@ -34,7 +34,8 @@ If code and spec disagree, stop and ask.
 ## Commands (tasks.py is the single entry point: `uv run python tasks.py <target>`)
 `dev` (app at http://127.0.0.1:8765) · `init-data` · `test-fast` (< 60 s, no e2e, no live; parallel, warns above 45 s) · `test` (all but live; parallel, then `serial`-marked tests alone) ·
 `e2e` · `live` (real Google/Claude; pass `-k`) · `eval-email` · `eval-essay` · `lint` (ruff) · `validate` (lint + test + criteria guard)
-App CLI (installed by uv as `hub`): `hub serve` · `hub sync [--dry-run]` · `hub digest [--dry-run]` · `hub connect-google`.
+App CLI (installed by uv as `hub`): `hub serve` · `hub sync [--dry-run]` · `hub digest [--dry-run]` · `hub connect-google` ·
+`hub email-payload <professor_id> [--programme <id>]` (prints the /rec-email input; used by "Refine in Claude Code").
 Add new targets to tasks.py and keep this list up to date.
 
 ## Glossary

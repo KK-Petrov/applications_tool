@@ -1,0 +1,23 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "num_turns": 2,
+  "duration_ms": 3696,
+  "result": "{\"unsupported_claims\":[{\"quote\":\"I received the highest grade in your class\",\"reason\":\"The facts give only the grade 8.7 / 10 and say nothing about class rank or the top grade.\"},{\"quote\":\"class of 120 students\",\"reason\":\"No field in the facts states how many students took the course.\"}]}",
+  "total_cost_usd": 0.0134766,
+  "permission_denials": [],
+  "structured_output": {
+    "unsupported_claims": [
+      {
+        "quote": "I received the highest grade in your class",
+        "reason": "The facts give only the grade 8.7 / 10 and say nothing about class rank or the top grade."
+      },
+      {
+        "quote": "class of 120 students",
+        "reason": "No field in the facts states how many students took the course."
+      }
+    ]
+  },
+  "session_id": "00000000-0000-4000-8000-000000000000"
+}

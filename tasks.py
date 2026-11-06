@@ -94,9 +94,8 @@ def live(extra: list[str]) -> int:
 
 
 def eval_email(extra: list[str]) -> int:
-    """Email generator eval set (Phase 2b)."""
-    print("eval-email: not yet implemented (Phase 2b).")
-    return 0
+    """Email eval (live Claude calls): reports/eval_email.json and .md; options --cases 1,2 and --out DIR."""
+    return _run(PY, "tests/evals/email/run.py", *extra)
 
 
 def eval_essay(extra: list[str]) -> int:

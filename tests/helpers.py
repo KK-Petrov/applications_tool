@@ -13,6 +13,8 @@ from fastapi.testclient import TestClient
 
 BASE = "http://127.0.0.1:8765"  # the app's own origin in fast tests (Host and Origin checks, DECISIONS #26)
 FIXED_NOW = datetime(2026, 10, 30, 16, 0, tzinfo=UTC)  # Friday 30 October 2026, 12:00 New York
+FAKE_CLAUDE = Path(__file__).resolve().parent / "fakes" / "fake_claude.py"  # stands in for Claude Code
+RECORDINGS = FAKE_CLAUDE.parent / "recordings"
 
 
 class _FormParser(HTMLParser):

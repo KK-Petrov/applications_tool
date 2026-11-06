@@ -1,0 +1,23 @@
+# Case 10 (held out): a surname with a particle; the salutation is "Dear Professor Van der Berg,". Invented data.
+number: 10
+held_out: true
+programmes:
+  - mit-sloan-mfin
+professor:
+  id: van-der-berg
+  name: Prof. van der Berg
+  title: Professor
+  surname: van der Berg
+  email: vanderberg@example.org
+  university: RSM
+  course: Mathematical Finance (FEM-3100)
+  course_description: |
+    Stochastic calculus for finance: Brownian motion, Itô's lemma, stochastic differential equations,
+    risk-neutral pricing and the martingale approach, with applications to option pricing.
+  grade: "8.4 / 10"
+  term: 2025-2026 block 3
+  interaction: Asked him for extra exercises on Girsanov's theorem, which he provided
+  tone: formal
+  letters:
+    mit-sloan-mfin:
+      status: not_asked

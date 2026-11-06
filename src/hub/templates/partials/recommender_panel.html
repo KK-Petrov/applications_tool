@@ -1,3 +1,4 @@
+{% from "_time.html" import deadline with context %}
 {#- Detail panel for the selected professor (docs/03 §4.3). The only place the email is shown. -#}
 <section class="card panel" id="panel" data-professor="{{ prof.id }}" aria-labelledby="panel-title" tabindex="-1"{% if oob_panel %} hx-swap-oob="true"{% endif %}>
   <div class="panel-head">
@@ -29,16 +30,58 @@
     {% endfor %}
   </ul>
   {% endif %}
+  <div class="email-area" id="email-area-{{ prof.id }}">
+    <h3>Request email</h3>
+    {% if email_error %}<div class="form-error" role="alert" tabindex="-1" autofocus id="email-error-{{ prof.id }}">{{ email_error }}</div>{% endif %}
+    {% if askable %}
+    <form id="generate-{{ prof.id }}" class="generate-form" method="post" action="/recommenders/{{ prof.id }}/email"
+          hx-post="/recommenders/{{ prof.id }}/email" hx-target="#panel" hx-swap="outerHTML"
+          hx-sync="this:drop" data-generate>
+      {% if sheet %}{% for k, v in {"q": sheet.q, "filter": sheet.filter.value, "sort": sheet.sort.value}.items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}{% endif %}
+      <fieldset>
+        <legend>Programmes to include (To ask or Draft ready)</legend>
+        {% for c in askable_cols %}
+        <div class="field-check">
+          <input type="checkbox" id="gen-{{ prof.id }}-{{ c.programme.id }}" name="programmes" value="{{ c.programme.id }}" checked aria-describedby="gen-{{ prof.id }}-{{ c.programme.id }}-dl">
+          <label for="gen-{{ prof.id }}-{{ c.programme.id }}">{{ c.programme.short_name }}</label>
+          <span class="sub" id="gen-{{ prof.id }}-{{ c.programme.id }}-dl">deadline {{ deadline(c.summary.deadline) }}</span>
+        </div>
+        {% endfor %}
+      </fieldset>
+      <button class="button button-primary" type="submit" data-busy-text="Generating…">{% if latest %}Regenerate{% else %}Generate email{% endif %}</button>
+      <span class="generating" id="generating-{{ prof.id }}" aria-hidden="true">Generating with Claude Code — this can take up to {{ claude_timeout }} s…</span>
+    </form>
+    {% else %}
+    <p class="empty">To generate an email, first ask for a programme: set a letter to To ask in the sheet or with Edit.</p>
+    {% endif %}
+    {% if latest %}
+    <section class="email-result" id="email-result" aria-labelledby="email-result-title" tabindex="-1">
+      <h4 id="email-result-title">Latest draft <span class="note">· generated {{ latest.generated_at | when }}{% if latest.marked_sent_on %} · marked as requested {{ latest.marked_sent_on | fdate }}{% endif %}</span></h4>
+      {% if email_alerts %}<div class="email-alert" role="alert"><ul>{% for w in email_alerts %}<li>{{ w }}</li>{% endfor %}</ul></div>{% endif %}
+      {% if email_notes %}<div class="email-warnings"><p class="note">Check before sending:</p><ul>{% for w in email_notes %}<li>{{ w }}</li>{% endfor %}</ul></div>{% endif %}
+      <p class="email-subject"><span class="note">Subject:</span> <span id="email-subject-{{ prof.id }}">{{ latest.subject }}</span></p>
+      <pre class="email-body" id="email-body-{{ prof.id }}">{{ latest.body }}</pre>
+      <div class="email-actions">
+        <button class="button button-secondary" type="button" data-copy-target="email-subject-{{ prof.id }}">Copy subject</button>
+        <button class="button button-secondary" type="button" data-copy-target="email-body-{{ prof.id }}">Copy body</button>
+        <button class="button button-secondary" type="button" data-copy-text='claude "/rec-email {{ prof.id }}"' aria-describedby="refine-{{ prof.id }}">Refine in Claude Code</button>
+        <span class="note copy-status" role="status" aria-live="polite"></span>
+      </div>
+      <p class="note" id="refine-{{ prof.id }}">Refine copies <code>claude "/rec-email {{ prof.id }}"</code>; run it in a terminal in the app folder to rework the draft with Claude Code. The app never sends email: copy it into your mail client.</p>
+    </section>
+    {% endif %}
+  </div>
   <details class="mark-requested">
     <summary>Mark as requested</summary>
     {% if askable %}
     <form id="mark-requested-{{ prof.id }}" method="post" action="/recommenders/{{ prof.id }}/mark-requested">
       {% if sheet %}{% for k, v in {"q": sheet.q, "filter": sheet.filter.value, "sort": sheet.sort.value}.items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}{% endif %}
+      {% if latest and latest.marked_sent_on is none %}<input type="hidden" name="email_index" value="{{ prof.emails | length - 1 }}">{% endif %}
       <fieldset>
-        <legend>Programmes you asked {{ prof.name }} for (today's date is stamped)</legend>
+        <legend>Programmes you asked {{ prof.name }} for (today's date is stamped{% if latest and latest.marked_sent_on is none %}; ticked: the programmes in the latest email{% endif %})</legend>
         {% for p in askable %}
         <div class="field-check">
-          <input type="checkbox" id="mr-{{ prof.id }}-{{ p.id }}" name="programmes" value="{{ p.id }}" checked>
+          <input type="checkbox" id="mr-{{ prof.id }}-{{ p.id }}" name="programmes" value="{{ p.id }}"{% if p.id in mark_checked %} checked{% endif %}>
           <label for="mr-{{ prof.id }}-{{ p.id }}">{{ p.short_name }}</label>
         </div>
         {% endfor %}
@@ -49,8 +92,4 @@
     <p class="empty">Nothing to mark: no letter is To ask or Draft ready.</p>
     {% endif %}
   </details>
-  <div class="email-area">
-    <h3>Request email</h3>
-    <p class="note">Generating the request email arrives in Phase 2b.</p>
-  </div>
 </section>

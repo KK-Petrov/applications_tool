@@ -1,4 +1,5 @@
-"""Recommender routes (docs/03 §1, §4.3–4.4): sheet, status cells, add/edit, detail panel, CSV import.
+"""Recommender routes (docs/03 §1, §4.3–4.4): sheet, status cells, add/edit, detail panel, CSV import,
+and request-email generation (US-10, Phase 2b).
 
 Every write loads the professor fresh from data_dir, changes it and saves it through the store (atomic,
 comment-preserving). HTMX requests get the changed row (plus the totals strip, out of band); plain form
@@ -9,15 +10,26 @@ panel does.
 from __future__ import annotations
 
 import re
+import secrets
 from typing import Any
 from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, Response
 from starlette.datastructures import UploadFile
 
 from hub import sheet as sheets
-from hub.models.professor import COURSE_DESCRIPTION_MAX_CHARS, LetterStatus, Professor
+from hub.ai.email_checks import anticipated_terms, app_warnings, unselected_terms
+from hub.ai.payloads import (
+    deadline_warnings,
+    is_unverified_warning,
+    programmes_by_deadline,
+    rec_email_payload,
+)
+from hub.ai.skills import SkillError, load_schema, run_skill
+from hub.models.professor import COURSE_DESCRIPTION_MAX_CHARS, GeneratedEmail, LetterStatus, Professor
 from hub.professor_form import (
     CSV_OPTIONAL,
     CSV_REQUIRED,
@@ -50,6 +62,8 @@ def build_router(web: Web) -> APIRouter:
     router = APIRouter()
     store = web.store
     config = web.config
+    # A failed "Save and generate email" is reported after its redirect: token → message, shown once.
+    flashes: dict[str, str] = {}
 
     # ---- helpers ---------------------------------------------------------------------------------
 
@@ -121,11 +135,23 @@ def build_router(web: Web) -> APIRouter:
             if pid in by_id and x.status in letters.ASKABLE
         ]
         askable.sort(key=lambda p: [c.programme.id for c in sheet.columns].index(p.id))
+        latest = professor.emails[-1] if professor.emails else None
+        askable_ids = {p.id for p in askable}
+        in_latest = (
+            set(latest.programmes) & askable_ids if latest and latest.marked_sent_on is None else set()
+        )
         return {
             "prof": professor,
             "prof_row": sheets.row(professor, sheet.columns, web.today(snapshot), web.clock(), config),
             "askable": askable,
+            "askable_cols": [c for c in sheet.columns if c.programme.id in askable_ids],
             "date_labels": LETTER_DATE_LABELS,
+            "latest": latest,
+            "email_alerts": [w for w in latest.warnings if is_unverified_warning(w)] if latest else [],
+            "email_notes": [w for w in latest.warnings if not is_unverified_warning(w)] if latest else [],
+            "mark_checked": in_latest
+            or askable_ids,  # pre-filled from the latest unsent email (DECISIONS #39)
+            "claude_timeout": config.claude.timeout_s,
         }
 
     # ---- the sheet -------------------------------------------------------------------------------
@@ -136,10 +162,14 @@ def build_router(web: Web) -> APIRouter:
         params: dict[str, str],
         action_error: str | None = None,
         status_code: int = 200,
+        email_error: str | None = None,
     ) -> HTMLResponse:
         sheet = build_sheet(snapshot, params)
         selected = next((p for p in snapshot.professors if p.id == params.get("selected")), None)
         extra = panel_context(snapshot, selected, sheet) if selected else {}
+        flashed = flashes.pop(params.get("email_error", ""), None)
+        if selected and (email_error or flashed):
+            extra["email_error"] = email_error or flashed
         imported = params.get("imported", "")
         return web.render(
             request,
@@ -217,17 +247,119 @@ def build_router(web: Web) -> APIRouter:
         view = {k: str(form.get(k, "")) for k in ("q", "filter", "sort")} | {"selected": pid}
         ticked = {str(v) for v in form.getlist("programmes")}
         changed = False
+        marked: set[str] = set()
         for programme_id, letter in professor.letters.items():
             if programme_id in ticked and letter.status in letters.ASKABLE:
                 professor.letters[programme_id] = letters.set_status(
                     letter, LetterStatus.REQUESTED, web.today(snapshot)
                 )
                 changed = True
+                marked.add(programme_id)
+        index = str(form.get("email_index", ""))
+        if marked and index.isdigit() and int(index) < len(professor.emails):
+            email = professor.emails[int(index)]
+            if email.marked_sent_on is None and marked & set(email.programmes):
+                email.marked_sent_on = web.today(snapshot)  # this draft is the one that was sent
         if changed:
             error = save(professor)
             if error:
                 return render_sheet(request, store.load_all(), view, action_error=error, status_code=409)
         return see_other(sheet_url(build_sheet(store.load_all(), view), selected=pid))
+
+    # ---- request email (US-10) ---------------------------------------------------------------------
+
+    def generate(pid: str, ticked: list[str]) -> str | None:
+        """Generate a request email for the ticked To ask / Draft ready programmes and save it.
+
+        Returns ``None`` on success, else the message to show; on any failure nothing is written (C-2b-05).
+        The professor is loaded again after the (slow) call, so edits made meanwhile are kept. Ticked To ask
+        letters become Draft ready; no other status changes and no date is stamped.
+        """
+        snapshot = store.load_all()
+        professor = find(snapshot, pid)
+        if snapshot.settings is None:
+            return (
+                "settings.yaml could not be loaded, so the email cannot be signed. Fix it first. "
+                "Nothing was saved."
+            )
+        by_id = {p.id: p for p in snapshot.programmes}
+        chosen_ids = [
+            x
+            for x in dict.fromkeys(ticked)
+            if x in by_id and x in professor.letters and professor.letters[x].status in letters.ASKABLE
+        ]
+        if not chosen_ids:
+            return "Tick at least one programme whose letter is To ask or Draft ready. Nothing was saved."
+        now = web.clock()
+        chosen = programmes_by_deadline([by_id[x] for x in chosen_ids], now)
+        owner = snapshot.settings.owner_name
+        payload = rec_email_payload(professor, chosen, snapshot.biography, owner, now, config)
+        try:
+            result = run_skill("rec-email", payload, load_schema("rec_email"), config=config)
+        except SkillError as err:
+            return err.message
+        subject, body = result.data["subject"], result.data["body"]
+        others = [p for p in snapshot.programmes if p.id not in chosen_ids]
+        terms = anticipated_terms(snapshot.biography.entries)
+        checks = app_warnings(subject, body, payload, unselected_terms(chosen, others), terms)
+        # The urgent unverified alerts come only from the app's own check, never from the model's text.
+        model_notes = [w for w in result.data["warnings"] if not is_unverified_warning(w)]
+        warnings = list(dict.fromkeys([*deadline_warnings(chosen, now), *checks, *model_notes]))
+        snapshot = store.load_all()
+        fresh = find(snapshot, pid)
+        fresh.emails.append(
+            GeneratedEmail(
+                generated_at=now.astimezone(ZoneInfo(web.display_tz(snapshot))).replace(microsecond=0),
+                programmes=[p.id for p in chosen],
+                subject=subject,
+                body=body,
+                warnings=warnings,
+                marked_sent_on=None,  # written as null, as docs/01 §4 shows it
+            )
+        )
+        for x in chosen_ids:
+            letter = fresh.letters.get(x)
+            if letter is not None and letter.status is LetterStatus.NOT_ASKED:
+                fresh.letters[x] = letters.set_status(letter, LetterStatus.DRAFT_READY, web.today(snapshot))
+        error = save(fresh)
+        if error:
+            return (
+                f"The draft could not be saved, so it was lost: {error} "
+                "Generate it again once the file can be written."
+            )
+        return None
+
+    @router.post("/recommenders/{pid}/email")
+    def generate_email(
+        request: Request,
+        pid: str,
+        programmes: list[str] = Form(default=[]),  # noqa: B008
+        q: str = Form(""),
+        filter_: str = Form("", alias="filter"),
+        sort: str = Form(""),
+    ) -> Response:
+        """Generate email (US-10). A sync route: FastAPI runs it in a worker thread, so the app stays
+        responsive while Claude Code works. HTMX gets the panel (with the row and totals out of band)."""
+        find(store.load_all(), pid)  # 404 / 409 before any call
+        view = {"q": q, "filter": filter_, "sort": sort, "selected": pid}
+        error = generate(pid, programmes)
+        if not is_htmx(request):
+            if error:
+                return render_sheet(request, store.load_all(), view, status_code=409, email_error=error)
+            return see_other(sheet_url(build_sheet(store.load_all(), view), selected=pid) + "#email-result")
+        snapshot = store.load_all()
+        sheet = build_sheet(snapshot, view)
+        professor = find(snapshot, pid)
+        ctx = web.context(
+            SHEET_PAGE,
+            snapshot,
+            **common(sheet),
+            **panel_context(snapshot, professor, sheet),
+            r=sheets.row(professor, sheet.columns, web.today(snapshot), web.clock(), config),
+            selected=professor,
+            email_error=error,
+        )
+        return web.templates.TemplateResponse(request, "partials/panel_swap.html", ctx)
 
     # ---- add / edit ------------------------------------------------------------------------------
 
@@ -262,6 +394,7 @@ def build_router(web: Web) -> APIRouter:
             askable=letters.ASKABLE,
             removable=removable,
             max_description=COURSE_DESCRIPTION_MAX_CHARS,
+            claude_timeout=config.claude.timeout_s,
             letter_status=sheets.LETTER_STATUS,
         )
 
@@ -281,7 +414,8 @@ def build_router(web: Web) -> APIRouter:
 
     async def submit(request: Request, existing: Professor | None) -> Response:
         snapshot = store.load_all()
-        state = form_from_request(await request.form())
+        form = await request.form()
+        state = form_from_request(form)
         names = {p.id: p.short_name for p in snapshot.programmes}
         professor = build_professor(state, existing, taken_ids(snapshot), names)
         email = state.values.get("email", "").strip().casefold()
@@ -306,6 +440,17 @@ def build_router(web: Web) -> APIRouter:
         if error:
             state.errors = [("file", error)]
             return render_form(request, snapshot, state, existing)
+        if str(form.get("then", "")) == "generate":  # "Save and generate email" (docs/03 §4.4)
+            ticked = [pid for pid in state.programmes if pid in professor.letters]
+            failure = await run_in_threadpool(generate, professor.id, ticked)
+            if failure:
+                token = secrets.token_urlsafe(8)
+                reason = failure.removesuffix(" Nothing was saved.")
+                flashes[token] = f"The professor was saved, but no email was generated: {reason}"
+                return see_other(
+                    f"/recommenders?selected={professor.id}&email_error={token}#email-error-{professor.id}"
+                )
+            return see_other(f"/recommenders?selected={professor.id}#email-result")
         return see_other(f"/recommenders?selected={professor.id}")
 
     @router.post("/recommenders")
