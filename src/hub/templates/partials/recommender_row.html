@@ -3,7 +3,7 @@
 {% set prof = r.professor %}
 <tr id="row-{{ prof.id }}"{% if selected and selected.id == prof.id %} class="selected" aria-current="true"{% endif %}>
   <th scope="row" class="prof-name">
-    <a href="{{ sheet_url(sheet, selected=prof.id) }}#panel" hx-get="/recommenders/{{ prof.id }}/panel" hx-target="#panel" hx-swap="outerHTML" hx-push-url="{{ sheet_url(sheet, selected=prof.id) }}" data-select-row="{{ prof.id }}">{{ prof.name }}</a>
+    <a href="{{ sheet_url(sheet, selected=prof.id) }}#panel" hx-get="/recommenders/{{ prof.id }}/panel" hx-include="#sheet-controls" hx-target="#panel" hx-swap="outerHTML" hx-push-url="{{ sheet_url(sheet, selected=prof.id) }}" data-select-row="{{ prof.id }}">{{ prof.name }}</a>
   </th>
   <td class="course">{{ prof.course or "" }}</td>
   <td>{{ prof.grade or "" }}</td>

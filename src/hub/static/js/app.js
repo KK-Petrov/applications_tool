@@ -100,7 +100,7 @@
 
   document.addEventListener("submit", function (event) {
     var form = event.target;
-    if (!form || !form.matches || !form.matches("#sheet-controls, form.keeps-view")) {
+    if (!form || !form.matches || !form.matches("#sheet-controls")) {
       return;
     }
     var id = selectedId();

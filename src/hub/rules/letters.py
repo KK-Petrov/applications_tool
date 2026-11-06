@@ -171,11 +171,15 @@ def set_status(letter: Letter | None, status: LetterStatus, today: date) -> Lett
 
     Requested, confirmed and submitted stamp their date with ``today`` (the display-zone date) and
     ``last_contact`` becomes the latest stamped date. Dates stamped earlier are kept when the status
-    moves back (they stay editable in Edit). A new letter is created for a programme with no letter.
+    moves back (they stay editable in Edit). Re-entering Requested keeps a stored ``requested_on``:
+    follow-ups count from the original request (DECISIONS #43). A new letter is created for a
+    programme with no letter.
     """
     out = letter.model_copy(deep=True) if letter else Letter(status=status)
     out.status = status
     stamp = STAMPED_DATE.get(status)
+    if stamp == "requested_on" and out.requested_on is not None:
+        return out
     if stamp:
         setattr(out, stamp, today)
         out.last_contact = max(d for d in (out.last_contact, today) if d is not None)

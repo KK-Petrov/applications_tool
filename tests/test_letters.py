@@ -191,3 +191,20 @@ def test_request_due_dates(world) -> None:
 def test_fixture_professors_are_invented() -> None:
     for path in (FIXTURES / "letters" / "professors").glob("*.yaml"):
         assert "@example.org" in Path(path).read_text(encoding="utf-8")
+
+
+# ---- DECISIONS #43 (L1): re-entering Requested keeps the original request date ---------------------
+
+
+def test_reentering_requested_keeps_the_original_requested_on() -> None:
+    from hub.models.professor import Letter, LetterStatus
+
+    asked = L.set_status(None, LetterStatus.REQUESTED, date(2026, 11, 1))
+    confirmed = L.set_status(asked, LetterStatus.CONFIRMED, date(2026, 11, 3))
+    again = L.set_status(confirmed, LetterStatus.REQUESTED, date(2026, 11, 5))
+    assert again.status == LetterStatus.REQUESTED
+    assert again.requested_on == date(2026, 11, 1)  # follow-ups count from the stored date
+    assert again.confirmed_on == date(2026, 11, 3)  # history is kept
+    assert again.last_contact == date(2026, 11, 3)  # nothing new was stamped
+    first = L.set_status(Letter(status=LetterStatus.DRAFT_READY), LetterStatus.REQUESTED, date(2026, 11, 5))
+    assert first.requested_on == date(2026, 11, 5) and first.last_contact == date(2026, 11, 5)

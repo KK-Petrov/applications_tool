@@ -299,3 +299,20 @@ def test_selection_by_click_survives_a_status_change_and_a_sort(page: Page, live
     page.get_by_label("Sort").select_option("last_contact")
     page.wait_for_url("**selected=whitfield**")
     expect(page.locator("#panel")).to_contain_text("s.whitfield@example.org")
+
+
+def test_mark_as_requested_after_a_click_keeps_search_filter_and_sort(
+    page: Page, with_letters: Path, live_server: str
+) -> None:
+    """Final ui-review WARN: the panel opened by a click must carry the sheet's view into its forms."""
+    page.goto(
+        live_server + "/recommenders?q=prof&filter=needs_action&sort=name", wait_until="domcontentloaded"
+    )
+    page.get_by_role("link", name="Prof. Ben Okafor").click()
+    panel = page.locator("#panel")
+    expect(panel).to_contain_text("okafor@example.org")
+    panel.get_by_text("Mark as requested").click()
+    panel.get_by_role("button", name="Mark ticked as requested").click()
+    page.wait_for_url("**selected=okafor**")
+    for part in ("q=prof", "filter=needs_action", "sort=name"):
+        assert part in page.url, page.url
