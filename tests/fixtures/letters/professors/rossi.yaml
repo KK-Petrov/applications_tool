@@ -1,0 +1,8 @@
+# Test fixture for C-2a-02: invented professor (no letters: no action).
+id: rossi
+name: Prof. Mo Rossi
+email: rossi@example.org
+university: UVA McIntire
+course: Time Series (EC-410)
+course_description: Invented.
+letters: {}

@@ -20,6 +20,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from hub.config import Config, load_config
 from hub.routes.programmes import build_router as programmes_router
+from hub.routes.recommenders import build_router as recommenders_router
 from hub.security import LocalOriginMiddleware
 from hub.store import DataError, Store
 from hub.views import dashboard
@@ -39,7 +40,7 @@ PAGES: tuple[Page, ...] = (
     Page("settings", "/settings", "Settings", "Settings",
          "Owner details, display zone and the Google connection arrive in later phases."),
 )  # fmt: skip
-PLACEHOLDER_PAGES = {"recommenders", "essays", "biography", "settings"}
+PLACEHOLDER_PAGES = {"essays", "biography", "settings"}
 NOT_FOUND = Page("not-found", "", "", "Page not found", "There is no page at this address.")
 
 
@@ -84,6 +85,7 @@ def create_app(config: Config | None = None, clock: Callable[[], datetime] | Non
         return web.render(request, "pages/dashboard.html", PAGES[0], snapshot, board=board)
 
     app.include_router(programmes_router(web))
+    app.include_router(recommenders_router(web))
 
     def add_placeholder(page: Page) -> None:
         async def view(request: Request) -> HTMLResponse:

@@ -19,22 +19,28 @@ from hub.app import create_app
 from helpers import FIXED_NOW
 
 
-def _free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return int(s.getsockname()[1])
+def _bound_socket() -> socket.socket:
+    """A listening-ready socket on a free local port, kept open and handed to uvicorn.
+
+    Probing for a free port and closing it before uvicorn binds leaves a gap in which another xdist
+    worker can take the same port; passing the bound socket closes that gap (DECISIONS #38).
+    """
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(("127.0.0.1", 0))
+    return sock
 
 
 @pytest.fixture
 def live_server(config) -> Iterator[str]:
     """Start the app in a background thread against the fixture data_dir; yield its base URL."""
-    port = _free_port()
+    sock = _bound_socket()
+    port = int(sock.getsockname()[1])
     server = uvicorn.Server(
         uvicorn.Config(
             create_app(config, clock=lambda: FIXED_NOW), host="127.0.0.1", port=port, log_level="warning"
         )
     )
-    thread = threading.Thread(target=server.run, daemon=True)
+    thread = threading.Thread(target=server.run, kwargs={"sockets": [sock]}, daemon=True)
     thread.start()
     deadline = time.monotonic() + 10
     while not server.started:
@@ -44,3 +50,4 @@ def live_server(config) -> Iterator[str]:
     yield f"http://127.0.0.1:{port}"
     server.should_exit = True
     thread.join(timeout=10)
+    sock.close()

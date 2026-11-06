@@ -1,0 +1,39 @@
+{#- One sheet row (docs/03 §4.3). Status cell = a disclosure button with a menu of statuses; each choice
+    is a real submit button, so it works without JavaScript; with HTMX it swaps this row. -#}
+{% set prof = r.professor %}
+<tr id="row-{{ prof.id }}"{% if selected and selected.id == prof.id %} class="selected" aria-current="true"{% endif %}>
+  <th scope="row" class="prof-name">
+    <a href="{{ sheet_url(sheet, selected=prof.id) }}#panel" hx-get="/recommenders/{{ prof.id }}/panel" hx-target="#panel" hx-swap="outerHTML" hx-push-url="{{ sheet_url(sheet, selected=prof.id) }}" data-select-row="{{ prof.id }}">{{ prof.name }}</a>
+  </th>
+  <td class="course">{{ prof.course or "" }}</td>
+  <td>{{ prof.grade or "" }}</td>
+  {% for cell in r.cells %}
+  {% set cid = prof.id ~ "-" ~ cell.programme.id %}
+  <td class="cell" data-cell="{{ prof.id }}:{{ cell.programme.id }}" data-status="{{ cell.status }}">
+    <details class="status-menu">
+      <summary class="status-trigger" aria-label="Change {{ cell.programme.short_name }} status for {{ prof.name }}" aria-describedby="chip-{{ cid }}"{% if focus_cell == cell.programme.id %} autofocus{% endif %}>
+        {%- if cell.status == "none" %}<span class="letter-none" id="chip-{{ cid }}"><span aria-hidden="true">—</span><span class="visually-hidden">not assigned</span></span>
+        {%- else %}<span class="chip {{ letter_chip[cell.status] }}" id="chip-{{ cid }}">{{ cell.label }}</span>{% endif -%}
+        <span class="caret" aria-hidden="true">▾</span>
+      </summary>
+      <form class="menu" method="post" action="/recommenders/{{ prof.id }}/letters/{{ cell.programme.id }}" hx-post="/recommenders/{{ prof.id }}/letters/{{ cell.programme.id }}" hx-target="#row-{{ prof.id }}" hx-swap="outerHTML">
+        {% for k, v in {"q": sheet.q, "filter": sheet.filter.value, "sort": sheet.sort.value}.items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+        {% if selected %}<input type="hidden" name="selected" value="{{ selected.id }}">{% endif %}
+        {% if cell.status == "none" %}
+        <button type="submit" name="status" value="not_asked">Ask for this programme</button>
+        {% else %}
+        {% for value, text in letter_status.items() %}
+        <button type="submit" name="status" value="{{ value }}"{% if value == cell.status %} aria-pressed="true"{% endif %}>{{ text }}</button>
+        {% endfor %}
+        {% endif %}
+      </form>
+    </details>
+  </td>
+  {% endfor %}
+  <td class="mono last-contact">{% if r.last_contact %}{{ r.last_contact | fdate }}{% else %}<span aria-hidden="true">—</span><span class="visually-hidden">no contact yet</span>{% endif %}</td>
+  <td class="next-action">
+    {%- if r.action %}{% if r.action.urgent %}<span class="chip chip-urgent">Urgent</span> {% endif %}<span>{{ r.action.text }}</span>
+    {%- else %}<span class="note">No action</span>{% endif -%}
+  </td>
+</tr>
+{% if oob_totals %}<template>{% include "partials/recommender_totals.html" %}{% if oob_panel %}{% include "partials/recommender_panel.html" %}{% endif %}</template>{% endif %}

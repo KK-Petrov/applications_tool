@@ -291,3 +291,75 @@ fieldset.rows legend { font-weight: var(--weight-semibold); font-size: var(--fon
   .sidebar-footer { margin-top: 0; }
   .main { padding: 24px 16px; }  /* narrow screens: DECISIONS #15 */
 }
+
+/* Recommender sheet (docs/03 §4.3) */
+.totals { display: flex; flex-wrap: wrap; gap: 8px 24px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-card); padding: 12px 20px; }
+.total { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; }
+.total-name { font-weight: var(--weight-semibold); }
+.total-deadline { color: var(--color-text-secondary); font-size: 13px; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px; margin-bottom: 16px; }
+.toolbar .field { min-width: 180px; }
+.toolbar .count { margin: 0 0 10px; }
+.toolbar input:not([type="file"]), .toolbar select {
+  min-height: var(--button-min-height); padding: 0 10px; font: inherit; color: var(--color-ink);
+  border: 1px solid var(--color-text-muted); border-radius: var(--radius-button); background: var(--color-surface);
+}
+.sheet-scroll { position: relative; background: var(--color-surface); max-height: 70vh; overflow: auto;  /* relative: visually-hidden text stays inside */
+  border: 1px solid var(--color-border); border-radius: var(--radius-card); }
+.sheet thead th { position: sticky; top: 0; z-index: 2; background: var(--color-surface); }
+.sheet th[scope="row"] { position: sticky; left: 0; z-index: 1; background: var(--color-surface); font-weight: var(--weight-medium); white-space: normal; min-width: 140px; }
+.sheet thead th:first-child { left: 0; z-index: 3; }
+.sheet td.course { min-width: 140px; }
+/* Next action ("what to do next") stays in view at the right edge while the sheet scrolls sideways */
+.sheet td.next-action, .sheet thead th:last-child {
+  position: sticky; right: 0; min-width: 190px; max-width: 240px; white-space: normal;
+  background: var(--color-surface); box-shadow: -1px 0 0 var(--color-border);
+}
+.sheet thead th:last-child { z-index: 3; }
+.sheet td.next-action { z-index: 1; }
+.sheet td.last-contact { white-space: nowrap; }
+/* selected row: a bar at the start and a light ground, so the blue and grey chips keep their contrast */
+.sheet tr.selected th, .sheet tr.selected td { background: var(--color-ground); }
+.sheet tr.selected th[scope="row"] { box-shadow: inset 4px 0 0 var(--color-accent); }
+.status-menu summary {
+  display: inline-flex; align-items: center; gap: 6px; min-height: var(--button-min-height); padding: 0 6px;
+  border: 1px solid transparent; border-radius: var(--radius-button); cursor: pointer; list-style: none; white-space: nowrap;
+}
+.status-menu summary::-webkit-details-marker { display: none; }
+.status-menu summary:hover { border-color: var(--color-text-muted); }
+.status-menu summary:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.status-menu .caret { color: var(--color-text-muted); font-size: 12px; }
+.status-menu .menu { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 0; padding: 4px; min-width: 150px;
+  background: var(--color-surface); border: 1px solid var(--color-text-muted); border-radius: var(--radius-button); }
+.status-menu .menu button {
+  text-align: left; min-height: var(--button-min-height); padding: 0 10px; font: inherit; color: var(--color-ink);
+  background: var(--color-surface); border: 0; border-radius: var(--radius-button); cursor: pointer;
+}
+.status-menu .menu button:hover, .status-menu .menu button:focus-visible { background: var(--color-neutral-bg); }
+.status-menu .menu button[aria-pressed="true"] { font-weight: var(--weight-semibold); }
+.letter-none { color: var(--color-text-muted); }
+.letter-not_asked { background: var(--color-neutral-bg); color: var(--color-neutral); }
+.letter-draft_ready { background: var(--color-info-bg); color: var(--color-info); }
+.letter-requested { background: var(--color-urgent-bg); color: var(--color-urgent-text); }
+.letter-confirmed { background: var(--color-success-bg); color: var(--color-success); }
+.letter-submitted { background: var(--color-success); color: var(--color-surface); }
+.letter-declined { background: var(--color-danger-bg); color: var(--color-danger); }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 0; margin: 12px 0 16px; list-style: none; color: var(--color-text-secondary); }
+.notice { background: var(--color-success-bg); color: var(--color-success); border-radius: var(--radius-card); padding: 8px 16px; }
+.panel-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.panel h3 { font-size: var(--font-size-body); margin: 16px 0 4px; }
+.details { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 8px 0; }
+.details dt { font-weight: var(--weight-medium); color: var(--color-text-secondary); }
+.details dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.details dd.pre-line { white-space: pre-line; }
+.panel details { margin: 8px 0; }
+.panel details > summary { cursor: pointer; font-weight: var(--weight-medium); color: var(--color-accent); padding: 10px 0; }  /* keeps the disclosure triangle */
+.description-text { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; padding: 8px 12px; background: var(--color-ground); border-radius: var(--radius-button); }
+.letter-list { padding-left: 20px; margin: 0; }
+.mark-requested fieldset { border: 0; padding: 0; margin: 0 0 8px; }
+.mark-requested legend { padding: 0; margin-bottom: 4px; }
+.programme-choice { padding: 8px 0; border-bottom: 1px solid var(--color-row-line); }
+.letter-dates { margin-top: 8px; }
+fieldset.tone { border: 0; padding: 0; margin: 12px 0 0; display: flex; flex-wrap: wrap; gap: 4px 16px; }
+fieldset.tone legend { font-weight: var(--weight-medium); padding: 0; }
+.field-check input[type="radio"] { width: 20px; height: 20px; accent-color: var(--color-accent); }

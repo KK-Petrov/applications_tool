@@ -1,0 +1,14 @@
+# Test fixture for C-2a-02: invented professor (priority 4, not urgent).
+id: castillo
+name: Prof. Dan Castillo
+email: castillo@example.org
+university: RSM
+course: "Accounting (AC-100)"
+course_description: "Invented."
+letters:
+  booth-mif:
+    status: not_asked
+    requested_on: null
+    confirmed_on: null
+    submitted_on: null
+    thanked_on: null

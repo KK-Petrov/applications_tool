@@ -22,6 +22,10 @@ PAGES = [
     "/programmes/new",
     "/programmes/princeton-mfin/edit",
     "/recommenders",
+    "/recommenders?selected=jansen",
+    "/recommenders/new",
+    "/recommenders/jansen/edit",
+    "/recommenders/import",
     "/essays",
     "/biography",
     "/settings",
@@ -69,3 +73,15 @@ def test_no_serious_violations_with_open_forms(page: Page, live_server: str) -> 
     page.wait_for_load_state("domcontentloaded")
     violations = _serious(page)
     assert not violations, "programme form with added row:\n" + "\n".join(violations)
+
+
+def test_no_serious_violations_with_open_status_menu_and_panel(page: Page, live_server: str) -> None:
+    page.goto(live_server + "/recommenders", wait_until="domcontentloaded")
+    page.get_by_label("Change Princeton MFin status for Prof. Dr. Eva Jansen").click()
+    page.get_by_role("button", name="Requested", exact=True).wait_for()
+    violations = _serious(page)
+    assert not violations, "open status menu:\n" + "\n".join(violations)
+    page.goto(live_server + "/recommenders?selected=jansen", wait_until="domcontentloaded")
+    page.locator("#panel").get_by_text("Mark as requested").click()
+    violations = _serious(page)
+    assert not violations, "panel with open checklist:\n" + "\n".join(violations)

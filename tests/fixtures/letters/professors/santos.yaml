@@ -1,0 +1,20 @@
+# Test fixture for C-2a-02: invented professor (all submitted and thanked or declined: done).
+id: santos
+name: Prof. Lu Santos
+email: santos@example.org
+university: RSM
+course: "Optimisation (MA-320)"
+course_description: "Invented."
+letters:
+  mit-sloan-mfin:
+    status: submitted
+    requested_on: 2026-09-01
+    confirmed_on: 2026-09-05
+    submitted_on: 2026-10-01
+    thanked_on: 2026-10-03
+  columbia-msfe:
+    status: declined
+    requested_on: null
+    confirmed_on: null
+    submitted_on: null
+    thanked_on: null

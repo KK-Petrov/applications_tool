@@ -6,7 +6,7 @@ Estimated sessions are the kit's recommendation. `/phase` and `/resume` add 1 to
 |---|---|---|---|---|---|---|---|
 | 0 Scaffold | Done | 1 | 1 | medium | 2026-11-05 | C-0-01 PASS (real-clone sim, 130 tests); C-0-02 PASS (test-fast 8.9 s); C-0-03 PASS (15); C-0-04 PASS (21); You check confirmed by user; follow-up 2026-11-05 (block style, aware timestamps) | – (minor limitations in Phase notes) |
 | 1 Programmes and dashboard | Done with known issues | 1–2 | 1 | medium | 2026-11-05 | C-1-01 to C-1-05 PASS (20/20 tz cases, axe 0 serious); C-1-06 confirmed by user; 369 tests, fast 25 s; both reviewers READY | low items in Phase notes |
-| 2a Recommender sheet | Not started | 1 | 0 | medium | | | |
+| 2a Recommender sheet | In progress | 1 | 1 | medium | 2026-11-06 | C-2a-01 PASS (US-6 to US-9, 12 e2e); C-2a-02 PASS (39 cases, priorities 1–8); C-2a-03 PASS (115–290 ms worst warm load, limit 1000); 508 tests, test-fast 26.6 → 14.1 s with xdist (8 workers); awaiting You check | see Phase notes |
 | 2b Recommendation email generator | Not started | 1–2 | 0 | high | | | |
 | 2c Programme research | Not started | 1–2 | 0 | high | | | |
 | 3 Reminders, calendar and digest | Not started | 1–2 | 0 | high | | | |
@@ -24,6 +24,15 @@ Actual ÷ estimated sessions over finished phases: 0.67 (Phase 0: 1 ÷ 1; Phase 
 
 ## Phase notes
 <!-- At the end of each phase: what was built, how to run it, metrics, open issues. -->
+
+### Phase 2a: Recommender sheet (2026-11-06, session 1)
+- **Task 0 (tests):** pytest-xdist, 8 workers (fastest of auto/4/8, median of 3: 11.7/11.7/10.2 s); `serial` marker for timing gates (second, non-parallel pass); warning above `performance.test_fast_warn_seconds` (45 s). test-fast 26.6 s → 11.1 s at the time (348 tests); full `test` 78 s → ~21 s. Isolation: audit clean; e2e server now receives its bound socket (port race fixed); security tests share one app per module whose teardown proves no write (DECISIONS #38).
+- **Built:** `rules/letters.py` (in_play, over_ask, next_action, bucket, set_status), `sheet.py` (columns by deadline, rows, filter/sort), `professor_form.py` (form ↔ Professor, CSV), `routes/recommenders.py` (sheet, status cells, add/edit, panel, mark as requested, CSV preview/save), `Store.create_professor` (exclusive, case-insensitive), templates, CSS, app.js (menus, auto-submit, selection).
+- **Results:** C-2a-01 12/12 recommender e2e; C-2a-02 39/39; C-2a-03 worst of 5 warm loads 115–290 ms over runs (cold 407–913 ms; server render median 24–64 ms); C-1-05 axe 0 serious on 4 new pages + open menu + panel. Suite 508 passed (507 parallel + 1 serial); test-fast median 14.1 s.
+- **Reviewers:** data-integrity NOT READY (overwrite on a case-only name clash, browser maxlength trimming, letter with history deleted on Edit, unchanged save rewrote files, partial import message) → fixed → **READY** (its 4 low findings fixed after). ui-reviewer NOT READY (unverified badge missing in totals, Next action off-screen at 1280 px, selection/panel stale) → fixed → re-review NOT READY (selection lost after clicking a name) → fixed with an e2e regression test; not re-reviewed a third time. DECISIONS #38–#42.
+- **Tests changed with disclosure (all new this phase, before passing):** e2e cell checks made stricter (data-status + trigger text: the open menu's buttons made `to_contain_text` pass early); US-8 Done expectation corrected (Quinn and Santos are Done); `aria-selected` → `aria-current` (aria-selected is invalid on a table row); maxlength assertion replaced by "no maxlength" (review H2); "University is required" → "Other institution is required"; a too-broad `".."` check narrowed. Phase 0/1 tests unchanged except test_security.py (shared app, DECISIONS #38).
+- **Open / for the user:** re-stamping when a status moves back to Requested (review L1, decision needed); no date-order check between letter dates (L2); deleted professor IDs can be reused (L5, matters for Phase 3 reminder IDs; docs/01 says IDs are never reused); the create lock covers one process; totals strip pushes the table below the fold at 761 px; a status menu in a low row may need scrolling inside the sheet box; no-JS failure page stays at the POST address.
+- **Run:** `uv run python tasks.py dev` → http://127.0.0.1:8765/recommenders.
 
 ### Phase 1: Programmes and dashboard (2026-11-05, session 1)
 - **Built:** `rules/` (timezones, countdown, programmes, letters counts, interim alert), `views.py`, `web.py` (one `when`/`school_time` filter set + `_time.html` provenance macros), `routes/programmes.py` (list, page, add/edit form with repeatable rows, verify, requirement/step/document toggles, interviews), `programme_form.py`, `security.py` (Host/Origin/Referer checks), header zone selector (`POST /display-tz`), dashboard (alert, 4 tiles, table, reminders placeholder), CSS from tokens only, store load cache.

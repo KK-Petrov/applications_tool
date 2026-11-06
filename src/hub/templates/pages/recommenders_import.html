@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{#- CSV import (docs/03 §4.3): upload, preview with errors listed, then import the valid rows. -#}
+{% block content %}
+<section class="card" aria-labelledby="upload-title">
+  <h2 id="upload-title">Choose a file</h2>
+  <p>Columns: {% for c in required %}<code>{{ c }}</code>{{ ", " if not loop.last }}{% endfor %}; optional {% for c in optional %}<code>{{ c }}</code>{{ ", " if not loop.last }}{% endfor %}. Save from Excel as “CSV UTF-8”. Nothing is saved until you confirm the preview.</p>
+  <form method="post" action="/recommenders/import" enctype="multipart/form-data" class="toolbar">
+    <div class="field">
+      <label for="csv-file">CSV file</label>
+      <input id="csv-file" name="file" type="file" accept=".csv,text/csv" required>
+    </div>
+    <button class="button button-secondary" type="submit">Preview</button>
+  </form>
+</section>
+{% if result %}
+<section class="card" aria-labelledby="preview-title">
+  <h2 id="preview-title">Preview</h2>
+  {% if result.partial %}
+  <div class="form-error" role="alert"><strong>Import stopped.</strong> {{ result.partial }}</div>
+  {% elif result.file_error %}
+  <div class="form-error" role="alert"><strong>Nothing was imported.</strong> {{ result.file_error }}</div>
+  {% else %}
+  {% set n = result.valid | length %}
+  <p role="status"><strong>{{ n }} professor{{ "" if n == 1 else "s" }} will be imported</strong>{% if result.invalid %}; {{ result.invalid | length }} row{{ "" if result.invalid | length == 1 else "s" }} with errors will be skipped{% endif %}.</p>
+  {% if result.invalid %}
+  <div class="form-error">
+    <h3>Rows with errors (not imported)</h3>
+    <ul>{% for r in result.invalid %}<li>Row {{ r.number }}{% if r.name %} ({{ r.name }}){% endif %}: {{ r.errors | join("; ") }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+  {% if n %}
+  <div class="table-scroll" tabindex="0" role="region" aria-label="Professors to import">
+    <table>
+      <thead><tr><th scope="col">Row</th><th scope="col">Name</th><th scope="col">University</th><th scope="col">Course</th><th scope="col">Description</th></tr></thead>
+      <tbody>
+        {% for r in result.rows if r.professor %}
+        <tr><td class="mono">{{ r.number }}</td><td>{{ r.professor.name }}</td><td>{{ r.professor.university }}</td><td>{{ r.professor.course }}</td><td class="mono">{{ "{:,}".format(r.professor.course_description | length) }} characters</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+  <form id="import-form" method="post" action="/recommenders/import/save" class="form-actions">
+    <label class="visually-hidden" for="csv-text">CSV text</label>
+    <textarea id="csv-text" name="csv_text" hidden>
+{{ csv_text }}</textarea>
+    <button class="button button-primary" type="submit"{% if not n %} disabled{% endif %}>Import {{ n }} professor{{ "" if n == 1 else "s" }}</button>
+    <a class="button button-secondary" href="/recommenders">Cancel</a>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

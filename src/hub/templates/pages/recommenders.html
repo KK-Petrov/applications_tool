@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{#- Recommender sheet (docs/03 §4.3): "who has been asked, for what, and what to do next". -#}
+{% block actions %}
+<a class="button button-secondary" href="/recommenders/import">Import CSV</a>
+<a class="button button-primary" href="/recommenders/new">Add professor</a>
+{% endblock %}
+{% block content %}
+{% if imported is not none %}<p class="notice" role="status">{{ imported }} professor{{ "" if imported == 1 else "s" }} imported.</p>{% endif %}
+{% if action_error %}<div class="form-error" role="alert" tabindex="-1" autofocus><strong>Nothing was saved.</strong> {{ action_error }} The sheet shows what is stored.</div>{% endif %}
+{% include "partials/recommender_totals.html" %}
+
+<form class="toolbar" method="get" action="/recommenders" role="search" id="sheet-controls">
+  <div class="field">
+    <label for="sheet-q">Search</label>
+    <input id="sheet-q" name="q" type="search" value="{{ sheet.q }}" placeholder="Name or course">
+  </div>
+  <div class="field">
+    <label for="sheet-filter">Filter</label>
+    <select id="sheet-filter" name="filter" data-autosubmit>
+      {% for value, text in filter_labels.items() %}<option value="{{ value.value }}"{% if sheet.filter == value %} selected{% endif %}>{{ text }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="sheet-sort">Sort</label>
+    <select id="sheet-sort" name="sort" data-autosubmit>
+      {% for value, text in sort_labels.items() %}<option value="{{ value.value }}"{% if sheet.sort == value %} selected{% endif %}>{{ text }}</option>{% endfor %}
+    </select>
+  </div>
+  {% if selected %}<input type="hidden" name="selected" value="{{ selected.id }}">{% endif %}
+  <button class="button button-secondary" type="submit">Apply</button>
+  <p class="count" role="status">{{ sheet.rows | length }} professor{{ "" if sheet.rows | length == 1 else "s" }}{% if sheet.rows | length != sheet.total %} of {{ sheet.total }}{% endif %}</p>
+</form>
+
+{% if sheet.total == 0 %}
+<p class="empty card">No professors yet — add one or import a CSV.</p>
+{% else %}
+<div class="table-scroll sheet-scroll" tabindex="0" role="region" aria-label="Recommender sheet">
+  <table id="sheet" class="sheet">
+    <thead>
+      <tr>
+        <th scope="col">Professor</th>
+        <th scope="col">Course</th>
+        <th scope="col">Grade</th>
+        {% for c in sheet.columns %}<th scope="col" data-programme="{{ c.programme.id }}">{{ c.programme.short_name }}</th>{% endfor %}
+        <th scope="col">Last contact</th>
+        <th scope="col">Next action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in sheet.rows %}{% include "partials/recommender_row.html" %}
+      {% else %}
+      <tr><td colspan="{{ sheet.columns | length + 5 }}" class="empty">No professors match this search and filter.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<ul class="legend" id="legend" aria-label="Status legend">
+  <li><span class="letter-none" aria-hidden="true">—</span> Not assigned</li>
+  {% for value, text in letter_status.items() %}<li><span class="chip {{ letter_chip[value] }}">{{ text }}</span></li>{% endfor %}
+</ul>
+{% endif %}
+
+{% if selected %}{% include "partials/recommender_panel.html" %}{% else %}<div id="panel"></div>{% endif %}
+{% endblock %}

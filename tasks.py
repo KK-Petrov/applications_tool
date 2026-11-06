@@ -35,17 +35,52 @@ def init_data(extra: list[str]) -> int:
     return _run(PY, "-m", "hub.cli", "init-data", *extra)
 
 
+NO_TESTS_COLLECTED = 5  # pytest exit code when a marker expression selects nothing
+
+
+def _performance() -> tuple[int, float]:
+    """Worker count and test-fast warning from config/project.yaml → performance (rule 5).
+
+    Imported lazily so the other targets stay standard library only.
+    """
+    from hub.config import load_config
+
+    perf = load_config().performance
+    return perf.test_workers, perf.test_fast_warn_seconds
+
+
+def _parallel_then_serial(markers: str, extra: list[str]) -> int:
+    """Run ``markers`` minus ``serial`` tests across pytest-xdist workers, then the ``serial`` ones alone.
+
+    Timing-sensitive tests (marker ``serial``, e.g. C-2a-03) run in their own non-parallel pass so other
+    workers cannot slow them down. ``extra`` comes last, so ``-n 0`` forces the first pass to run serially.
+    """
+    workers, _ = _performance()
+    first = _pytest("-n", str(workers), "-m", f"{markers} and not serial", *extra)
+    second = _pytest("-m", f"serial and {markers}", *extra)
+    if second == NO_TESTS_COLLECTED:
+        second = 0
+    return first or second
+
+
 def test_fast(extra: list[str]) -> int:
-    """Fast tests: everything except e2e and live; must finish in under 60 s (C-0-02)."""
+    """Fast tests in parallel: everything except e2e and live; must finish in under 60 s (C-0-02)."""
+    _, warn_seconds = _performance()
     start = time.perf_counter()
-    code = _pytest("-m", "not e2e and not live", "-q", *extra)
-    print(f"test-fast finished in {time.perf_counter() - start:.1f} s", flush=True)
+    code = _parallel_then_serial("not e2e and not live", ["-q", *extra])
+    elapsed = time.perf_counter() - start
+    print(f"test-fast finished in {elapsed:.1f} s", flush=True)
+    if elapsed > warn_seconds:
+        print(
+            f"WARNING: test-fast took {elapsed:.1f} s (warning at {warn_seconds:g} s, limit 60 s, C-0-02)",
+            flush=True,
+        )
     return code
 
 
 def test(extra: list[str]) -> int:
-    """All tests except live ones (real Google or Claude calls)."""
-    return _pytest("-m", "not live", *extra)
+    """All tests except live ones (real Google or Claude calls), in parallel; serial-marked tests after."""
+    return _parallel_then_serial("not live", extra)
 
 
 def e2e(extra: list[str]) -> int:

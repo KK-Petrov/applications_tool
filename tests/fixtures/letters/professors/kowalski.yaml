@@ -1,0 +1,20 @@
+# Test fixture for C-2a-02: invented professor (priority 6 beats 7).
+id: kowalski
+name: Prof. Hana Kowalski
+email: kowalski@example.org
+university: RSM
+course: "Probability (MA-210)"
+course_description: "Invented."
+letters:
+  early-msf:
+    status: submitted
+    requested_on: 2026-09-20
+    confirmed_on: 2026-09-25
+    submitted_on: 2026-10-25
+    thanked_on: null
+  princeton-mfin:
+    status: requested
+    requested_on: 2026-10-29
+    confirmed_on: null
+    submitted_on: null
+    thanked_on: null

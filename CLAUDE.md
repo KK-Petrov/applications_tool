@@ -32,7 +32,7 @@ If code and spec disagree, stop and ask.
 - Data folder: `storage.data_dir` in `config/project.yaml`; the env var `HUB_DATA_DIR` overrides it (tests always set it to a temp folder; handy for a scratch copy). There is no `.env.example` (DECISIONS #17).
 
 ## Commands (tasks.py is the single entry point: `uv run python tasks.py <target>`)
-`dev` (app at http://127.0.0.1:8765) · `init-data` · `test-fast` (< 60 s, no e2e, no live) · `test` (all but live) ·
+`dev` (app at http://127.0.0.1:8765) · `init-data` · `test-fast` (< 60 s, no e2e, no live; parallel, warns above 45 s) · `test` (all but live; parallel, then `serial`-marked tests alone) ·
 `e2e` · `live` (real Google/Claude; pass `-k`) · `eval-email` · `eval-essay` · `lint` (ruff) · `validate` (lint + test + criteria guard)
 App CLI (installed by uv as `hub`): `hub serve` · `hub sync [--dry-run]` · `hub digest [--dry-run]` · `hub connect-google`.
 Add new targets to tasks.py and keep this list up to date.

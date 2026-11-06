@@ -1,0 +1,14 @@
+# Test fixture for C-2a-02: invented professor (priority 1: no course details).
+id: lind
+name: Prof. Ada Lind
+email: lind@example.org
+university: RSM
+course: ""
+course_description: ""
+letters:
+  booth-mif:
+    status: not_asked
+    requested_on: null
+    confirmed_on: null
+    submitted_on: null
+    thanked_on: null

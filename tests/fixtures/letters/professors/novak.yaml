@@ -1,0 +1,14 @@
+# Test fixture for C-2a-02: invented professor (priority 8).
+id: novak
+name: Prof. Jo Novak
+email: novak@example.org
+university: RSM
+course: "Derivatives (FI-310)"
+course_description: "Invented."
+letters:
+  booth-mif:
+    status: confirmed
+    requested_on: 2026-10-10
+    confirmed_on: 2026-10-15
+    submitted_on: null
+    thanked_on: null

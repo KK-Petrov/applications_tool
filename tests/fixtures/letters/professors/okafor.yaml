@@ -1,0 +1,20 @@
+# Test fixture for C-2a-02: invented professor (priority 2: request overdue).
+id: okafor
+name: Prof. Ben Okafor
+email: okafor@example.org
+university: RSM
+course: "Econometrics (EC-201)"
+course_description: "Invented."
+letters:
+  early-msf:
+    status: not_asked
+    requested_on: null
+    confirmed_on: null
+    submitted_on: null
+    thanked_on: null
+  booth-mif:
+    status: not_asked
+    requested_on: null
+    confirmed_on: null
+    submitted_on: null
+    thanked_on: null

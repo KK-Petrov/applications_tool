@@ -36,7 +36,7 @@ App binds to `127.0.0.1:8765` only.
 - **US-3** On a programme page the user ticks a requirement and a step and sets a document to "sent"; reload shows them saved.
 - **US-4** The user adds a programme by form; it appears on the dashboard marked unverified; editing it works.
 - **US-5** The user marks a programme verified and adds an interview with date, time and zone; both persist.
-- **US-6** The user adds a professor with a pasted 3,000-character course description and two programmes; the row appears with "Draft ready"/"—" cells correct and the description is stored verbatim.
+- **US-6** The user adds a professor with a pasted 3,000-character course description and two programmes; the row appears with "To ask"/"—" cells correct and the description is stored verbatim.
 - **US-7** Clicking a status cell and choosing "Requested" updates the cell, stamps today's date and updates the row's next action.
 - **US-8** Search, filter (Needs action / Waiting on professor / Done) and sort (next action date, name, last contact) work together.
 - **US-9** Clicking a row opens the detail panel; editing the course saves; the email address is not visible in the sheet.
@@ -83,8 +83,9 @@ highlights, Linked items (recommenders x/required, essays evaluated, AI-use poli
 - Table: Professor · Course · Grade · one column per programme (status cell) · Last contact · Next action.
   Sticky header; selected row highlighted. Status cell = a button showing the status chip and a caret;
   clicking opens a menu with all statuses; choosing one posts and swaps the cell and the row.
-  Status colours: not asked "—" grey text; Draft ready blue; Requested orange; Confirmed green tint;
-  Submitted solid green; Declined red tint. Legend under the table.
+  Status colours: no letter (not assigned) "—" grey text; To ask (`not_asked`) grey chip; Draft ready blue
+  (set only by email generation, 2b); Requested orange; Confirmed green tint; Submitted solid green;
+  Declined red tint. Legend under the table. (DECISIONS #39)
 - Detail panel below the table for the selected row: details (email shown here only), Edit, Generate email,
   latest generated email with Copy, "Refine in Claude Code" (copies a ready command to the clipboard:
   `claude "/rec-email <professor_id>"`), Mark as requested.

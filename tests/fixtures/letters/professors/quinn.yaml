@@ -1,0 +1,14 @@
+# Test fixture for C-2a-02: invented professor (only declined: no action).
+id: quinn
+name: Prof. Kit Quinn
+email: quinn@example.org
+university: RSM
+course: "Calculus (MA-101)"
+course_description: "Invented."
+letters:
+  princeton-mfin:
+    status: declined
+    requested_on: null
+    confirmed_on: null
+    submitted_on: null
+    thanked_on: null

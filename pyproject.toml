@@ -28,6 +28,7 @@ dev = [
     "axe-playwright-python>=0.1.4",
     "ruff>=0.7",
     "httpx>=0.27",
+    "pytest-xdist>=3.8.0",
 ]
 
 [build-system]
@@ -42,6 +43,7 @@ testpaths = ["tests"]
 markers = [
     "e2e: end-to-end browser tests (Playwright); excluded from test-fast",
     "live: real Google or Claude calls; never run in test-fast or test",
+    "serial: timing-sensitive; tasks.py runs it in a separate non-parallel pass",
 ]
 addopts = "-ra"
 

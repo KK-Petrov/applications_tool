@@ -1,0 +1,42 @@
+# Test fixture for C-2a-02: an invented programme with an early deadline, so priorities 2 and 5 occur on
+# 30 Oct 2026 (request due 29 Sep 2026; submission check from 27 Oct 2026).
+id: early-msf
+name: Example Early MS in Finance
+short_name: Early MSF
+school: Example University
+unit: Example School of Finance
+aliases: []
+status: not_started
+verification: unverified
+verification_note: Researched, not checked
+verified_on: null
+portal_url: null
+sources:
+  - url: https://www.example.edu/msf/admissions
+    title: Example Early MSF admissions
+    checked: null
+deadlines:
+  - id: main
+    label: Application deadline
+    due_local: 2026-11-10T23:59
+    tz: America/New_York
+    time_known: true
+    verification: unverified
+    source_url: https://www.example.edu/msf/admissions
+letters_required: 1
+letters_note: null
+requirements: []
+steps: []
+documents: []
+interviews: []
+essays: []
+curriculum:
+  summary: null
+  courses: []
+ai_policy:
+  text: null
+  source_url: null
+fee:
+  amount: null
+  currency: USD
+  note: null

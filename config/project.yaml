@@ -43,6 +43,7 @@ letters:
   default_required: 2             # when a programme does not state it; most programmes ask for 2–3; source: recommended
   max_extra: 1                    # over-ask warning beyond required + 1; source: recommended
   follow_up_days: 7               # source: recommended
+  request_soon_days: 7            # next action "Send request by …" is urgent within this many days (docs/02 §4 priority 4; DECISIONS #39)
 
 reminders:                        # offsets in days before the deadline's local date; source: recommended (docs/02 §5)
   letters_request_days: 42        # six weeks' notice for recommenders
@@ -106,3 +107,5 @@ schedule:
 
 performance:
   sheet_professors_benchmark: 40   # C-2a-03 fixture size
+  test_workers: 8                  # pytest-xdist workers for test-fast and test; fastest measured (DECISIONS #38)
+  test_fast_warn_seconds: 45       # tasks.py test-fast warns above this; C-0-02 limit is 60 s

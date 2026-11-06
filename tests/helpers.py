@@ -108,6 +108,25 @@ def set_field(fields: list[tuple[str, str]], name: str, value: str) -> list[tupl
     return out
 
 
+def long_description(length: int = 3000) -> str:
+    """An invented course description of exactly ``length`` characters for verbatim round trips (US-6).
+
+    It has line breaks, a blank line, an indented first line, double and single quotes, a colon, a hash,
+    trailing spaces and non-ASCII letters and punctuation, so any trimming or re-quoting would show.
+    """
+    head = (
+        "  Indented first line: Behavioural Finance (FIN-330) # not a comment\n"
+        'Week 1 — "Prospect theory" and Kahneman’s ‘framing’; '
+        "café, naïve, über, 中文.  \n"
+        "\n"
+    )
+    body = "Topics: heuristics, biases, limits to arbitrage; it's 50% cases and 50% data work.\n"
+    text = head
+    while len(text) < length:
+        text += body
+    return text[: length - 1] + "\n"
+
+
 def tree_digest(folder: Path) -> dict[str, str]:
     """sha256 of every file under ``folder`` (relative path → digest), to prove nothing was written."""
     return {

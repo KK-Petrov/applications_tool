@@ -1,0 +1,20 @@
+# Test fixture for C-2a-02: invented professor (priority 5 beats 8).
+id: ishikawa
+name: Prof. Gus Ishikawa
+email: ishikawa@example.org
+university: RSM
+course: "Investments (FI-210)"
+course_description: "Invented."
+letters:
+  early-msf:
+    status: confirmed
+    requested_on: 2026-10-01
+    confirmed_on: 2026-10-05
+    submitted_on: null
+    thanked_on: null
+  booth-mif:
+    status: confirmed
+    requested_on: 2026-10-01
+    confirmed_on: 2026-10-06
+    submitted_on: null
+    thanked_on: null

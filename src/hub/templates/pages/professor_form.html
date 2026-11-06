@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{#- Add / Edit professor (docs/03 §4.4; fields docs/01 §4). The course description is stored verbatim. -#}
+{% from "_time.html" import deadline with context %}
+{% from "_badge.html" import data_badge with context %}
+{% block content %}
+{% set f = state.values %}
+<form id="professor-form" class="programme-form" method="post" action="{{ action }}">
+  {% if state.errors %}
+  <div class="form-error" role="alert" tabindex="-1" id="form-errors" autofocus>
+    <h2>Nothing was saved. Please fix:</h2>
+    <ul>{% for name, text in state.errors %}<li data-field="{{ name }}">{{ error_text(name, text) }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+  <section class="card" aria-labelledby="who-title">
+    <h2 id="who-title">Professor</h2>
+    <div class="form-grid">
+      <div class="field">
+        <label for="f-name">Name</label>
+        <input id="f-name" name="name" type="text" value="{{ f.name }}" required aria-describedby="f-name-hint"{% if state.has_error("name") %} aria-invalid="true"{% endif %}>
+        <span class="hint" id="f-name-hint">As you would write it, e.g. Prof. Dr. Eva Jansen</span>
+      </div>
+      <div class="field">
+        <label for="f-email">Email</label>
+        <input id="f-email" name="email" type="email" value="{{ f.email }}" required aria-describedby="f-email-hint"{% if state.has_error("email") %} aria-invalid="true"{% endif %}>
+        <span class="hint" id="f-email-hint">Used to address the email; not shown in the sheet</span>
+      </div>
+      <div class="field">
+        <label for="f-university">University</label>
+        <select id="f-university" name="university"{% if state.has_error("university") %} aria-invalid="true"{% endif %}>
+          {% for u in universities %}<option value="{{ u }}"{% if f.university == u %} selected{% endif %}>{{ u }}</option>{% endfor %}
+          <option value="{{ other }}"{% if f.university == other %} selected{% endif %}>{{ other }}</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="f-university_other">Other institution</label>
+        <input id="f-university_other" name="university_other" type="text" value="{{ f.university_other }}" aria-describedby="f-university_other-hint"{% if state.has_error("university_other") %} aria-invalid="true"{% endif %}>
+        <span class="hint" id="f-university_other-hint">Only when University is Other</span>
+      </div>
+      <div class="field field-wide">
+        <label for="f-course">Course</label>
+        <input id="f-course" name="course" type="text" value="{{ f.course }}" aria-describedby="f-course-hint">
+        <span class="hint" id="f-course-hint">Course name and code, e.g. Corporate Finance (FIN-101)</span>
+      </div>
+      <div class="field field-wide">
+        <label for="f-course_description">Course description</label>
+        <textarea id="f-course_description" name="course_description" rows="12" aria-describedby="f-course_description-hint"{% if state.has_error("course_description") %} aria-invalid="true"{% endif %}>
+{{ f.course_description }}</textarea>
+        <span class="hint" id="f-course_description-hint">Paste it straight from the course guide or syllabus (up to {{ "{:,}".format(max_description) }} characters; stored exactly as pasted)</span>
+      </div>
+      <div class="field">
+        <label for="f-grade">Grade</label>
+        <input id="f-grade" name="grade" type="text" value="{{ f.grade }}" aria-describedby="f-grade-hint">
+        <span class="hint" id="f-grade-hint">Optional, e.g. 9.0 / 10</span>
+      </div>
+      <div class="field">
+        <label for="f-term">Term</label>
+        <input id="f-term" name="term" type="text" value="{{ f.term }}" aria-describedby="f-term-hint">
+        <span class="hint" id="f-term-hint">Optional, e.g. Fall 2025</span>
+      </div>
+      <div class="field field-wide">
+        <label for="f-interaction">Specific interaction</label>
+        <textarea id="f-interaction" name="interaction" rows="3" aria-describedby="f-interaction-hint">
+{{ f.interaction }}</textarea>
+        <span class="hint" id="f-interaction-hint">Optional: something the professor will remember, e.g. a project or an office-hours discussion</span>
+      </div>
+    </div>
+    <fieldset class="tone">
+      <legend>Tone</legend>
+      {% for value, text in tones.items() %}
+      <div class="field-check">
+        <input type="radio" id="f-tone-{{ value }}" name="tone" value="{{ value }}"{% if f.tone == value %} checked{% endif %}>
+        <label for="f-tone-{{ value }}">{{ text }}{% if value == "formal" %} (default){% endif %}</label>
+      </div>
+      {% endfor %}
+    </fieldset>
+  </section>
+
+  <section class="card" aria-labelledby="programmes-title">
+    <h2 id="programmes-title">Programmes</h2>
+    <p class="note">Tick the programmes you plan to ask this professor for; they show as <strong>To ask</strong> in the sheet.</p>
+    {% for c in columns %}
+    {% set pid = c.programme.id %}
+    {% set letter = existing.letters.get(pid) if existing else none %}
+    {% set locked = letter is not none and not removable(letter) %}
+    <div class="programme-choice">
+      <div class="field-check">
+        <input type="checkbox" id="f-prog-{{ pid }}" name="programmes" value="{{ pid }}"{% if pid in state.programmes or locked %} checked{% endif %}{% if locked %} disabled aria-describedby="f-prog-{{ pid }}-locked"{% endif %}>
+        <label for="f-prog-{{ pid }}">{{ c.programme.short_name }}</label>
+      </div>
+      <span class="sub">Deadline {{ deadline(c.summary.deadline) }}{% if c.summary.badge.unverified %} {{ data_badge(c.summary.badge) }}{% endif %}</span>
+      {% if locked %}<span class="sub" id="f-prog-{{ pid }}-locked">{{ letter_status[letter.status.value] }}{% if letter.status in askable %} with dates already stamped{% endif %}: change the status in the sheet</span>{% endif %}
+      {% if letter is not none %}
+      <div class="form-grid letter-dates">
+        {% for name in date_fields %}
+        {% set fid = "letter-" ~ pid ~ "-" ~ name %}
+        <div class="field">
+          <label for="{{ fid }}"><span class="visually-hidden">{{ c.programme.short_name }} · </span>{{ date_labels[name] }}</label>
+          <input id="{{ fid }}" name="{{ fid }}" type="date" value="{{ state.letter_dates.get(pid, {}).get(name, '') }}"{% if state.has_error(fid) %} aria-invalid="true"{% endif %}>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    {% else %}
+    <p class="empty">No programmes yet. Add one under Programmes first.</p>
+    {% endfor %}
+  </section>
+
+  <div class="form-actions">
+    <span title="Generating the request email arrives in Phase 2b"><button class="button button-secondary" type="button" disabled aria-describedby="gen-hint">Save and generate email</button></span>
+    <button class="button button-primary" type="submit">Save</button>
+    <a class="button button-secondary" href="{% if existing %}/recommenders?selected={{ existing.id }}{% else %}/recommenders{% endif %}">Cancel</a>
+    <span class="hint" id="gen-hint">Generating the request email arrives in Phase 2b.</span>
+  </div>
+</form>
+{% endblock %}

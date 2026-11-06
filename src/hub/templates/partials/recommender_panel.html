@@ -1,0 +1,56 @@
+{#- Detail panel for the selected professor (docs/03 §4.3). The only place the email is shown. -#}
+<section class="card panel" id="panel" data-professor="{{ prof.id }}" aria-labelledby="panel-title" tabindex="-1"{% if oob_panel %} hx-swap-oob="true"{% endif %}>
+  <div class="panel-head">
+    <h2 id="panel-title">{{ prof.name }}</h2>
+    <a class="button button-secondary" href="/recommenders/{{ prof.id }}/edit">Edit<span class="visually-hidden"> {{ prof.name }}</span></a>
+  </div>
+  <dl class="details">
+    <dt>Email</dt><dd>{{ prof.email }}</dd>
+    <dt>University</dt><dd>{{ prof.university }}</dd>
+    <dt>Course</dt><dd>{{ prof.course or "Not set" }}</dd>
+    {% if prof.grade %}<dt>Grade</dt><dd>{{ prof.grade }}</dd>{% endif %}
+    {% if prof.term %}<dt>Term</dt><dd>{{ prof.term }}</dd>{% endif %}
+    {% if prof.interaction %}<dt>Specific interaction</dt><dd class="pre-line">{{ prof.interaction }}</dd>{% endif %}
+    <dt>Tone</dt><dd>{{ "Slightly warmer" if prof.tone.value == "warm" else "Formal" }}</dd>
+    <dt>Next action</dt><dd>{% if prof_row.action %}{% if prof_row.action.urgent %}<span class="chip chip-urgent">Urgent</span> {% endif %}{{ prof_row.action.text }}{% else %}No action{% endif %}</dd>
+  </dl>
+  <details class="description">
+    <summary>Course description ({{ "{:,}".format(prof.course_description | length) }} characters)</summary>
+    {% if prof.course_description %}<div class="description-text">{{ prof.course_description }}</div>
+    {% else %}<p class="empty">No course description yet. Add it with Edit.</p>{% endif %}
+  </details>
+  {% if prof.letters %}
+  <h3>Letters</h3>
+  <ul class="letter-list">
+    {% for c in sheet.columns if c.programme.id in prof.letters %}
+    {% set x = prof.letters[c.programme.id] %}
+    <li><strong>{{ c.programme.short_name }}</strong>: <span class="chip {{ letter_chip[x.status.value] }}">{{ letter_status[x.status.value] }}</span>
+      {%- for f, label in date_labels.items() if x[f] %} · {{ label }} <span class="mono">{{ x[f] | fdate }}</span>{% endfor %}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  <details class="mark-requested">
+    <summary>Mark as requested</summary>
+    {% if askable %}
+    <form id="mark-requested-{{ prof.id }}" method="post" action="/recommenders/{{ prof.id }}/mark-requested">
+      {% if sheet %}{% for k, v in {"q": sheet.q, "filter": sheet.filter.value, "sort": sheet.sort.value}.items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}{% endif %}
+      <fieldset>
+        <legend>Programmes you asked {{ prof.name }} for (today's date is stamped)</legend>
+        {% for p in askable %}
+        <div class="field-check">
+          <input type="checkbox" id="mr-{{ prof.id }}-{{ p.id }}" name="programmes" value="{{ p.id }}" checked>
+          <label for="mr-{{ prof.id }}-{{ p.id }}">{{ p.short_name }}</label>
+        </div>
+        {% endfor %}
+      </fieldset>
+      <button class="button button-primary" type="submit">Mark ticked as requested</button>
+    </form>
+    {% else %}
+    <p class="empty">Nothing to mark: no letter is To ask or Draft ready.</p>
+    {% endif %}
+  </details>
+  <div class="email-area">
+    <h3>Request email</h3>
+    <p class="note">Generating the request email arrives in Phase 2b.</p>
+  </div>
+</section>

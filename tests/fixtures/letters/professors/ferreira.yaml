@@ -1,0 +1,20 @@
+# Test fixture for C-2a-02: invented professor (priority 4 tie: earliest date wins).
+id: ferreira
+name: Prof. Fay Ferreira
+email: ferreira@example.org
+university: RSM
+course: "Linear Algebra (MA-120)"
+course_description: "Invented."
+letters:
+  booth-mif:
+    status: not_asked
+    requested_on: null
+    confirmed_on: null
+    submitted_on: null
+    thanked_on: null
+  mit-sloan-mfin:
+    status: not_asked
+    requested_on: null
+    confirmed_on: null
+    submitted_on: null
+    thanked_on: null

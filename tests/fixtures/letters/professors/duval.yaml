@@ -1,0 +1,14 @@
+# Test fixture for C-2a-02: invented professor (priority 4, urgent).
+id: duval
+name: Prof. Eli Duval
+email: duval@example.org
+university: RSM
+course: "Microeconomics (EC-110)"
+course_description: "Invented."
+letters:
+  princeton-mfin:
+    status: draft_ready
+    requested_on: null
+    confirmed_on: null
+    submitted_on: null
+    thanked_on: null

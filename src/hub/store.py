@@ -17,6 +17,7 @@ import hashlib
 import io
 import logging
 import os
+import threading
 import time
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -278,6 +279,9 @@ def _represent_timestamp(representer: Any, value: datetime) -> Any:
     return representer.represent_scalar("tag:yaml.org,2002:timestamp", value.isoformat())
 
 
+_CREATE_LOCK = threading.Lock()  # serialises "does it exist? then write" for new files
+
+
 class Store:
     """All reads and writes of the configured data_dir go through here (rule 12)."""
 
@@ -474,6 +478,24 @@ class Store:
 
     def save_professor(self, professor: Professor) -> bool:
         return self._save(self.data_dir / PROFESSORS_DIR / f"{professor.id}.yaml", professor)
+
+    def create_professor(self, professor: Professor) -> None:
+        """Write a new professor file, never over an existing one (Add and CSV import).
+
+        The check ignores case, because Windows treats ``Lee.yaml`` and ``lee.yaml`` as one file, and it
+        runs under a lock with the write, so two concurrent creates cannot pick the same file.
+        """
+        folder = self.data_dir / PROFESSORS_DIR
+        with _CREATE_LOCK:
+            name = f"{professor.id}.yaml".casefold()
+            existing = [p for p in folder.glob("*") if p.name.casefold() == name] if folder.is_dir() else []
+            if existing:
+                raise DataError(
+                    self._rel(existing[0]),
+                    None,
+                    "already exists; nothing was written",
+                )
+            self._save(folder / f"{professor.id}.yaml", professor)
 
     # ---- biography -------------------------------------------------------------------------------
 

@@ -87,6 +87,7 @@ class LettersConfig(_Section):
     default_required: int
     max_extra: int
     follow_up_days: int
+    request_soon_days: int  # priority 4 is urgent when request_due is at most this many days away
 
 
 class RemindersConfig(_Section):
@@ -158,6 +159,8 @@ class ScheduleConfig(_Section):
 
 class PerformanceConfig(_Section):
     sheet_professors_benchmark: int
+    test_workers: int = Field(ge=1)  # pytest-xdist workers used by tasks.py test-fast and test
+    test_fast_warn_seconds: float = Field(gt=0)  # tasks.py warns above this (C-0-02 limit is 60 s)
 
 
 class Config(_Section):

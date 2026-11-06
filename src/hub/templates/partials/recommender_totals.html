@@ -1,0 +1,18 @@
+{#- Totals strip (docs/03 §4.3): per programme "confirmed / required · deadline", in deadline order. -#}
+{% from "_time.html" import deadline with context %}
+{% from "_badge.html" import data_badge with context %}
+<section class="totals" id="totals" aria-label="Letters per programme"{% if oob_totals %} hx-swap-oob="true"{% endif %}>
+  {% for c in sheet.columns %}
+  <div class="total" data-programme="{{ c.programme.id }}">
+    <span class="total-name">{{ c.programme.short_name }}</span>
+    <span class="total-count mono">{{ c.summary.letters_confirmed }} / {{ c.summary.letters_required.count }}</span>
+    <span class="visually-hidden">letters confirmed of required</span>
+    {%- if c.summary.letters_required.assumed %} <span class="note">(assumed)</span>{% endif %}
+    <span class="total-deadline">· {{ deadline(c.summary.deadline) }}</span>
+    {% if c.summary.badge.unverified %}{{ data_badge(c.summary.badge) }}{% endif %}
+    {% if c.over_ask %}<span class="chip chip-urgent">Over-asked: {{ c.in_play }} asked or confirmed for {{ c.summary.letters_required.count }} needed</span>{% endif %}
+  </div>
+  {% else %}
+  <p class="empty">No programmes yet. Add one under Programmes.</p>
+  {% endfor %}
+</section>
