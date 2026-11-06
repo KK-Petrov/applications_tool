@@ -18,7 +18,7 @@ docs/PROGRESS.md (accepted known issues of earlier phases).
 3. **Unreadable programme file.** A clearer error page when a programme file cannot be loaded: name the file and
    the problem, and say how to fix it (accepted Phase 1 item).
 4. **Final pass.** Every empty/error state from docs/03 §5 present; no raw IDs or "None" visible (screenshot
-   text scan); full suite green, US-1 to US-18 (C-5-02).
+   text scan); full suite green, US-1 to US-21 (C-5-02).
 
 ## Tests first
 In your plan, map every automated criterion below to the test or script that checks it and the command
@@ -27,7 +27,7 @@ for the right reason. Never edit a test to make it pass without saying so and ge
 
 ## Acceptance criteria
 Fixed at the design freeze (`config/criteria.json`) and guarded; never lowered without the user's approval. Criteria of earlier phases must keep passing.
-- [ ] **C-5-02** The full end-to-end suite passes (US-1 to US-18). *Verify:* `uv run python tasks.py test`. *(automated, gate)*
+- [ ] **C-5-02** The full end-to-end suite passes (US-1 to US-21). *Verify:* `uv run python tasks.py test`. *(automated, gate)*
 - [ ] **C-5-03** Following README.md alone, the user sets up, syncs and uses the tool. *Verify:* phase 5 prompt, You check. *(human review: you confirm, gate)*
 
 ## Reviewer

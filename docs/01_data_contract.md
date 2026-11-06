@@ -11,6 +11,8 @@ All user data lives in one folder, `data_dir`, set in `config/project.yaml` → 
   programmes/<programme_id>.yaml        # §3, one file per programme
   professors/<professor_id>.yaml        # §4, one file per professor
   biography.yaml                        # §5
+  courses.yaml                          # §10, courses imported from a transcript (Phase 2c)
+  sources/<name>.txt                    # §10, identifier-stripped text of an imported document
   essays/<programme_id>/<essay_id>/
       meta.yaml                         # §6
       v1.md, v2.md, …                   # draft text, immutable once saved
@@ -92,8 +94,11 @@ Validation: every deadline needs `tz` and `source_url`; `due_local` must parse; 
 id: mulder
 name: Prof. Mulder                # display name; surname = last token, override with `surname`
 surname: Mulder
-email: m.mulder@example.org       # stored, used by the generator, never shown in the sheet
+title: Professor                  # used in "Dear {title} {surname},"; default "Professor", e.g. "Dr."
+email: m.mulder@example.org       # optional (null → "Email missing"); never shown in the sheet
 university: RSM                   # free text; the form offers RSM / UVA McIntire / Other
+course_ids: []                    # links to courses.yaml (§10); with links, course and
+                                  # course_description below are not used (they stay for unlinked professors)
 course: "[course name and code]"
 course_description: |             # verbatim paste, any length up to 20,000 characters, never trimmed
   ...
@@ -153,3 +158,28 @@ CVs are evaluated with the same rubric; Programme fit uses the target programme.
 - `hub init-data` copies `seed/programmes/*.yaml` into an empty `data_dir/programmes/` and creates
   `settings.yaml` from prompts (owner name, owner email). It never overwrites existing files.
 - Later phases add: `essays/` and `cv/` (4a), `vN.eval.json` (4b), `sync/` (3).
+
+## 10. courses.yaml and sources/ (Phase 2c, DECISIONS #44)
+```yaml
+courses:
+  - id: corporate-finance-fin-101       # slug, unique, never reused
+    name: Corporate Finance             # exactly as on the transcript
+    code: FIN-101                       # as written, or null
+    institution: Example School of Economics
+    grade: "8.5"                        # text, exactly as written (e.g. "7,5", "A-", "Pass"), or null
+    credits: 6.0                        # number as written (ECTS or US credits), or null
+    term: "2024-2025 block 2"           # free text, or null
+    lecturers:                          # names as written; the first is the listed-first lecturer
+      - Prof. dr. A. van den Berg
+      - Dr. J. Smit
+    description: |                      # verbatim, up to 20,000 characters, or empty
+      ...
+    source_document: transcript-2026-11-06.txt   # file in sources/, or null for a course added by hand
+    confirmed: true                     # true when accepted in the import preview; false for courses added
+                                        # later without checking
+```
+- Courses are written only when the user accepts rows in the import preview (per row or all).
+- `sources/<name>.txt` holds the **identifier-stripped** text of an imported document (docs/02 §10), with a
+  header comment giving the original file name and its sha256. The original file (.docx, .pdf) is never stored,
+  and no file under data_dir contains a student number, date of birth or national ID number.
+- Professors link to courses through `course_ids` (§4); a course can be linked to several professors.

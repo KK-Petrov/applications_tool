@@ -8,7 +8,7 @@ Estimated sessions are the kit's recommendation. `/phase` and `/resume` add 1 to
 | 1 Programmes and dashboard | Done with known issues | 1–2 | 1 | medium | 2026-11-05 | C-1-01 to C-1-05 PASS (20/20 tz cases, axe 0 serious); C-1-06 confirmed by user; 369 tests, fast 25 s; both reviewers READY | low items in Phase notes |
 | 2a Recommender sheet | Done with known issues | 1 | 1 | medium | 2026-11-06 | C-2a-01 PASS (US-6 to US-9, 14 e2e); C-2a-02 PASS (40 cases, priorities 1–8); C-2a-03 PASS (115–290 ms worst warm load, limit 1000); You check confirmed by user; 510 tests, test-fast 26.6 → ~14 s with xdist (8 workers); data-integrity READY, ui READY | minor items in Phase notes |
 | 2b Recommendation email generator | Not started | 1–2 | 0 | high | | | |
-| 2c Programme research | Not started | 1–2 | 0 | high | | | |
+| 2c Programme research and course import | Not started | 2 | 0 | high | | | |
 | 3 Reminders, calendar and digest | Not started | 1–2 | 0 | high | | | |
 | 4a Biography bank, essays, CVs and exact checks | Not started | 1 | 0 | medium | | | |
 | 4b AI essay and CV evaluator | Not started | 1–2 | 0 | high | | | |

@@ -38,17 +38,18 @@ Methods: **automated** (a test decides) · **human** (you decide, with the phase
 |---|---|---|---|---|---|---|---|
 | C-2b-01 | Every generated email validates against its JSON schema | email_schema_failures == 0 | automated | yes | `uv run python tasks.py eval-email` → reports/eval_email.json: schema_failures | – | The app reads the output by machine |
 | C-2b-02 | Every eval email names the right professor and course, lists each selected programme with its exact stored deadline, and mentions no unselected programme | email_fact_failures == 0 | automated | yes | `uv run python tasks.py eval-email` → reports/eval_email.json: fact_failures | – | A wrong deadline or name in a request to a professor is unrecoverable |
-| C-2b-03 | Eval emails are 180–280 words, open with 'Dear Professor {surname},' and never state an anticipated achievement as achieved | email_form_failures == 0 | automated | yes | `uv run python tasks.py eval-email` → reports/eval_email.json: form_failures | – | Formal register and honesty about the anticipated cum laude |
+| C-2b-03 | Eval emails are 180–280 words, open with 'Dear {title} {surname},' and never state an anticipated achievement as achieved | email_form_failures == 0 | automated | yes | `uv run python tasks.py eval-email` → reports/eval_email.json: form_failures | – | Formal register and honesty about the anticipated cum laude |
 | C-2b-04 | No unsupported claims in eval emails, and the claim grader flags all 3 planted calibration emails | unsupported_claims == 0 | automated | yes | `uv run python tasks.py eval-email` → reports/eval_email.json: unsupported_claims, grader_calibration_passed | – | The user requires accuracy over embellishment |
 | C-2b-05 | Failure paths (Claude Code missing, timeout, invalid output) show a clear message and write nothing | pass/fail | automated | yes | `uv run pytest tests/test_claude_cli.py` | – | – |
 | C-2b-06 | Five generated emails read as something the user would send | pass/fail | human | yes | phase 2b prompt, You check | – | – |
 
-## Phase 2c: Programme research
+## Phase 2c: Programme research and course import
 
 | ID | Criterion | Threshold | Method | Gate | Verify | Baseline | Why |
 |---|---|---|---|---|---|---|---|
 | C-5-01 | Researching two programmes yields schema-valid files where every filled field has a source URL and the programme is marked unverified | pass/fail | automated | yes | `uv run python tasks.py live -k research` | – | – |
 | C-2c-02 | Re-research writes nothing until the user saves; accepted deadline changes reset those deadlines to unverified; rejected changes leave the file byte-identical | pass/fail | automated | yes | `uv run pytest tests/test_research_merge.py tests/e2e/test_research.py -k us18` | – | – |
+| C-2c-03 | On the invented 28-course fixture transcript, course import extracts every course with exact name, grade and credits, flags 0 false grades, stores no identifiers, lists every lecturer once with all their courses, and writes nothing (courses or professors) until the user confirms | pass/fail | automated | yes | `uv run python tasks.py live -k courses` (tests/evals/courses/) and `uv run pytest tests/test_course_import.py` | – | Course names and grades go into letters to professors; a wrong grade or a stored student number is unrecoverable |
 
 ## Phase 3: Reminders, calendar and digest
 
@@ -83,5 +84,5 @@ Methods: **automated** (a test decides) · **human** (you decide, with the phase
 
 | ID | Criterion | Threshold | Method | Gate | Verify | Baseline | Why |
 |---|---|---|---|---|---|---|---|
-| C-5-02 | The full end-to-end suite passes (US-1 to US-18) | pass/fail | automated | yes | `uv run python tasks.py test` | – | – |
+| C-5-02 | The full end-to-end suite passes (US-1 to US-21) | pass/fail | automated | yes | `uv run python tasks.py test` | – | – |
 | C-5-03 | Following README.md alone, the user sets up, syncs and uses the tool | pass/fail | human | yes | phase 5 prompt, You check | – | – |

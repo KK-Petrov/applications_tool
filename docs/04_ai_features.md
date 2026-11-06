@@ -37,8 +37,10 @@ Command (argv list, never a shell string):
 ### 2.1 Input payload (built in Python by `src/hub/ai/payloads.py`)
 ```json
 {"owner": {"name": "…"},
- "professor": {"name": "Prof. Mulder", "surname": "Mulder", "university": "RSM", "course": "…",
-               "course_description": "(verbatim text)", "grade": null, "term": null, "interaction": null, "tone": "formal"},
+ "professor": {"name": "Prof. Mulder", "title": "Professor", "surname": "Mulder", "university": "RSM",
+               "courses": [{"name": "…", "code": null, "description": "(verbatim text)", "grade": null,
+                            "term": null, "credits": null}],
+               "interaction": null, "tone": "formal"},
  "programmes": [{"short_name": "Princeton MFin", "full_name": "Princeton Master in Finance",
                  "deadline_text": "15 December 2026, 11:59 pm ET", "submission": "via the Graduate School portal",
                  "letters_note": "…"}],
@@ -46,10 +48,12 @@ Command (argv list, never a shell string):
  "constraints": {"min_words": 180, "max_words": 280}}
 ```
 `deadline_text` is formatted in Python in the **school's** zone; the model must copy it exactly.
-Only programmes ticked for this letter are included.
+Only programmes ticked for this letter are included. `courses` holds every course linked through
+`course_ids` (docs/01 §10), or the professor's manual course and description when none is linked
+(DECISIONS #44). `surname` is the salutation form (docs/02 §9: "Van den Berg" standing alone).
 
 ### 2.2 Rules in SKILL.md
-1. Formal register; open with exactly `Dear Professor {surname},`; close with `Kind regards,` then the owner's name.
+1. Formal register; open with exactly `Dear {title} {surname},` (e.g. `Dear Dr. De Vries,`); close with `Kind regards,` then the owner's name.
 2. Structure: (a) who the owner is and the course taken with the professor (term, grade if given);
    (b) what he did or learned in the course, drawn from the course description and the interaction;
    (c) why these programmes, from goal/experience entries; (d) the programmes and deadlines as a short
@@ -83,7 +87,8 @@ performance, projects, contact or achievements are.
 1. rich record (grade, term, interaction), one programme; 2. no grade, no interaction; 3. all four
 programmes; 4. warm tone; 5. 3,000-character pasted description; 6. biography with an **anticipated**
 cum laude; 7. very short description (sparse, tempts invention); 8. UVA professor, term "Fall 2026";
-9. two programmes with different zones (ET and CT); 10. professor name with a particle ("Prof. van der Berg", surname "van der Berg").
+9. two programmes with different zones (ET and CT); 10. professor name with a particle ("Prof. van der Berg", surname "van der Berg"; salutation
+"Dear Professor Van der Berg,"). Every case sets `title` explicitly; case 8 uses `"Dr."`.
 `tests/evals/email/calibration/` — 3 hand-written emails each containing one invented claim; the grader must flag all 3.
 
 `tasks.py eval-email` runs `/rec-email` once per case (live), then graders in `tests/evals/email/graders.py`:
@@ -91,7 +96,7 @@ cum laude; 7. very short description (sparse, tempts invention); 8. UVA professo
 - `fact_failures`: body lacks the professor's surname in the salutation, the course name, or any selected
   programme's `short_name` **and** its exact `deadline_text`; or contains any unselected programme's
   short name, school or alias.
-- `form_failures`: body word count (docs/02 §7) outside 180–280; salutation not exactly `Dear Professor {surname},`;
+- `form_failures`: body word count (docs/02 §7) outside 180–280; salutation not exactly `Dear {title} {surname},`;
   an anticipated entry stated as achieved (regex for its title without "expect"/"anticipat"/"on track").
 - `unsupported_claims`: total from `/grade-claims` over the 10 emails; `grader_calibration_passed`: all 3 calibration emails flagged.
 Writes `reports/eval_email.json` and a readable `reports/eval_email.md` with each email for the human check.
@@ -168,3 +173,28 @@ comments (DECISIONS #29b).
 Calls happen only on explicit clicks or eval runs. The Settings page shows the month's call count and
 summed `total_cost_usd` from `reports/ai_usage.jsonl` (an estimate; subscription usage draws on the
 Agent SDK credit).
+
+## 9. Skill: `/extract-courses` (Phase 2c, DECISIONS #44)
+Input: `{"text": "(identifier-stripped document text)", "institution_hint": null}` (docs/02 §10). No tools.
+Output (`src/hub/ai/schemas/extract_courses.json`):
+```json
+{"type": "object", "additionalProperties": false, "required": ["courses", "warnings"],
+ "properties": {"courses": {"type": "array", "items": {"type": "object", "additionalProperties": false,
+   "required": ["name", "code", "institution", "grade", "credits", "term", "lecturers", "description"],
+   "properties": {"name": {"type": "string"}, "code": {"type": ["string", "null"]},
+     "institution": {"type": ["string", "null"]}, "grade": {"type": ["string", "null"]},
+     "credits": {"type": ["number", "null"]}, "term": {"type": ["string", "null"]},
+     "lecturers": {"type": "array", "items": {"type": "string"}},
+     "description": {"type": "string"}}}},
+   "warnings": {"type": "array", "items": {"type": "string"}}}}
+```
+Rules in SKILL.md: copy names, codes, grades and credits exactly as written; lecturers as written, in the
+document's order; never infer, round or convert a grade; a field not in the document is null; never output a
+student number, date of birth or national ID number. Python then strips identifiers again, checks every grade
+verbatim against the source text (docs/02 §10), validates the schema and shows the preview; nothing is written
+until the user accepts.
+Eval set `tests/evals/courses/`: an invented 28-course transcript (invented student, institutions and lecturers)
+as .docx, text PDF and pasted text, with identifiers in several formats in English and Dutch, course codes and
+other numbers that resemble IDs, and `expected.json`. `tasks.py live -k courses` grades: every course found with
+exact name, grade and credits; 0 false grades; no identifier in the output or in data_dir; every lecturer listed
+once with all their courses (C-2c-03).

@@ -24,6 +24,10 @@ App binds to `127.0.0.1:8765` only.
 | `GET /recommenders/{id}/panel` | Detail panel partial |
 | `POST /recommenders/{id}/letters/{programme_id}` | Set letter status (partial: the cell + the row's next action) |
 | `POST /recommenders/{id}/email` | Generate email (Phase 2b) |
+| `GET /recommenders/course-suggestions?name=` | Add professor: courses whose lecturers match the name (partial, 2c) |
+| `GET /courses` | Courses list (minimal, 2c; shown in full on the biography bank page in 4a) |
+| `GET /courses/import`, `POST /courses/import`, `POST /courses/import/save` | Import courses: upload or paste, preview, accept per row or all (2c) |
+| `POST /courses/import/professors` | Create professors from the document: preview, then batch create (2c) |
 | `GET /essays`, `GET /essays/{programme_id}/{essay_id}`, `POST …/versions`, `POST …/evaluate` | Essays (4a/4b) |
 | `GET /cv`, `GET /cv/{base or programme_id}`, `POST …/versions`, `POST …/evaluate` | CVs (4a/4b) |
 | `GET /biography`, `POST /biography/entries`, `POST /biography/entries/{id}` | Biography bank (4a) |
@@ -51,6 +55,10 @@ App binds to `127.0.0.1:8765` only.
 - **US-18** (2c) On a programme page, "Re-research" shows each field as new / changed / unchanged with its source;
   the user accepts or rejects each change; nothing is written until Save; accepted deadline changes reset those
   deadlines to unverified.
+
+- **US-19** (2c) The user imports a transcript (.docx, text PDF or pasted text); the preview shows every course with all fields, flags grades not found in the document, and writes nothing until rows are accepted; a scanned PDF is refused with a clear message.
+- **US-20** (2c) After the import, "Create professors from this document" lists every lecturer once with their courses and grades; the user ticks some, links one to an existing professor, and creates the rest in one batch; the new professors show "Email missing".
+- **US-21** (2c) On Add professor, typing a lecturer's name suggests their courses; choosing one fills course, description, grade and term, which stay editable.
 
 ## 3. Layout and navigation
 - Left sidebar (dark, 220 px min, stacks on top below 760 px): brand "Application Hub"; links Dashboard,
@@ -86,6 +94,8 @@ highlights, Linked items (recommenders x/required, essays evaluated, AI-use poli
   Status colours: no letter (not assigned) "—" grey text; To ask (`not_asked`) grey chip; Draft ready blue
   (set only by email generation, 2b); Requested orange; Confirmed green tint; Submitted solid green;
   Declined red tint. Legend under the table. (DECISIONS #39)
+  A professor without an email shows an "Email missing" chip in the Professor cell and in the panel;
+  email generation still works. The Course column shows the linked courses' names (DECISIONS #44).
 - Detail panel below the table for the selected row: details (email shown here only), Edit, Generate email,
   latest generated email with Copy, "Refine in Claude Code" (copies a ready command to the clipboard:
   `claude "/rec-email <professor_id>"`), Mark as requested.
@@ -93,6 +103,10 @@ highlights, Linked items (recommenders x/required, essays evaluated, AI-use poli
 the sheet"), University select, Course, Course description (large textarea, ≥ 8 rows, hint "Paste it straight
 from the course guide or syllabus"), Grade, Term, Specific interaction, programme checkboxes with deadlines,
 Tone (Formal default / Slightly warmer). Buttons: Save and generate email (2b), Save, Cancel.
+Phase 2c (DECISIONS #44): Title (default "Professor", pre-filled from a title in the name); Email optional;
+linked courses (chips, removable). Typing a name shows suggested courses whose lecturers match the surname;
+choosing one links it and fills course, description, grade and term; everything stays editable and
+nothing auto-saves.
 ### 4.5 Essays and CV — left list grouped by programme then "CV"; centre: prompt, version chip, live word
 count "n / limit words" (red when over), wrong-school hits listed under the editor with line numbers and an
 "intended" toggle, textarea, buttons Evaluate (4b), Save as new version, Discuss in Claude Code; right panel:
@@ -102,6 +116,11 @@ policy line, version history with "Compare".
 detail, tags, Anticipated chip, "used in n essays", Edit); Add entry form inline.
 ### 4.7 Settings — owner name and email, display and reminder zones, data folder path (read-only, from
 config), Google: Connect / Connected as …, Sync now (with dry-run checkbox), last sync summary, digest preview.
+
+### 4.8 Courses and course import (Phase 2c) — reached from Recommenders ("Import courses") and Add professor
+- Courses list: name, code, institution, grade, credits, term, lecturers; Import button.
+- Import: paste text or choose a .docx / PDF file. A scanned PDF is refused: "This PDF has no text layer; OCR is not supported. Export it as text or Word, or paste the text." Preview table with every field of every row; a grade not found verbatim in the document is flagged and blocks that row; Accept per row and Accept all; nothing is written before. Identifiers never appear in the preview.
+- Create professors from this document: one line per lecturer (name as written, their courses with the owner's grade, "listed first" marker), sorted by best grade, nothing ticked; a match with an existing professor offers "Link to {name}" instead of creating; Create ticked professors writes them in one batch.
 
 ## 5. States
 Every page has: loading (HTMX indicator on the triggering element), empty ("No professors yet — add one or

@@ -49,7 +49,7 @@ A local web app that tracks US master's applications (deadlines, requirements, d
 | 1 Programmes and dashboard | Dashboard, programme page (requirements, steps, documents, interviews, curriculum), add/edit programme, time zones, verification | 1–2 | medium | ui-reviewer, data-integrity-reviewer |
 | 2a Recommender sheet | Sheet with per-programme status cells, filters, Add professor page, detail panel | 1 | medium | ui-reviewer, data-integrity-reviewer |
 | 2b Recommendation email generator | Claude Code wrapper, /rec-email skill, email eval set and graders, Generate button | 1–2 | high | ai-output-reviewer |
-| 2c Programme research | /research-programme skill (official sources only), Research a programme, Re-research with field-by-field accept/reject | 1–2 | high | ai-output-reviewer, ui-reviewer |
+| 2c Programme research and course import | /research-programme skill (official sources only), Research a programme, Re-research with field-by-field accept/reject; /extract-courses (transcript → courses.yaml, grades checked, identifiers stripped), professors created from the transcript, course suggestions on Add professor | 2 | high | ai-output-reviewer, ui-reviewer, data-integrity-reviewer |
 | 3 Reminders, calendar and digest | Reminder engine, Google Calendar sync, Gmail digest to yourself, Task Scheduler setup | 1–2 | high | data-integrity-reviewer |
 | 4a Biography bank, essays, CVs and exact checks | Biography bank, essay and CV versions, word count, wrong-school check | 1 | medium | ui-reviewer, data-integrity-reviewer |
 | 4b AI essay and CV evaluator | /evaluate skill, rubric output, essay eval set, Evaluate button | 1–2 | high | ai-output-reviewer |
@@ -73,7 +73,7 @@ A local web app that tracks US master's applications (deadlines, requirements, d
 | C-2a-03 | 2a | The sheet stays fast with many professors | sheet_render_ms_40_professors < 1000 ms | yes |
 | C-2b-01 | 2b | Every generated email validates against its JSON schema | email_schema_failures == 0 | yes |
 | C-2b-02 | 2b | Every eval email names the right professor and course, lists each selected programme with its exact stored deadline, and mentions no unselected programme | email_fact_failures == 0 | yes |
-| C-2b-03 | 2b | Eval emails are 180–280 words, open with 'Dear Professor {surname},' and never state an anticipated achievement as achieved | email_form_failures == 0 | yes |
+| C-2b-03 | 2b | Eval emails are 180–280 words, open with 'Dear {title} {surname},' and never state an anticipated achievement as achieved | email_form_failures == 0 | yes |
 | C-2b-04 | 2b | No unsupported claims in eval emails, and the claim grader flags all 3 planted calibration emails | unsupported_claims == 0 | yes |
 | C-2b-05 | 2b | Failure paths (Claude Code missing, timeout, invalid output) show a clear message and write nothing | pass/fail | yes |
 | C-2b-06 | 2b | Five generated emails read as something the user would send | pass/fail | yes |
@@ -91,8 +91,10 @@ A local web app that tracks US master's applications (deadlines, requirements, d
 | C-4b-03 | 4b | The evaluator never rewrites: no comment exceeds 60 words or contains a replacement paragraph | pass/fail | yes |
 | C-4b-04 | 4b | False alarms on clean essays (accuracy rated weak on a clean essay) | pass/fail | no |
 | C-4b-05 | 4b | Three evaluations of the user's own drafts are useful and fair | pass/fail | yes |
-| C-5-01 | 5 | Researching two programmes yields schema-valid files where every filled field has a source URL and the programme is marked unverified | pass/fail | yes |
-| C-5-02 | 5 | The full end-to-end suite passes (US-1 to US-17) | pass/fail | yes |
+| C-5-01 | 2c | Researching two programmes yields schema-valid files where every filled field has a source URL and the programme is marked unverified | pass/fail | yes |
+| C-2c-02 | 2c | Re-research writes nothing until the user saves; accepted deadline changes reset those deadlines to unverified; rejected changes leave the file byte-identical | pass/fail | yes |
+| C-2c-03 | 2c | On the invented 28-course fixture transcript, course import extracts every course with exact name, grade and credits, flags 0 false grades, stores no identifiers, lists every lecturer once with all their courses, and writes nothing (courses or professors) until the user confirms | pass/fail | yes |
+| C-5-02 | 5 | The full end-to-end suite passes (US-1 to US-21) | pass/fail | yes |
 | C-5-03 | 5 | Following README.md alone, the user sets up, syncs and uses the tool | pass/fail | yes |
 
 ## 6. Decisions at the freeze

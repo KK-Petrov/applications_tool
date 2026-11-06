@@ -59,7 +59,7 @@ so tests can fix the clock. Parameters come from `config/project.yaml`.
 
 | Priority | Condition (per letter to programme p) | Text | Urgent |
 |---|---|---|---|
-| 1 | course or course_description empty and any letter exists | Add course details | no |
+| 1 | no course details (no linked course with a name and a description, and course or course_description empty) and any letter exists | Add course details | no |
 | 2 | status `not_asked`/`draft_ready` and today > request_due(p) | Send request (overdue since {date}) | yes |
 | 3 | status `requested` and today ≥ requested_on + 7 d | Follow up (asked {date}) | yes |
 | 4 | status `not_asked`/`draft_ready` | Send request by {request_due} | if ≤ 7 days away |
@@ -175,3 +175,34 @@ For an essay or tailored CV targeting programme P:
 Fixtures: `tests/fixtures/essays/planted/` (essays with 20 planted mentions in total, including possessives,
 multi-word names and aliases such as "Sloan") and `tests/fixtures/essays/clean/` (10 essays mentioning the
 own programme, own background, "British Columbia", "phone booth").
+
+## 9. Names (Phase 2c, DECISIONS #44)
+Lecturer names are parsed in Python from the name as written (`config.names`):
+1. **Title tokens** (`names.title_tokens`, case-insensitive, with or without a full stop: prof., dr., ir., drs.,
+   mr., …) are stripped. The professor's `title` is pre-filled from the highest-ranked stripped token
+   (`names.title_precedence`; "prof." → "Professor", "dr." → "Dr."); with no token it defaults to "Professor".
+   The user can edit it.
+2. **Initials** are tokens of one letter followed by a full stop, possibly joined ("J.A." = J, A).
+3. **Particles** (`names.particles`: van, van der, van den, de, den, der, ter, te, ten, 't, in 't, op de, von, …)
+   belong to the surname: "Prof. dr. A.B. van den Berg" → surname "van den Berg", initials "A B", title
+   "Professor".
+4. **Salutation:** the surname keeps its particle in lower case after a first name or initials ("A. van den
+   Berg"); standing alone, as in "Dear Professor Van den Berg,", the first particle is capitalised.
+5. **Matching** (lecturer ↔ existing professor, Add professor suggestions): surname plus initials, compared
+   case-insensitively and with diacritics removed ("Müller" = "Muller"). A lecturer without initials matches on
+   surname only and is offered for linking, never merged silently.
+Worked examples (tests/test_names.py): "Prof. dr. A. van den Berg" → Professor · van den Berg · "Dear Professor
+Van den Berg,"; "Dr. J. de Vries" → Dr. · de Vries · "Dear Dr. De Vries,"; "S. Whitfield" → Professor ·
+Whitfield.
+
+## 10. Identifiers and grades in imported documents (Phase 2c, DECISIONS #44)
+Rule 13: both checks run in Python, never in the model.
+1. **Identifier stripping is label-anchored.** A number or date is removed only when it follows an identifier
+   label (`courses.identifier_labels`, English and Dutch: student number, student ID, studentnummer, date of
+   birth, geboortedatum, BSN, burgerservicenummer, national ID, …), on the same line after optional
+   punctuation. A standalone 9-digit number is treated as a BSN, and removed, only if it passes the BSN 11-check.
+   Course codes, grades, credits and years are kept. Stripping runs on the text before it is sent to
+   `/extract-courses` and again on every returned field.
+2. **Grades are facts.** A grade returned by the skill is accepted only if the exact string occurs in the
+   stripped source text; otherwise the preview flags it ("Grade not found in the document") and the row can't
+   be accepted until the user corrects or clears it.

@@ -168,7 +168,7 @@
     {
       "id": "C-2b-03",
       "phase": "2b",
-      "title": "Eval emails are 180–280 words, open with 'Dear Professor {surname},' and never state an anticipated achievement as achieved",
+      "title": "Eval emails are 180–280 words, open with 'Dear {title} {surname},' and never state an anticipated achievement as achieved",
       "method": "automated",
       "gate": true,
       "metric": "email_form_failures",
@@ -227,6 +227,16 @@
       "method": "automated",
       "gate": true,
       "verify": "`uv run pytest tests/test_research_merge.py tests/e2e/test_research.py -k us18`",
+      "source": "user"
+    },
+    {
+      "id": "C-2c-03",
+      "phase": "2c",
+      "title": "On the invented 28-course fixture transcript, course import extracts every course with exact name, grade and credits, flags 0 false grades, stores no identifiers, lists every lecturer once with all their courses, and writes nothing (courses or professors) until the user confirms",
+      "method": "automated",
+      "gate": true,
+      "verify": "`uv run python tasks.py live -k courses` (tests/evals/courses/) and `uv run pytest tests/test_course_import.py`",
+      "why": "Course names and grades go into letters to professors; a wrong grade or a stored student number is unrecoverable",
       "source": "user"
     },
     {
@@ -376,7 +386,7 @@
     {
       "id": "C-5-02",
       "phase": "5",
-      "title": "The full end-to-end suite passes (US-1 to US-18)",
+      "title": "The full end-to-end suite passes (US-1 to US-21)",
       "method": "automated",
       "gate": true,
       "verify": "`uv run python tasks.py test`",
