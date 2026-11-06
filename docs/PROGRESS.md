@@ -12,7 +12,7 @@ Estimated sessions are the kit's recommendation. `/phase` and `/resume` add 1 to
 | 3 Reminders, calendar and digest | Not started | 1–2 | 0 | high | | | |
 | 4a Biography bank, essays, CVs and exact checks | Not started | 1 | 0 | medium | | | |
 | 4b AI essay and CV evaluator | Not started | 1–2 | 0 | high | | | |
-| 5 Polish | Not started | 1 | 0 | medium | | | |
+| 5 Polish | Not started | 1–2 | 0 | medium | | | |
 
 Status values: Not started · In progress · Done · Done with known issues
 

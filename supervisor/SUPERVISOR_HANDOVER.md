@@ -53,7 +53,7 @@ A local web app that tracks US master's applications (deadlines, requirements, d
 | 3 Reminders, calendar and digest | Reminder engine, Google Calendar sync, Gmail digest to yourself, Task Scheduler setup | 1–2 | high | data-integrity-reviewer |
 | 4a Biography bank, essays, CVs and exact checks | Biography bank, essay and CV versions, word count, wrong-school check | 1 | medium | ui-reviewer, data-integrity-reviewer |
 | 4b AI essay and CV evaluator | /evaluate skill, rubric output, essay eval set, Evaluate button | 1–2 | high | ai-output-reviewer |
-| 5 Polish | Usage panel, README, final end-to-end pass, clearer unreadable-file page | 1 | medium | ui-reviewer, ai-output-reviewer |
+| 5 Polish | Usage panel, README, final end-to-end pass, clearer unreadable-file page, six accepted known issues (plain-word file errors, .tmp lock message, toast focus, one-round form errors, narrow-screen sheet, post-redirect-get) | 1–2 | medium | ui-reviewer, ai-output-reviewer |
 
 ## 5. Acceptance criteria
 | ID | Phase | Criterion | Threshold | Gate |
