@@ -1,0 +1,20 @@
+<section class="card" id="requirements" aria-labelledby="requirements-title">
+  {% set done = p.requirements | selectattr("done") | list | length %}
+  <h2 id="requirements-title">Requirements <span class="count mono">{{ done }} / {{ p.requirements | length }}</span></h2>
+  {% if card_error and card_error[0] == "requirements" %}<p class="form-error card-error" role="alert" tabindex="-1" autofocus><strong>Nothing was saved.</strong> {{ card_error[1] }} The card shows what is stored.</p>{% endif %}
+  {% if p.requirements %}
+  <ul class="checklist">
+    {% for r in p.requirements %}
+    <li>
+      <form method="post" action="/programmes/{{ p.id }}/requirements/{{ r.id }}" hx-post="/programmes/{{ p.id }}/requirements/{{ r.id }}" data-reset-on-error hx-trigger="change" hx-target="#requirements" hx-swap="outerHTML">
+        <input type="hidden" name="done" value="0">
+        <input type="checkbox" id="req-{{ r.id }}" name="done" value="1"{% if r.done %} checked{% endif %}>
+        <label for="req-{{ r.id }}">{{ r.label }}</label>
+        {% if r.note %}<span class="note">{{ r.note }}</span>{% endif %}
+        <noscript><button class="button button-small" type="submit">Save<span class="visually-hidden"> {{ r.label }}</span></button></noscript>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="empty">No requirements yet. Add them with Edit.</p>{% endif %}
+</section>

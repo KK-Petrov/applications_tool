@@ -1,0 +1,12 @@
+{#- Data badge (docs/02 §3): unverified data is always visibly marked, with its reason (C-1-01). -#}
+{% macro data_badge(b, verified_on=none) -%}
+{%- if b.unverified -%}
+<span class="chip badge-unverified">Unverified<span class="badge-reason"> · {{ b.reason }}</span></span>
+{%- else -%}
+<span class="chip badge-verified">Verified{% if verified_on %}<span class="badge-reason"> · {{ verified_on | fdate }}</span>{% endif %}</span>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro status_chip(status) -%}
+<span class="chip status-{{ status.value }}">{{ labels.programme_status[status.value] }}</span>
+{%- endmacro %}

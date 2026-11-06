@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% from "_time.html" import deadline, countdown_chip with context %}
+{% block content %}
+{% set t = board.tiles %}
+{% if board.alert %}
+{% set a = board.alert %}{% set s = board.alert_programme %}
+<section class="alert" aria-labelledby="alert-title">
+  <h2 id="alert-title" class="alert-title">
+    {%- if a.kind.value == "letters" -%}
+      {%- if a.overdue -%}Request {{ s.programme.short_name }} recommendations: overdue since {{ a.due | fdate }}
+      {%- else -%}Request {{ s.programme.short_name }} recommendations by {{ a.due | fdate }}{%- endif -%}
+    {%- else -%}{{ s.programme.short_name }} deadline: {{ s.countdown.label }}{%- endif -%}
+  </h2>
+  <p class="alert-detail">
+    {% if a.kind.value == "letters" %}{{ a.letters_required }} letters needed, {{ a.letters_confirmed }} confirmed{% if a.letters_assumed %} (number assumed){% endif %} · deadline {{ deadline(s.deadline) }}
+    {% else %}{{ deadline(s.deadline) }} · requirements {{ s.requirements[0] }} / {{ s.requirements[1] }} done{% endif %}
+    · <a href="/programmes/{{ s.programme.id }}">Open {{ s.programme.short_name }}</a>
+  </p>
+</section>
+{% endif %}
+
+<section class="tiles" aria-label="Summary">
+  <div class="tile">
+    <h2 class="tile-label">Next deadline</h2>
+    {% if t.next_deadline %}
+    <p class="tile-value mono">{{ t.next_deadline.countdown.label }}</p>
+    <p class="tile-sub">{{ t.next_deadline.programme.short_name }} · {{ deadline(t.next_deadline.deadline) }}</p>
+    {% else %}<p class="tile-value">Nothing due</p>{% endif %}
+  </div>
+  <div class="tile">
+    <h2 class="tile-label">Programmes tracked</h2>
+    <p class="tile-value mono">{{ t.tracked }}</p>
+    <p class="tile-sub">{{ t.unverified }} unverified</p>
+  </div>
+  <div class="tile">
+    <h2 class="tile-label">Letters confirmed</h2>
+    <p class="tile-value mono">{{ t.letters_confirmed }} of {{ t.letters_required }}</p>
+    <p class="tile-sub">required{% if t.letters_assumed %} (some numbers assumed){% endif %}</p>
+  </div>
+  <div class="tile">
+    <h2 class="tile-label">Essays evaluated</h2>
+    <p class="tile-value mono">{{ t.essays_evaluated }} of {{ t.essays_total }}</p>
+    <p class="tile-sub">Evaluation arrives in Phase 4b</p>
+  </div>
+</section>
+
+<section class="card" aria-labelledby="programmes-title">
+  <h2 id="programmes-title">Programmes</h2>
+  {% set rows = board.rows %}{% include "_programme_table.html" %}
+</section>
+
+<section class="card" aria-labelledby="upcoming-title">
+  <h2 id="upcoming-title">Upcoming reminders</h2>
+  <p class="empty">Reminders arrive in Phase 3.</p>
+</section>
+{% endblock %}

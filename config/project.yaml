@@ -15,8 +15,22 @@ app:
 
 time:
   display_zones:                  # header selector options; source: user (ET while in Charlottesville, Rotterdam later)
-    - {tz: America/New_York, label: "Eastern Time (Charlottesville)", clock: 12h}
-    - {tz: Europe/Amsterdam, label: "Central European Time (Rotterdam)", clock: 24h}
+    - {tz: America/New_York, label: "Eastern Time (Charlottesville)", clock: 12h, place: null}
+    - {tz: Europe/Amsterdam, label: "Central European Time (Rotterdam)", clock: 24h, place: Rotterdam}
+    # place: printed after the zone abbreviation for times shown in that display zone, e.g.
+    # "16 Dec 2026, 05:59 CET (Rotterdam)"; source: user (DECISIONS #20)
+  zone_abbreviations:             # printed next to every time; zones not listed use their tzname (CET, CEST, UTC)
+    America/New_York: ET          # source: docs/02 §1 (ET, CT, CET, CEST)
+    America/Chicago: CT
+    America/Denver: MT
+    America/Los_Angeles: PT
+  default_clock: 12h              # zones not in display_zones (school zones are US: 12-hour, docs/02 §1)
+  formats:                        # docs/02 §1; placeholders filled by hub.rules.timezones (DECISIONS #20)
+    long: "{day} {month} {year}, {time} {zone}"     # 15 Dec 2026, 11:59 pm ET
+    short: "{day} {month}, {time} {zone}"           # 16 Dec, 05:59 CET (Rotterdam)
+    date: "{day} {month} {year}"                    # 3 Nov 2026 (dates without a time, e.g. request-by dates)
+    time_12h: "{hour12}:{minute} {ampm}"            # US zones
+    time_24h: "{hour24}:{minute}"                   # European zones
   default_display_tz: America/New_York
   default_reminder_tz: America/New_York
   assumed_deadline_time: "23:59"  # used when a deadline's time is unknown; shown as "(time to verify)"

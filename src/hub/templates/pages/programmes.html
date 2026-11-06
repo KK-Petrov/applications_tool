@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block actions %}<a class="button button-primary" href="/programmes/new">Add programme</a>{% endblock %}
+{% block content %}
+<section class="card" aria-label="All programmes">
+  {% set rows = board.rows %}{% include "_programme_table.html" %}
+</section>
+{% endblock %}

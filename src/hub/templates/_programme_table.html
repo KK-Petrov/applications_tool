@@ -1,0 +1,37 @@
+{% from "_time.html" import deadline, countdown_chip with context %}
+{% from "_badge.html" import data_badge, status_chip %}
+{% if rows %}
+<div class="table-scroll" tabindex="0" role="region" aria-label="Programmes table">
+  <table class="programmes">
+    <thead>
+      <tr>
+        <th scope="col">Programme</th>
+        <th scope="col">Deadline</th>
+        <th scope="col">Days left</th>
+        <th scope="col">Letters</th>
+        <th scope="col">Documents</th>
+        <th scope="col">Status</th>
+        <th scope="col">Data</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr data-programme="{{ r.programme.id }}"{% if r.countdown.passed %} class="passed"{% endif %}>
+        <td>
+          <a class="programme-link" href="/programmes/{{ r.programme.id }}">{{ r.programme.short_name }}</a>
+          {% if r.programme.unit %}<span class="sub">{{ r.programme.unit }}</span>{% endif %}
+        </td>
+        <td>{{ deadline(r.deadline) }}</td>
+        <td>{{ countdown_chip(r.countdown) }}</td>
+        <td><span class="mono">{{ r.letters_confirmed }} / {{ r.letters_required.count }}</span>{% if r.letters_required.assumed %} <span class="note">assumed</span>{% endif %}</td>
+        <td><span class="mono">{{ r.documents[0] }} / {{ r.documents[1] }}</span> received</td>
+        <td>{{ status_chip(r.programme.status) }}</td>
+        <td>{{ data_badge(r.badge, r.programme.verified_on) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="empty">No programmes yet. <a href="/programmes/new">Add a programme</a> or run <code>hub init-data</code> to load the starting four.</p>
+{% endif %}

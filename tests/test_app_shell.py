@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from hub.app import create_app
 
+from helpers import BASE
 from paths import INVALID, REPO_ROOT
 
 PAGES = {
@@ -29,7 +30,8 @@ FIXED_NOW = datetime(2026, 10, 30, 16, 0, tzinfo=UTC)  # Friday 30 October 2026,
 
 @pytest.fixture
 def client(config) -> TestClient:
-    return TestClient(create_app(config, clock=lambda: FIXED_NOW))
+    # Phase 1: requests must come from the app's own host (DECISIONS #26), so the client uses BASE.
+    return TestClient(create_app(config, clock=lambda: FIXED_NOW), base_url=BASE)
 
 
 @pytest.mark.parametrize("route", PAGES)
@@ -66,8 +68,20 @@ def test_static_assets_are_served_locally(client: TestClient) -> None:
     assert '/static/htmx.min.js"' in html
     assert client.get("/static/htmx.min.js").status_code == 200
     assert client.get("/static/css/tokens.css").status_code == 200
-    external = re.findall(r"(?:src|href)=\"(https?://[^\"]+)\"", html)
-    assert all(u.startswith(("https://fonts.googleapis.com", "https://fonts.gstatic.com")) for u in external)
+    # Only attributes that make the browser load something count; <a href> links (e.g. deadline source
+    # links, C-1-01) load nothing until clicked. Narrowed in Phase 1 with the user's approval (DECISIONS #28).
+    loads = re.compile(
+        r"<(?:script|img|iframe|source|video|audio|embed)\b[^>]*\s(?:src|srcset)=\"(https?://[^\"]+)\""
+        r"|<link\b[^>]*\shref=\"(https?://[^\"]+)\""
+    )
+    for page in ("/", "/programmes/princeton-mfin"):
+        text = client.get(page).text
+        external = [a or b for a, b in loads.findall(text)]
+        assert external, "the Google Fonts stylesheet should be found by the pattern"
+        assert all(
+            u.startswith(("https://fonts.googleapis.com", "https://fonts.gstatic.com")) for u in external
+        )
+    assert not re.search(r"<script\b[^>]*\ssrc=\"https?://", html)
 
 
 def test_data_error_banner_names_file_and_field(data_dir: Path, client: TestClient) -> None:

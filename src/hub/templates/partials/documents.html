@@ -1,0 +1,30 @@
+<section class="card" id="documents" aria-labelledby="documents-title">
+  <h2 id="documents-title">Documents and score reports <span class="count mono">{{ summary.documents[0] }} / {{ summary.documents[1] }} received</span></h2>
+  {% if card_error and card_error[0] == "documents" %}<p class="form-error card-error" role="alert" tabindex="-1" autofocus><strong>Nothing was saved.</strong> {{ card_error[1] }} The card shows what is stored.</p>{% endif %}
+  {% if p.documents %}
+  <div class="table-scroll" tabindex="0" role="region" aria-label="Documents table">
+    <table>
+      <thead><tr><th scope="col">Item</th><th scope="col">How sent</th><th scope="col">Status</th><th scope="col">Updated</th></tr></thead>
+      <tbody>
+        {% for d in p.documents %}
+        <tr>
+          <td>{{ d.label }}{% if d.note %}<span class="sub">{{ d.note }}</span>{% endif %}</td>
+          <td>{{ d.method or "" }}</td>
+          <td>
+            <form method="post" action="/programmes/{{ p.id }}/documents/{{ d.id }}" hx-post="/programmes/{{ p.id }}/documents/{{ d.id }}" data-reset-on-error hx-trigger="change" hx-target="#documents" hx-swap="outerHTML" class="inline-form">
+              <select id="doc-{{ d.id }}" name="status" aria-label="Status of {{ d.label }}">
+                {% for value, text in labels.document_status.items() %}
+                <option value="{{ value }}"{% if d.status.value == value %} selected{% endif %}>{{ text }}</option>
+                {% endfor %}
+              </select>
+              <noscript><button class="button button-small" type="submit">Save<span class="visually-hidden"> {{ d.label }}</span></button></noscript>
+            </form>
+          </td>
+          <td class="mono">{% if d.updated %}{{ d.updated | fdate }}{% else %}<span aria-hidden="true">—</span><span class="visually-hidden">not set</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}<p class="empty">No documents yet. Add them with Edit.</p>{% endif %}
+</section>

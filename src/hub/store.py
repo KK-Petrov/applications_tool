@@ -7,10 +7,13 @@
   removed.
 - Writes are atomic (``<file>.tmp`` then ``os.replace``), are validated before anything touches the
   disk, and are skipped entirely when nothing changed.
+- Loads are cached by file content (a hash of the exact bytes): an unchanged file is not parsed again,
+  a changed one always is, and callers always get their own deep copy (DECISIONS #27).
 """
 
 from __future__ import annotations
 
+import hashlib
 import io
 import logging
 import os
@@ -65,7 +68,7 @@ class Snapshot:
     errors: list[DataError] = field(default_factory=list)
 
 
-def _format_loc(loc: tuple[int | str, ...]) -> str | None:
+def format_loc(loc: tuple[int | str, ...]) -> str | None:
     """Pydantic location → ``deadlines[0].tz`` / ``letters.princeton-mfin.status``."""
     out = ""
     for part in loc:
@@ -82,7 +85,7 @@ def _error_from_validation(rel: str, exc: ValidationError) -> DataError:
     message = first["msg"].removeprefix("Value error, ")
     if len(errors) > 1:
         message += f" (and {len(errors) - 1} more problem{'s' if len(errors) > 2 else ''})"
-    return DataError(rel, _format_loc(tuple(first["loc"])), message)
+    return DataError(rel, format_loc(tuple(first["loc"])), message)
 
 
 def _dump(model: BaseModel) -> dict[str, Any]:
@@ -188,13 +191,28 @@ def _merge_map(target: CommentedMap, source: dict[str, Any]) -> bool:
     return changed
 
 
-def _item_id(item: Any) -> Any:
-    return item.get("id") if isinstance(item, dict) else None
+IDENTITY_KEYS = ("id", "order", "url")  # a list item's identity: id, a step's order, a source's url
+
+
+def _identity_key(items: list[Any]) -> str | None:
+    """The first identity key every item has, with values unique on that side; None → match by position."""
+    for key in IDENTITY_KEYS:
+        if all(isinstance(i, dict) and i.get(key) is not None for i in items):
+            values = [i[key] for i in items]
+            if len(set(values)) == len(values):
+                return key
+    return None
 
 
 def _merge_seq(target: CommentedSeq, source: list[Any]) -> bool:
-    """Make ``target`` equal ``source``. Items with an ``id`` are matched by id, others by position."""
-    keyed = all(_item_id(i) is not None for i in [*target, *source]) and bool(target) and bool(source)
+    """Make ``target`` equal ``source``. Items are matched by identity (id, step order or source url) so
+    comments stay with their item when another is removed (DECISIONS #33); otherwise by position."""
+    key = _identity_key([*target]) if target and source else None
+    keyed = key is not None and _identity_key(source) == key
+
+    def _item_id(item: Any) -> Any:
+        return item.get(key) if isinstance(item, dict) else None
+
     changed = False
     if keyed:
         wanted = {_item_id(s): s for s in source}
@@ -266,6 +284,8 @@ class Store:
     def __init__(self, data_dir: Path, config: Config) -> None:
         self.data_dir = Path(data_dir)
         self.config = config
+        # (resolved path, model class) -> (sha256 of the file's bytes, validated model)
+        self._cache: dict[tuple[str, type[BaseModel]], tuple[bytes, BaseModel]] = {}
 
     @classmethod
     def from_config(cls, config: Config) -> Store:
@@ -279,16 +299,20 @@ class Store:
         except ValueError:
             return path.name
 
-    def _read_tree(self, path: Path) -> CommentedMap:
-        rel = self._rel(path)
+    def _read_bytes(self, path: Path) -> bytes:
         try:
-            text = path.read_text(encoding="utf-8")
+            return path.read_bytes()
         except FileNotFoundError:
-            raise DataError(rel, None, "file not found") from None
+            raise DataError(self._rel(path), None, "file not found") from None
+        except OSError as exc:
+            raise DataError(self._rel(path), None, f"cannot be read ({exc.strerror or exc})") from None
+
+    def _parse_tree(self, rel: str, raw: bytes) -> CommentedMap:
+        try:
+            # universal newlines, exactly as read_text() does (the file's CRLF is restored on save)
+            text = raw.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
         except UnicodeDecodeError:
             raise DataError(rel, None, "cannot be read: the file is not UTF-8 text") from None
-        except OSError as exc:
-            raise DataError(rel, None, f"cannot be read ({exc.strerror or exc})") from None
         try:
             tree = _yaml().load(text)
         except MarkedYAMLError as exc:
@@ -300,6 +324,9 @@ class Store:
             raise DataError(rel, None, "must contain a YAML mapping (key: value lines)")
         return tree
 
+    def _read_tree(self, path: Path) -> CommentedMap:
+        return self._parse_tree(self._rel(path), self._read_bytes(path))
+
     def _validate(self, rel: str, model_cls: type[M], data: Any) -> M:
         try:
             return model_cls.model_validate(data)
@@ -307,7 +334,17 @@ class Store:
             raise _error_from_validation(rel, exc) from None
 
     def _load(self, path: Path, model_cls: type[M]) -> M:
-        return self._validate(self._rel(path), model_cls, self._read_tree(path))
+        """Read and validate one file; an unchanged file (same bytes) is served from the cache."""
+        raw = self._read_bytes(path)
+        key = (str(path.resolve()), model_cls)
+        digest = hashlib.sha256(raw).digest()
+        hit = self._cache.get(key)
+        if hit is not None and hit[0] == digest:
+            return hit[1].model_copy(deep=True)  # type: ignore[return-value]
+        rel = self._rel(path)
+        model = self._validate(rel, model_cls, self._parse_tree(rel, raw))  # parsed from the hashed bytes
+        self._cache[key] = (digest, model.model_copy(deep=True))
+        return model
 
     def _save(self, path: Path, model: BaseModel) -> bool:
         """Validate, merge into the existing file, write atomically. Returns False if nothing changed."""
@@ -339,7 +376,22 @@ class Store:
         return True
 
     def write_bytes_atomic(self, path: Path, content: bytes) -> None:
-        """Write ``<file>.tmp``, flush it to disk, then ``os.replace`` it over ``path``."""
+        """Write ``<file>.tmp``, flush it to disk, then ``os.replace`` it over ``path``.
+
+        A file that stays locked or read-only after the retries raises a ``DataError`` naming it; the
+        original file is untouched (DECISIONS #33).
+        """
+        try:
+            self._write_bytes_atomic(path, content)
+        except OSError as exc:
+            reason = (
+                "it is locked (OneDrive or another program) or read-only"
+                if isinstance(exc, PermissionError)
+                else (exc.strerror or str(exc))
+            )
+            raise DataError(self._rel(path), None, f"could not be written: {reason}. Try again.") from None
+
+    def _write_bytes_atomic(self, path: Path, content: bytes) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_name(path.name + ".tmp")
         try:

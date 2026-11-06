@@ -1,4 +1,4 @@
-# Seed data researched 30 Oct 2026 from a third-party site only. Verify everything on Columbia's own pages.
+# Seed data researched 30 Oct 2026; source set to Columbia Business School's own page on 5 Nov 2026 (owner). Values not yet checked against it: unverified until the user confirms.
 id: columbia-msfe
 name: Columbia MS in Financial Economics
 short_name: Columbia MSFE
@@ -10,13 +10,13 @@ aliases:
   - CBS
 status: not_started
 verification: unverified
-verification_note: Third-party source
+verification_note: Researched, not checked
 verified_on: null
 portal_url: null
 sources:
-  - url: https://applybuds.com/program-details/columbia-university-ms-financial-economics
-    title: ApplyBuds, Columbia MS in Financial Economics (third party)
-    checked: 2026-10-30
+  - url: https://academics.business.columbia.edu/admissions/ms/application-requirements
+    title: "Columbia Business School, MS programs: application requirements"
+    checked: null
 deadlines:
   - id: main
     label: Application deadline
@@ -24,7 +24,7 @@ deadlines:
     tz: America/New_York
     time_known: false
     verification: unverified
-    source_url: https://applybuds.com/program-details/columbia-university-ms-financial-economics
+    source_url: https://academics.business.columbia.edu/admissions/ms/application-requirements
 letters_required: 2
 letters_note: Up to five letters accepted; submitted by recommenders through the online application
 requirements:

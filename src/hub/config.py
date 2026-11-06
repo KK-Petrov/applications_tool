@@ -43,10 +43,25 @@ class DisplayZone(_Section):
     tz: str
     label: str
     clock: Literal["12h", "24h"]
+    place: str | None = None  # printed after the abbreviation, e.g. "05:59 CET (Rotterdam)" (DECISIONS #20)
+
+
+class TimeFormats(_Section):
+    """Format patterns for times (docs/02 §1). Placeholders: {day} {month} {year} {time} {zone};
+    {hour12} {hour24} {minute} {ampm}."""
+
+    long: str
+    short: str
+    date: str
+    time_12h: str
+    time_24h: str
 
 
 class TimeConfig(_Section):
     display_zones: list[DisplayZone] = Field(min_length=1)
+    zone_abbreviations: dict[str, str] = Field(default_factory=dict)
+    default_clock: Literal["12h", "24h"]
+    formats: TimeFormats
     default_display_tz: str
     default_reminder_tz: str
     assumed_deadline_time: str

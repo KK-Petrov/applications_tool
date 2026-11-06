@@ -1,4 +1,8 @@
-"""E2E harness: a temporary data_dir from fixtures and the app running on a free local port."""
+"""E2E harness: a temporary data_dir from fixtures and the app running on a free local port.
+
+The clock is fixed at Friday 30 October 2026, 12:00 New York (helpers.FIXED_NOW), so days-left values
+and "today" stamps are deterministic (docs/02 §2: 46 days to Princeton).
+"""
 
 from __future__ import annotations
 
@@ -12,6 +16,8 @@ import uvicorn
 
 from hub.app import create_app
 
+from helpers import FIXED_NOW
+
 
 def _free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -24,7 +30,9 @@ def live_server(config) -> Iterator[str]:
     """Start the app in a background thread against the fixture data_dir; yield its base URL."""
     port = _free_port()
     server = uvicorn.Server(
-        uvicorn.Config(create_app(config), host="127.0.0.1", port=port, log_level="warning")
+        uvicorn.Config(
+            create_app(config, clock=lambda: FIXED_NOW), host="127.0.0.1", port=port, log_level="warning"
+        )
     )
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()

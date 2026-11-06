@@ -1,12 +1,13 @@
 <div class="header-row">
   <p class="today mono">{{ today_label }}</p>
-  {# Placeholder: the selector is wired to POST /display-tz in Phase 1 (US-2). #}
-  <form class="zone-form" method="post" action="/display-tz">
+  {# US-2: changing the zone saves settings.display_tz; HTMX reloads the page, the Apply button is the no-JS fallback. #}
+  <form class="zone-form" method="post" action="/display-tz" hx-post="/display-tz" data-reset-on-error hx-trigger="change">
     <label for="display-tz">Times in:</label>
     <select id="display-tz" name="display_tz">
       {% for zone in display_zones %}
       <option value="{{ zone.tz }}"{% if zone.tz == display_tz %} selected{% endif %}>{{ zone.label }}</option>
       {% endfor %}
     </select>
+    <noscript><button class="button button-secondary" type="submit">Apply</button></noscript>
   </form>
 </div>

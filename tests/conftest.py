@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from helpers import BASE, FIXED_NOW, FormClient
 from paths import FIXTURE_DATA, REPO_ROOT
 
 
@@ -37,6 +38,23 @@ def config(data_dir: Path):
     cfg = load_config()
     assert cfg.storage.data_dir == data_dir
     return cfg
+
+
+@pytest.fixture
+def client(config):
+    """The app on its own origin with the clock fixed at 30 Oct 2026 12:00 New York.
+
+    Like a browser, it sends the app's own ``Origin`` on every request (DECISIONS #26). Redirects are
+    not followed so tests can assert the 303 of the no-JS fallback.
+    """
+    from hub.app import create_app
+
+    return FormClient(
+        create_app(config, clock=lambda: FIXED_NOW),
+        base_url=BASE,
+        headers={"Origin": BASE},
+        follow_redirects=False,
+    )
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:

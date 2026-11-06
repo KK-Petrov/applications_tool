@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{#- Add / Edit programme (docs/03 §1). Rows are "<group>-<i>-<field>"; "Add …" buttons re-render the form
+    with one more row and save nothing; errors are listed at the top and name the field. -#}
+{% macro text(name, label, value, hint=none, wide=false, kind="text", extra="") -%}
+<div class="field{% if wide %} field-wide{% endif %}">
+  <label for="f-{{ name }}">{{ label }}</label>
+  <input id="f-{{ name }}" name="{{ name }}" type="{{ kind }}" value="{{ value }}"{% if hint %} aria-describedby="f-{{ name }}-hint"{% endif %}{% if state.has_error(name) %} aria-invalid="true"{% endif %} {{ extra | safe }}>
+  {% if hint %}<span class="hint" id="f-{{ name }}-hint">{{ hint }}</span>{% endif %}
+</div>
+{%- endmacro %}
+{% macro area(name, label, value, rows=3, wide=true) -%}
+<div class="field{% if wide %} field-wide{% endif %}">
+  <label for="f-{{ name }}">{{ label }}</label>
+  <textarea id="f-{{ name }}" name="{{ name }}" rows="{{ rows }}">
+{{ value }}</textarea>
+</div>
+{%- endmacro %}
+{% macro row_text(group, i, name, label, value, kind="text", extra="", path=none) -%}
+{% set fid = group ~ "-" ~ i ~ "-" ~ name %}
+<div class="field">
+  <label for="{{ fid }}">{{ label }}</label>
+  <input id="{{ fid }}" name="{{ fid }}" type="{{ kind }}" value="{{ value }}"{% if path and state.has_error(path) %} aria-invalid="true"{% endif %} {{ extra | safe }}>
+</div>
+{%- endmacro %}
+{% macro row_area(group, i, name, label, value) -%}
+{% set fid = group ~ "-" ~ i ~ "-" ~ name %}
+<div class="field field-wide">
+  <label for="{{ fid }}">{{ label }}</label>
+  <textarea id="{{ fid }}" name="{{ fid }}" rows="2">
+{{ value }}</textarea>
+</div>
+{%- endmacro %}
+{% macro remove(group, i, noun) -%}
+<div class="field field-check row-remove">
+  <input id="{{ group }}-{{ i }}-remove" name="{{ group }}-{{ i }}-remove" type="checkbox" value="1">
+  <label for="{{ group }}-{{ i }}-remove">Remove this {{ noun }}</label>
+</div>
+{%- endmacro %}
+{% macro add_button(group, noun) -%}
+<button class="button button-secondary" type="submit" name="_add" value="{{ group }}" formnovalidate>Add {{ noun }}</button>
+{%- endmacro %}
+
+{% block content %}
+{% set f = state.fields %}
+<form id="programme-form" class="programme-form" method="post" action="{{ action }}">
+  {% if state.errors %}
+  <div class="form-error" role="alert" tabindex="-1" id="form-errors">
+    <h2>Nothing was saved. Please fix:</h2>
+    <ul>{% for path, message in state.errors %}<li data-field="{{ path }}"><strong>{{ field_label(path) }}</strong>: {{ message }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+  {% if existing is none %}<p class="note">New programmes start as <strong>Unverified</strong>; mark them verified on the programme page after checking the source.</p>
+  {% else %}<p class="note">Changing a deadline's date, time, zone or source URL marks that deadline unverified until you check it again.</p>{% endif %}
+
+  <section class="card" aria-labelledby="basics-title">
+    <h2 id="basics-title">Programme</h2>
+    <div class="form-grid">
+      {{ text("name", "Programme name", f.name, wide=true) }}
+      {{ text("short_name", "Short name", f.short_name, hint="Used in tables and alerts, e.g. Princeton MFin") }}
+      {{ text("school", "School", f.school) }}
+      {{ text("unit", "Unit", f.unit, hint="Department or school within the university") }}
+      {{ area("aliases", "Aliases (one per line)", f.aliases, rows=3, wide=false) }}
+      {% if existing is none %}{{ text("id", "Programme ID", f.id, hint="Optional. Leave blank to use the short name, e.g. example-mqf") }}{% endif %}
+      <div class="field">
+        <label for="f-status">Status</label>
+        <select id="f-status" name="status">{% for value, label in labels.programme_status.items() %}<option value="{{ value }}"{% if f.status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+      </div>
+      {{ text("verification_note", "Why unverified", f.verification_note, hint="Shown on the badge, e.g. Last cycle's date", extra='list="reason-options"') }}
+      <datalist id="reason-options">{% for r in reasons %}<option value="{{ r }}">{% endfor %}</datalist>
+      {{ text("portal_url", "Application portal URL", f.portal_url, kind="url", extra='inputmode="url"') }}
+      {{ text("letters_required", "Letters required", f.letters_required, kind="number", hint="Leave blank if the programme does not say (a default is assumed)", extra='min="0"') }}
+      {{ area("letters_note", "Letters note", f.letters_note, rows=2) }}
+    </div>
+  </section>
+
+  <fieldset class="card rows" id="deadlines">
+    <legend>Deadlines</legend>
+    <p class="hint">Enter the time as the school states it, in the school's time zone. Leave the time blank if it is not given ({{ config_assumed_time }} is assumed and flagged).</p>
+    {% for r in state.rows.deadlines %}{% set i = loop.index0 %}
+    <div class="row">
+      <input type="hidden" name="deadlines-{{ i }}-id" value="{{ r.id }}">
+      {{ row_text("deadlines", i, "label", "Label", r.label, path="deadlines[" ~ i ~ "].label") }}
+      {{ row_text("deadlines", i, "date", "Date", r.date, kind="date", path="deadlines[" ~ i ~ "].date") }}
+      {{ row_text("deadlines", i, "time", "Time", r.time, kind="time", path="deadlines[" ~ i ~ "].time") }}
+      {{ row_text("deadlines", i, "tz", "Time zone", r.tz, extra='list="tz-options" placeholder="America/New_York"', path="deadlines[" ~ i ~ "].tz") }}
+      {{ row_text("deadlines", i, "source_url", "Source URL", r.source_url, kind="url", extra='inputmode="url"', path="deadlines[" ~ i ~ "].source_url") }}
+      <div class="field field-check">
+        <input id="deadlines-{{ i }}-time_unknown" name="deadlines-{{ i }}-time_unknown" type="checkbox" value="1"{% if r.time_unknown %} checked{% endif %}>
+        <label for="deadlines-{{ i }}-time_unknown">Time not confirmed</label>
+      </div>
+      {{ remove("deadlines", i, "deadline") }}
+    </div>
+    {% endfor %}
+    {{ add_button("deadlines", "deadline") }}
+  </fieldset>
+
+  <fieldset class="card rows" id="sources">
+    <legend>Sources</legend>
+    {% for r in state.rows.sources %}{% set i = loop.index0 %}
+    <div class="row">
+      {{ row_text("sources", i, "url", "URL", r.url, kind="url", extra='inputmode="url"', path="sources[" ~ i ~ "].url") }}
+      {{ row_text("sources", i, "title", "Title", r.title, path="sources[" ~ i ~ "].title") }}
+      {{ row_text("sources", i, "checked", "Checked on", r.checked, kind="date", path="sources[" ~ i ~ "].checked") }}
+      {{ remove("sources", i, "source") }}
+    </div>
+    {% endfor %}
+    {{ add_button("sources", "source") }}
+  </fieldset>
+
+  <fieldset class="card rows" id="requirements">
+    <legend>Requirements</legend>
+    {% for r in state.rows.requirements %}{% set i = loop.index0 %}
+    <div class="row">
+      <input type="hidden" name="requirements-{{ i }}-id" value="{{ r.id }}">
+      {{ row_text("requirements", i, "label", "Label", r.label, path="requirements[" ~ i ~ "].label") }}
+      {{ row_text("requirements", i, "note", "Note", r.note) }}
+      {{ remove("requirements", i, "requirement") }}
+    </div>
+    {% endfor %}
+    {{ add_button("requirements", "requirement") }}
+  </fieldset>
+
+  <fieldset class="card rows" id="steps">
+    <legend>Application steps</legend>
+    {% for r in state.rows.steps %}{% set i = loop.index0 %}
+    <div class="row">
+      <input type="hidden" name="steps-{{ i }}-order" value="{{ r.order }}">
+      {{ row_text("steps", i, "label", "Label", r.label, path="steps[" ~ i ~ "].label") }}
+      {{ row_text("steps", i, "note", "Note", r.note) }}
+      {{ remove("steps", i, "step") }}
+    </div>
+    {% endfor %}
+    {{ add_button("steps", "step") }}
+  </fieldset>
+
+  <fieldset class="card rows" id="documents">
+    <legend>Documents and score reports</legend>
+    {% for r in state.rows.documents %}{% set i = loop.index0 %}
+    <div class="row">
+      <input type="hidden" name="documents-{{ i }}-id" value="{{ r.id }}">
+      {{ row_text("documents", i, "label", "Label", r.label, path="documents[" ~ i ~ "].label") }}
+      {{ row_text("documents", i, "method", "How sent", r.method, path="documents[" ~ i ~ "].method") }}
+      {{ row_text("documents", i, "note", "Note", r.note) }}
+      {{ remove("documents", i, "document") }}
+    </div>
+    {% endfor %}
+    {{ add_button("documents", "document") }}
+  </fieldset>
+
+  <fieldset class="card rows" id="essays">
+    <legend>Essays</legend>
+    {% for r in state.rows.essays %}{% set i = loop.index0 %}
+    <div class="row">
+      <input type="hidden" name="essays-{{ i }}-id" value="{{ r.id }}">
+      {{ row_text("essays", i, "title", "Title", r.title, path="essays[" ~ i ~ "].title") }}
+      {{ row_text("essays", i, "word_limit", "Word limit", r.word_limit, kind="number", extra='min="1"', path="essays[" ~ i ~ "].word_limit") }}
+      {{ row_area("essays", i, "prompt", "Prompt", r.prompt) }}
+      {{ remove("essays", i, "essay") }}
+    </div>
+    {% endfor %}
+    {{ add_button("essays", "essay") }}
+  </fieldset>
+
+  <section class="card" aria-labelledby="more-title">
+    <h2 id="more-title">Curriculum, AI-use policy and fee</h2>
+    <div class="form-grid">
+      {{ area("curriculum_summary", "Curriculum summary", f.curriculum_summary) }}
+      {{ area("ai_policy_text", "AI-use policy", f.ai_policy_text, rows=2) }}
+      {{ text("ai_policy_source_url", "AI-use policy source URL", f.ai_policy_source_url, kind="url", extra='inputmode="url"') }}
+      {{ text("fee_amount", "Fee amount", f.fee_amount, kind="number", extra='min="0" step="any"') }}
+      {{ text("fee_currency", "Fee currency", f.fee_currency) }}
+      {{ text("fee_note", "Fee note", f.fee_note) }}
+    </div>
+  </section>
+  <fieldset class="card rows" id="courses">
+    <legend>Curriculum courses</legend>
+    {% for r in state.rows.courses %}{% set i = loop.index0 %}
+    <div class="row">
+      {{ row_text("courses", i, "name", "Course", r.name, path="courses[" ~ i ~ "].name") }}
+      {{ row_area("courses", i, "description", "Description", r.description) }}
+      {{ remove("courses", i, "course") }}
+    </div>
+    {% endfor %}
+    {{ add_button("courses", "course") }}
+  </fieldset>
+
+  <div class="form-actions">
+    <button class="button button-primary" type="submit">Save programme</button>
+    <a class="button button-secondary" href="{% if existing %}/programmes/{{ existing.id }}{% else %}/programmes{% endif %}">Cancel</a>
+  </div>
+</form>
+<datalist id="tz-options">{% for z in all_zones %}<option value="{{ z }}">{% endfor %}</datalist>
+{% endblock %}

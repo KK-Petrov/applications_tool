@@ -228,3 +228,50 @@ def test_settings_save_rejects_a_display_zone_outside_the_config(data_dir: Path,
         store.save_settings(settings)
     assert info.value.field == "display_tz"
     assert (data_dir / "settings.yaml").read_bytes() == before
+
+
+# ---- load cache (DECISIONS #27): keyed by the file's exact bytes ---------------------------------------
+
+
+def test_cache_sees_an_edit_made_outside_the_app(data_dir: Path, config) -> None:
+    path = data_dir / "programmes" / "booth-mif.yaml"
+    store = _store(config)
+    assert store.load_programme(path).status == "not_started"
+    path.write_bytes(path.read_bytes().replace(b"status: not_started", b"status: in_progress"))
+    assert store.load_programme(path).status == "in_progress"
+    path.write_bytes(path.read_bytes().replace(b"status: in_progress", b"status: oops"))
+    with pytest.raises(DataError):
+        store.load_programme(path)
+
+
+def test_cache_returns_independent_copies(data_dir: Path, config) -> None:
+    path = data_dir / "programmes" / "booth-mif.yaml"
+    store = _store(config)
+    first = store.load_programme(path)
+    first.requirements[0].done = True
+    first.deadlines[0].label = "changed in memory only"
+    second = store.load_programme(path)
+    assert second.requirements[0].done is False
+    assert second.deadlines[0].label != "changed in memory only"
+
+
+def test_locked_file_raises_a_data_error_and_keeps_the_file(
+    data_dir: Path, config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("hub.store.time.sleep", lambda _s: None)  # still retries, without the waits
+    import os
+    import stat
+
+    path = data_dir / "programmes" / "booth-mif.yaml"
+    store = _store(config)
+    programme = store.load_programme(path)
+    programme.status = "in_progress"
+    before = path.read_bytes()
+    os.chmod(path, stat.S_IREAD)
+    try:
+        with pytest.raises(DataError) as err:
+            store.save_programme(programme)
+        assert err.value.path == "programmes/booth-mif.yaml" and "could not be written" in err.value.message
+        assert path.read_bytes() == before and not list(path.parent.glob("*.tmp"))
+    finally:
+        os.chmod(path, stat.S_IREAD | stat.S_IWRITE)

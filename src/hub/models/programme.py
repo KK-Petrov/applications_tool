@@ -119,7 +119,7 @@ class AiPolicy(DataModel):
 
 
 class Fee(DataModel):
-    amount: float | None = Field(default=None, ge=0)
+    amount: float | None = Field(default=None, ge=0, allow_inf_nan=False)  # a real amount, never inf/nan
     currency: str = "USD"
     note: str | None = None
 

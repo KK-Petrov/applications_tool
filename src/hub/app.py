@@ -1,49 +1,35 @@
-"""The web app (docs/03): FastAPI + Jinja2 templates, bound to 127.0.0.1 only.
+"""The web app (docs/03): FastAPI + Jinja2 templates + HTMX, bound to 127.0.0.1 only.
 
-Phase 0 provides the shell: sidebar, header (date and zone selector), the DataError banner and an
-empty page for every sidebar link. Data is loaded fresh from data_dir on each request.
+Data is loaded fresh from data_dir on each request. Every request first passes the local-origin
+checks (DECISIONS #26). Pages not yet built show an empty state naming the phase that adds them.
 """
 
 from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from hub.config import Config, load_config
-from hub.store import Snapshot, Store
+from hub.routes.programmes import build_router as programmes_router
+from hub.security import LocalOriginMiddleware
+from hub.store import DataError, Store
+from hub.views import dashboard
+from hub.web import PACKAGE_DIR, Page, Web, back_path, is_htmx, see_other
 
-PACKAGE_DIR = Path(__file__).resolve().parent
 LOG_FILE = Path("logs") / "hub.log"
 
-
-@dataclass(frozen=True)
-class Page:
-    """One sidebar destination."""
-
-    key: str
-    href: str
-    label: str
-    title: str
-    empty_text: str
-    wide: bool = False
-
-
 PAGES: tuple[Page, ...] = (
-    Page("dashboard", "/", "Dashboard", "Dashboard",
-         "The dashboard (what is due next, and what is missing) arrives in Phase 1."),
-    Page("programmes", "/programmes", "Programmes", "Programmes",
-         "The list of programmes, each linking to its page, arrives in Phase 1."),
+    Page("dashboard", "/", "Dashboard", "Dashboard"),
+    Page("programmes", "/programmes", "Programmes", "Programmes"),
     Page("recommenders", "/recommenders", "Recommenders", "Recommenders",
          "No professors yet. The recommender sheet and Add professor arrive in Phase 2a.", wide=True),
     Page("essays", "/essays", "Essays and CV", "Essays and CV",
@@ -53,13 +39,8 @@ PAGES: tuple[Page, ...] = (
     Page("settings", "/settings", "Settings", "Settings",
          "Owner details, display zone and the Google connection arrive in later phases."),
 )  # fmt: skip
+PLACEHOLDER_PAGES = {"recommenders", "essays", "biography", "settings"}
 NOT_FOUND = Page("not-found", "", "", "Page not found", "There is no page at this address.")
-
-
-def _today_label(now: datetime, tz: str) -> str:
-    """Header date in the display zone, e.g. "Friday 30 October 2026" (no zero padding on any OS)."""
-    local = now.astimezone(ZoneInfo(tz))
-    return f"{local:%A} {local.day} {local:%B %Y}"
 
 
 def _configure_logging(config: Config) -> None:
@@ -91,40 +72,72 @@ def create_app(config: Config | None = None, clock: Callable[[], datetime] | Non
     _configure_logging(config)
 
     app = FastAPI(title="Application Hub", docs_url=None, redoc_url=None, openapi_url=None)
+    app.add_middleware(LocalOriginMiddleware)
     app.mount("/static", StaticFiles(directory=PACKAGE_DIR / "static"), name="static")
-    templates = Jinja2Templates(directory=PACKAGE_DIR / "templates")
     store = Store.from_config(config)
+    web = Web(config, store, clock, PAGES)
 
-    def render(request: Request, page: Page, snapshot: Snapshot, status_code: int = 200) -> HTMLResponse:
-        display_tz = snapshot.settings.display_tz if snapshot.settings else config.time.default_display_tz
-        context = {
-            "page": page,
-            "nav": PAGES,
-            "display_zones": config.time.display_zones,
-            "display_tz": display_tz,
-            "today_label": _today_label(clock(), display_tz),
-            "calendar_name": config.google.calendar_name,
-            "last_sync": "never",  # filled from the sync state in Phase 3
-            "data_errors": snapshot.errors,
-        }
-        return templates.TemplateResponse(request, "pages/empty.html", context, status_code=status_code)
+    @app.get("/", response_class=HTMLResponse, name="dashboard")
+    async def dashboard_page(request: Request) -> HTMLResponse:
+        snapshot = store.load_all()
+        board = dashboard(snapshot.programmes, snapshot.professors, clock(), config, web.display_tz(snapshot))
+        return web.render(request, "pages/dashboard.html", PAGES[0], snapshot, board=board)
 
-    def add_page(page: Page) -> None:
+    app.include_router(programmes_router(web))
+
+    def add_placeholder(page: Page) -> None:
         async def view(request: Request) -> HTMLResponse:
-            return render(request, page, store.load_all())
+            return web.render(request, "pages/empty.html", page, store.load_all())
 
         app.add_api_route(page.href, view, methods=["GET"], response_class=HTMLResponse, name=page.key)
 
     for page in PAGES:
-        add_page(page)
+        if page.key in PLACEHOLDER_PAGES:
+            add_placeholder(page)
+
+    @app.post("/display-tz")
+    async def set_display_tz(request: Request) -> Response:
+        """Header zone selector (US-2): saves settings.display_tz; every page re-renders in that zone."""
+        zone = str((await request.form()).get("display_tz", ""))
+        if zone not in config.display_zone_ids:
+            raise HTTPException(400, "Unknown display time zone.")
+        try:
+            settings = store.load_settings()
+            if settings.display_tz != zone:
+                settings.display_tz = zone
+                store.save_settings(settings)
+        except DataError as err:
+            raise HTTPException(
+                409, f"The display zone could not be saved: {err.path} {err.message}"
+            ) from None
+        if is_htmx(request):
+            return Response(status_code=204, headers={"HX-Refresh": "true"})
+        return see_other(back_path(request))
 
     @app.exception_handler(StarletteHTTPException)
     async def http_error(request: Request, exc: StarletteHTTPException) -> HTMLResponse:
+        if is_htmx(request):  # swapped into #action-error by the htmx-config in base.html
+            detail = (
+                exc.detail
+                if exc.status_code != 404
+                else "This item no longer exists or its file could not be loaded."
+            )
+            return web.templates.TemplateResponse(
+                request,
+                "partials/action_error.html",
+                {"message": detail, "saving": request.method != "GET"},
+                status_code=exc.status_code,
+            )
         page = (
             NOT_FOUND
             if exc.status_code == 404
             else Page("error", "", "", "Something went wrong", str(exc.detail))
         )
-        return render(request, page, store.load_all(), status_code=exc.status_code)
+        return web.render(request, "pages/empty.html", page, store.load_all(), status_code=exc.status_code)
+
+    @app.exception_handler(RequestValidationError)
+    async def bad_request(request: Request, exc: RequestValidationError) -> HTMLResponse:
+        """A malformed request (only reachable by tampering): a readable message, never FastAPI's JSON."""
+        return await http_error(request, StarletteHTTPException(400, "The request was not understood."))
 
     return app

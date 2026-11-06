@@ -123,3 +123,18 @@ def test_bulk_load_keeps_good_files_and_reports_bad_ones(data_dir: Path, config)
 def test_every_invalid_fixture_is_covered() -> None:
     on_disk = {p.stem for p in (INVALID / "programmes").glob("*.yaml")}
     assert on_disk == set(INVALID_PROGRAMMES)
+
+
+@pytest.mark.parametrize("amount", [".inf", "1e400"])
+def test_non_finite_fee_is_a_data_error(data_dir: Path, config, amount: str) -> None:
+    from hub.store import DataError, Store
+
+    path = data_dir / "programmes" / "booth-mif.yaml"
+    text = path.read_text(encoding="utf-8")
+    start = text.index("fee:")
+    path.write_text(
+        text[:start] + f"fee:\n  amount: {amount}\n  currency: USD\n  note: null\n", encoding="utf-8"
+    )
+    with pytest.raises(DataError) as err:
+        Store.from_config(config).load_programme(path)
+    assert err.value.field == "fee.amount"

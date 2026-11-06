@@ -1,0 +1,28 @@
+{#- Provenance components (C-1-01). The only place a deadline or interview time is printed.
+    A deadline always shows: the time in the display zone with its abbreviation, "(time to verify)"
+    when the time is assumed, a daylight-saving note when the local time was moved, and a link to
+    its source. Programme pages also show the school-zone original. -#}
+{% macro deadline(d, original=false, mark_unverified=false, show_label=false) -%}
+<span class="deadline" data-deadline="{{ d.key }}">
+  {%- if show_label %}<span class="deadline-label">{{ d.label }}:</span> {% endif -%}
+  <span class="mono">{{ d.utc | when }}</span>
+  {%- if not d.time_known %} <span class="note">(time to verify)</span>{% endif %}
+  {%- if d.adjusted %} <span class="note">(moved past a daylight-saving change)</span>{% endif %}
+  {%- if original and d.tz != display_tz %} <span class="original">· school time <span class="mono">{{ d.utc | school_time(d.tz) }}</span></span>{% endif %}
+  {%- if mark_unverified and d.unverified %} <span class="chip chip-urgent">Unverified</span>{% endif %}
+  {{ " " }}<a class="source-link" href="{{ d.source_url }}" target="_blank" rel="noopener noreferrer">source<span class="visually-hidden"> of {{ d.label }}</span></a>
+</span>
+{%- endmacro %}
+
+{% macro interview_time(i) -%}
+<span class="interview-time">
+  <span class="mono">{{ i.utc | when }}</span>
+  {%- if i.tz != display_tz %} <span class="original">· local <span class="mono">{{ i.utc | school_time(i.tz) }}</span></span>{% endif %}
+  {%- if i.adjusted %} <span class="note">(moved past a daylight-saving change)</span>{% endif %}
+  {%- if i.interview.estimated %} <span class="chip chip-neutral">Estimated</span>{% endif %}
+</span>
+{%- endmacro %}
+
+{% macro countdown_chip(c) -%}
+<span class="chip chip-{{ c.urgency.value }}">{{ c.label }}</span>
+{%- endmacro %}

@@ -1,0 +1,47 @@
+{% from "_time.html" import interview_time with context %}
+<section class="card" id="interviews" aria-labelledby="interviews-title">
+  <h2 id="interviews-title">Interviews and assessments</h2>
+  {% if interviews %}
+  <ul class="plain interview-list">
+    {% for iv in interviews %}{% set i = iv.interview %}
+    <li>
+      <strong>{{ i.label }}</strong>
+      <span class="chip chip-neutral">{{ labels.interview_kind[i.kind.value] }}</span>
+      <span class="chip chip-info">{{ labels.interview_status[i.status.value] }}</span><br>
+      {{ interview_time(iv) }}
+      {% if i.notes %}<span class="sub">{{ i.notes }}</span>{% endif %}
+      <button class="button button-small button-secondary" type="button" hx-get="/programmes/{{ p.id }}/interviews/form?interview_id={{ i.id }}" hx-target="#interviews" hx-swap="outerHTML">Edit<span class="visually-hidden"> {{ i.label }}</span></button>
+      <noscript><a href="/programmes/{{ p.id }}?interview={{ i.id }}#interviews">Edit {{ i.label }} (without JavaScript)</a></noscript>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="empty">No interviews or assessments yet.</p>{% endif %}
+
+  {% if interview_form %}{% set f = interview_form %}
+  <form class="interview-form" method="post" action="/programmes/{{ p.id }}/interviews" hx-post="/programmes/{{ p.id }}/interviews" hx-target="#interviews" hx-swap="outerHTML">
+    <h3>{% if f.interview_id %}Edit {{ f.label }}{% else %}New interview or assessment{% endif %}</h3>
+    {% if interview_error %}<p class="form-error" role="alert" id="iv-error" tabindex="-1"{% if focus == "iv-error" %} autofocus{% endif %}>{{ interview_error }}</p>{% endif %}
+    <input type="hidden" name="interview_id" value="{{ f.interview_id }}">
+    <div class="form-grid">
+      <div class="field"><label for="iv-kind">Kind</label>
+        <select id="iv-kind" name="kind"{% if focus == "iv-kind" %} autofocus{% endif %}>{% for value, text in labels.interview_kind.items() %}<option value="{{ value }}"{% if f.kind == value %} selected{% endif %}>{{ text }}</option>{% endfor %}</select></div>
+      <div class="field"><label for="iv-label">Label</label><input id="iv-label" name="label" value="{{ f.label }}"></div>
+      <div class="field"><label for="iv-date">Date</label><input id="iv-date" name="date" type="date" value="{{ f.date }}"></div>
+      <div class="field"><label for="iv-time">Time</label><input id="iv-time" name="time" type="time" value="{{ f.time }}"></div>
+      <div class="field"><label for="iv-tz">Time zone</label><input id="iv-tz" name="tz" list="tz-options" value="{{ f.tz }}" placeholder="America/New_York" aria-describedby="iv-tz-hint"><span class="hint" id="iv-tz-hint">IANA zone of the place it happens, e.g. America/Chicago</span></div>
+      <div class="field"><label for="iv-status">Status</label>
+        <select id="iv-status" name="status">{% for value, text in labels.interview_status.items() %}<option value="{{ value }}"{% if f.status == value %} selected{% endif %}>{{ text }}</option>{% endfor %}</select></div>
+      <div class="field field-check"><input id="iv-estimated" name="estimated" type="checkbox" value="1"{% if f.estimated %} checked{% endif %}><label for="iv-estimated">Date or time estimated</label></div>
+      <div class="field field-wide"><label for="iv-notes">Notes</label><textarea id="iv-notes" name="notes" rows="2">
+{{ f.notes }}</textarea></div>
+    </div>
+    <div class="form-actions">
+      <button class="button button-primary" type="submit">Save interview</button>
+      <a class="button button-secondary" href="/programmes/{{ p.id }}#interviews">Cancel</a>
+    </div>
+  </form>
+  {% else %}
+  <button id="iv-add" class="button button-secondary" type="button" hx-get="/programmes/{{ p.id }}/interviews/form" hx-target="#interviews" hx-swap="outerHTML"{% if focus == "iv-add" %} autofocus{% endif %}>Add interview or assessment</button>
+  <noscript><a href="/programmes/{{ p.id }}?interview=new#interviews">Add interview or assessment (without JavaScript)</a></noscript>
+  {% endif %}
+</section>

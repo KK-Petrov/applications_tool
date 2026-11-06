@@ -9,7 +9,9 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
   <link rel="stylesheet" href="/static/css/tokens.css">
   <link rel="stylesheet" href="/static/css/app.css">
+  <meta name="htmx-config" content='{"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"[45]..","swap":true,"error":false,"target":"#action-error","swapOverride":"innerHTML"}]}'>
   <script src="/static/htmx.min.js" defer></script>
+  <script src="/static/js/app.js" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -19,6 +21,8 @@
       <div class="main-inner{% if page.wide %} wide{% endif %}">
         {% include "_header.html" %}
         {% include "_data_errors.html" %}
+        <div id="action-error" aria-live="assertive"></div>
+        {% block before_title %}{% endblock %}
         <div class="title-row">
           <h1>{{ page.title }}</h1>
           <div class="actions">{% block actions %}{% endblock %}</div>

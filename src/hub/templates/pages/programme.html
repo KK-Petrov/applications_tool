@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% from "_time.html" import deadline, countdown_chip with context %}
+{% from "_badge.html" import data_badge, status_chip %}
+{% block before_title %}
+<nav class="breadcrumb" aria-label="Breadcrumb"><a href="/programmes">Programmes</a> <span aria-hidden="true">›</span> <span aria-current="page">{{ p.short_name }}</span></nav>
+{% endblock %}
+{% block actions %}
+<a class="button button-secondary" href="/programmes/{{ p.id }}/edit">Edit</a>
+{% if summary.badge.unverified %}
+<form method="post" action="/programmes/{{ p.id }}/verify" class="inline-form">
+  <button class="button button-primary" type="submit">Mark verified</button>
+</form>
+{% endif %}
+{% endblock %}
+{% block content %}
+<p class="subtitle">
+  {%- if p.unit %}{{ p.unit }} · {% endif %}{{ p.school }}
+  {%- if p.portal_url %} · <a href="{{ p.portal_url }}" target="_blank" rel="noopener noreferrer">Application portal</a>{% endif -%}
+</p>
+<div class="chips">
+  {{ countdown_chip(summary.countdown) }}
+  {{ deadline(summary.deadline, original=true) }}
+  {{ data_badge(summary.badge, p.verified_on) }}
+  {{ status_chip(p.status) }}
+</div>
+
+<section class="source-box" aria-labelledby="sources-title">
+  <h2 id="sources-title">Sources and verification</h2>
+  {% if verify_error %}<p class="form-error" role="alert">{{ verify_error }}</p>{% endif %}
+  {% if summary.badge.unverified %}
+  <p>{{ data_badge(summary.badge) }} Check the details on this page against the source pages, then press <strong>Mark verified</strong>.</p>
+  {% else %}
+  <p>{{ data_badge(summary.badge, p.verified_on) }} You checked this programme against its sources.</p>
+  {% endif %}
+  <h3>Deadlines</h3>
+  <ul class="plain">
+    {% for d in deadline_views %}
+    <li>{{ deadline(d, original=true, mark_unverified=true, show_label=true) }}</li>
+    {% endfor %}
+  </ul>
+  {% if p.sources %}
+  <h3>Source pages</h3>
+  <ul class="plain">
+    {% for s in p.sources %}
+    <li><a href="{{ s.url }}" target="_blank" rel="noopener noreferrer">{{ s.title }}</a>{% if s.checked %} <span class="note">checked {{ s.checked | fdate }}</span>{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty">No source pages yet. Add one with Edit before marking the programme verified.</p>
+  {% endif %}
+</section>
+
+<div class="cards">
+  {% include "partials/requirements.html" %}
+  {% include "partials/steps.html" %}
+</div>
+{% include "partials/documents.html" %}
+{% include "partials/interviews.html" %}
+
+<div class="cards">
+  <section class="card" aria-labelledby="curriculum-title">
+    <h2 id="curriculum-title">Curriculum highlights</h2>
+    {% if p.curriculum.summary %}<p>{{ p.curriculum.summary }}</p>{% endif %}
+    {% if p.curriculum.courses %}
+    <ul>{% for c in p.curriculum.courses %}<li><strong>{{ c.name }}</strong>{% if c.description %}: {{ c.description }}{% endif %}</li>{% endfor %}</ul>
+    {% endif %}
+    {% if not p.curriculum.summary and not p.curriculum.courses %}<p class="empty">No curriculum notes yet.</p>{% endif %}
+  </section>
+  <section class="card" aria-labelledby="linked-title">
+    <h2 id="linked-title">Linked items</h2>
+    <dl class="facts">
+      <dt>Recommenders</dt>
+      <dd><span class="mono">{{ summary.letters_confirmed }} / {{ summary.letters_required.count }}</span> confirmed{% if summary.letters_required.assumed %} <span class="note">(number assumed)</span>{% endif %}{% if p.letters_note %}<br><span class="note">{{ p.letters_note }}</span>{% endif %}</dd>
+      <dt>Essays</dt>
+      <dd><span class="mono">0 of {{ p.essays | length }}</span> evaluated <span class="note">(evaluation arrives in Phase 4b)</span></dd>
+      <dt>AI-use policy</dt>
+      <dd>{% if p.ai_policy.text %}{{ p.ai_policy.text }}{% if p.ai_policy.source_url %} <a href="{{ p.ai_policy.source_url }}" target="_blank" rel="noopener noreferrer">source</a>{% endif %}{% else %}<span class="note">Not stated yet</span>{% endif %}</dd>
+      <dt>Reminders</dt>
+      <dd><span class="note">Reminders arrive in Phase 3</span></dd>
+      {% if p.fee.amount or p.fee.note %}
+      <dt>Fee</dt>
+      <dd>{% if p.fee.amount %}<span class="mono">{{ "%.0f" | format(p.fee.amount) }} {{ p.fee.currency }}</span> {% endif %}{% if p.fee.note %}<span class="note">{{ p.fee.note }}</span>{% endif %}</dd>
+      {% endif %}
+    </dl>
+  </section>
+</div>
+<datalist id="tz-options">{% for z in all_zones %}<option value="{{ z }}">{% endfor %}</datalist>
+{% endblock %}
