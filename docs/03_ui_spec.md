@@ -12,11 +12,13 @@ App binds to `127.0.0.1:8765` only.
 |---|---|
 | `GET /` | Dashboard |
 | `GET /programmes/{id}` | Programme page |
-| `GET /programmes/new`, `POST /programmes` | Add programme (manual form; Research button added in Phase 5) |
+| `GET /programmes/new`, `POST /programmes` | Add programme (manual form; Research button added in Phase 2c) |
 | `GET /programmes/{id}/edit`, `POST /programmes/{id}` | Edit programme |
 | `POST /programmes/{id}/verify` | Mark verified (docs/02 §6) |
 | `POST /programmes/{id}/requirements/{rid}`, `/steps/{n}`, `/documents/{did}` | Toggle / set status (partial) |
 | `POST /programmes/{id}/interviews` | Add or edit an interview/assessment |
+| `POST /programmes/research`, `POST /programmes/research/save` | Research a new programme: preview, then save (2c) |
+| `POST /programmes/{id}/research`, `POST /programmes/{id}/research/apply` | Re-research: comparison, then save the accepted changes (2c) |
 | `GET /recommenders` | Recommender sheet (query: `q`, `filter`, `sort`, `selected`) |
 | `GET /recommenders/new`, `POST /recommenders` | Add professor |
 | `GET /recommenders/{id}/panel` | Detail panel partial |
@@ -44,8 +46,11 @@ App binds to `127.0.0.1:8765` only.
 - **US-13** (4a) The user compares v2 with v1 in a side-by-side diff.
 - **US-14** (4a) The user saves a base CV and a tailored CV for one programme.
 - **US-15** (4b) "Evaluate" shows the four rubric ratings with reasons and comments anchored to paragraphs.
-- **US-16** (5) "Research a programme" fills a new programme marked unverified with sources.
+- **US-16** (2c) "Research a programme" fills a new programme marked unverified with official sources.
 - **US-17** (3) Settings → "Sync now" reports created/updated/deleted counts (fake Google API in tests).
+- **US-18** (2c) On a programme page, "Re-research" shows each field as new / changed / unchanged with its source;
+  the user accepts or rejects each change; nothing is written until Save; accepted deadline changes reset those
+  deadlines to unverified.
 
 ## 3. Layout and navigation
 - Left sidebar (dark, 220 px min, stacks on top below 760 px): brand "Application Hub"; links Dashboard,
@@ -66,7 +71,7 @@ App binds to `127.0.0.1:8765` only.
 - Upcoming reminders: the next 8 reminders (date, text, category chip) from the reminder engine.
 ### 4.2 Programme page — main message: "everything this application needs, and where it stands"
 Breadcrumb; title; subtitle (unit · length · how to apply); chips: deadline with days, converted time,
-data badge, status. Buttons: Edit, Mark verified. Source box (dashed): source links with checked date and
+data badge, status. Buttons: Edit, Mark verified, Re-research (2c). Source box (dashed): source links with checked date and
 the verification note. Cards: Requirements (checkboxes, count), Application steps (numbered, ticks),
 Documents and score reports (table: item, how sent, status menu, updated), Interviews and assessments
 (rows with date/zone, estimated flag, status, notes; "Add interview or assessment"), Curriculum

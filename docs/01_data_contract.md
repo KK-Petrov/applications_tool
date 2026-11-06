@@ -50,6 +50,7 @@ short_name: Princeton MFin
 school: Princeton University
 unit: Bendheim Center for Finance
 aliases: [Princeton, Bendheim, BCF]          # proper nouns used by the wrong-school check (docs/02 §8)
+official_domains: [princeton.edu]           # optional; hosts (and their subdomains) that count as official sources (DECISIONS #37)
 status: not_started                         # not_started | in_progress | submitted
 verification: unverified                    # unverified | verified
 verification_note: Last cycle's date        # free text shown on the badge (docs/02 §3); null when verified
@@ -81,6 +82,8 @@ fee: {amount: null, currency: USD, note: "[amount to verify]"}
 Enums: document `status` ∈ `not_requested | requested | sent | received | waived`; interview `kind` ∈
 `interview | assessment`; interview `status` ∈ `not_invited | invited | scheduled | done`.
 The **primary deadline** is the earliest deadline whose date has not passed; if all passed, the last one.
+`official_domains` entries are lowercase host names (`columbia.edu`), unique; research accepts a source only on
+these domains, their subdomains or `config.research.official_shared_domains` (docs/04 §7).
 Validation: every deadline needs `tz` and `source_url`; `due_local` must parse; a programme with
 `verification: verified` must have at least one source.
 

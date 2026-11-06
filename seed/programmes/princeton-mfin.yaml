@@ -8,6 +8,8 @@ aliases:
   - Princeton
   - Bendheim
   - BCF
+official_domains:
+  - princeton.edu
 status: not_started
 verification: unverified
 verification_note: Last cycle's date

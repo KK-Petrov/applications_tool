@@ -122,6 +122,12 @@ class EvaluationConfig(_Section):
     max_comment_words: int
 
 
+class ResearchConfig(_Section):
+    """Programme research (docs/04 §7): hosts accepted as official besides a programme's own domains."""
+
+    official_shared_domains: list[str]
+
+
 class WrongSchoolConfig(_Section):
     own_background_terms: list[str]
     extra_terms: list[str]
@@ -166,6 +172,7 @@ class Config(_Section):
     email: EmailConfig
     claude: ClaudeConfig
     evaluation: EvaluationConfig
+    research: ResearchConfig
     wrong_school: WrongSchoolConfig
     google: GoogleConfig
     digest: DigestConfig

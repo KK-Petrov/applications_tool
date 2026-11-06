@@ -43,6 +43,13 @@ Methods: **automated** (a test decides) · **human** (you decide, with the phase
 | C-2b-05 | Failure paths (Claude Code missing, timeout, invalid output) show a clear message and write nothing | pass/fail | automated | yes | `uv run pytest tests/test_claude_cli.py` | – | – |
 | C-2b-06 | Five generated emails read as something the user would send | pass/fail | human | yes | phase 2b prompt, You check | – | – |
 
+## Phase 2c: Programme research
+
+| ID | Criterion | Threshold | Method | Gate | Verify | Baseline | Why |
+|---|---|---|---|---|---|---|---|
+| C-5-01 | Researching two programmes yields schema-valid files where every filled field has a source URL and the programme is marked unverified | pass/fail | automated | yes | `uv run python tasks.py live -k research` | – | – |
+| C-2c-02 | Re-research writes nothing until the user saves; accepted deadline changes reset those deadlines to unverified; rejected changes leave the file byte-identical | pass/fail | automated | yes | `uv run pytest tests/test_research_merge.py tests/e2e/test_research.py -k us18` | – | – |
+
 ## Phase 3: Reminders, calendar and digest
 
 | ID | Criterion | Threshold | Method | Gate | Verify | Baseline | Why |
@@ -72,10 +79,9 @@ Methods: **automated** (a test decides) · **human** (you decide, with the phase
 | C-4b-04 | False alarms on clean essays (accuracy rated weak on a clean essay) | pass/fail | reported | no | `uv run python tasks.py eval-essay` → reports/eval_essay.json: clean_essay_false_alarms | – | – |
 | C-4b-05 | Three evaluations of the user's own drafts are useful and fair | pass/fail | human | yes | phase 4b prompt, You check | – | – |
 
-## Phase 5: Programme research and polish
+## Phase 5: Polish
 
 | ID | Criterion | Threshold | Method | Gate | Verify | Baseline | Why |
 |---|---|---|---|---|---|---|---|
-| C-5-01 | Researching two programmes yields schema-valid files where every filled field has a source URL and the programme is marked unverified | pass/fail | automated | yes | `uv run python tasks.py live -k research` | – | – |
-| C-5-02 | The full end-to-end suite passes (US-1 to US-17) | pass/fail | automated | yes | `uv run python tasks.py test` | – | – |
+| C-5-02 | The full end-to-end suite passes (US-1 to US-18) | pass/fail | automated | yes | `uv run python tasks.py test` | – | – |
 | C-5-03 | Following README.md alone, the user sets up, syncs and uses the tool | pass/fail | human | yes | phase 5 prompt, You check | – | – |

@@ -138,3 +138,61 @@ def test_non_finite_fee_is_a_data_error(data_dir: Path, config, amount: str) -> 
     with pytest.raises(DataError) as err:
         Store.from_config(config).load_programme(path)
     assert err.value.field == "fee.amount"
+
+
+# ---- DECISIONS #37: official_domains -------------------------------------------------------------------
+
+
+def test_seeds_carry_official_domains(config) -> None:
+    from hub.store import Store
+
+    programmes, errors = Store.from_config(config).load_programmes()
+    assert not errors
+    assert {p.id: p.official_domains for p in programmes} == {
+        "princeton-mfin": ["princeton.edu"],
+        "mit-sloan-mfin": ["mit.edu"],
+        "booth-mif": ["chicagobooth.edu", "uchicago.edu"],
+        "columbia-msfe": ["columbia.edu"],
+    }
+
+
+@pytest.mark.parametrize(
+    ("value", "ok"),
+    [
+        (["columbia.edu"], True),
+        (["business.columbia.edu", "mba.com"], True),
+        (["Columbia.EDU"], False),
+        (["https://columbia.edu"], False),
+        (["columbia.edu/ms"], False),
+        (["edu"], False),
+        (["columbia.edu", "columbia.edu"], False),
+    ],
+)
+def test_official_domains_validation(data_dir: Path, config, value: list[str], ok: bool) -> None:
+    from hub.store import DataError, Store
+
+    path = data_dir / "programmes" / "mit-sloan-mfin.yaml"
+    text = path.read_text(encoding="utf-8")
+    block = "official_domains:\n" + "".join(f"  - {v}\n" for v in value)
+    path.write_text(text.replace("official_domains:\n  - mit.edu\n", block), encoding="utf-8")
+    store = Store.from_config(config)
+    if ok:
+        assert store.load_programme(path).official_domains == value
+    else:
+        with pytest.raises(DataError) as err:
+            store.load_programme(path)
+        assert str(err.value.field).startswith("official_domains")
+
+
+def test_official_domains_is_optional(data_dir: Path, config) -> None:
+    from hub.store import Store
+
+    path = data_dir / "programmes" / "mit-sloan-mfin.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace("official_domains:\n  - mit.edu\n", ""), encoding="utf-8"
+    )
+    assert Store.from_config(config).load_programme(path).official_domains == []
+
+
+def test_config_has_shared_official_domains(config) -> None:
+    assert config.research.official_shared_domains == ["mba.com"]

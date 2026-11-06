@@ -73,6 +73,9 @@ evaluation:
   criteria: [structure, content_fit, programme_fit, accuracy]
   max_comment_words: 60           # source: user (never rewrite)
 
+research:
+  official_shared_domains: [mba.com]   # official non-university bodies accepted as sources (GMAC); source: user (DECISIONS #37)
+
 wrong_school:
   own_background_terms: [RSM, Erasmus, Rotterdam, UVA, Virginia, McIntire]   # source: user's background
   extra_terms: [Wharton, Stanford, Harvard, Yale, Berkeley, Haas, NYU, Stern, Carnegie Mellon, CMU,

@@ -60,10 +60,11 @@ If a command doesn't appear when you type `/` (the VS Code extension supports a 
 | 1 Programmes and dashboard | Dashboard, programme page (requirements, steps, documents, interviews, curriculum), add/edit programme, time zones, verification | Your four programmes with deadlines in ET or Rotterdam time | 1–2 | medium | ui-reviewer, data-integrity-reviewer |
 | 2a Recommender sheet | Sheet with per-programme status cells, filters, Add professor page, detail panel | All professors at a glance; statuses change with one click | 1 | medium | ui-reviewer, data-integrity-reviewer |
 | 2b Recommendation email generator | Claude Code wrapper, /rec-email skill, email eval set and graders, Generate button | A tailored, formal request email per professor | 1–2 | high | ai-output-reviewer |
+| 2c Programme research | /research-programme skill (official sources only), Research a programme, Re-research with field-by-field accept/reject | A new programme added in under five minutes; stored programmes refreshed safely | 1–2 | high | ai-output-reviewer, ui-reviewer |
 | 3 Reminders, calendar and digest | Reminder engine, Google Calendar sync, Gmail digest to yourself, Task Scheduler setup | Reminders on your iPhone; a daily digest email | 1–2 | high | data-integrity-reviewer |
 | 4a Biography bank, essays, CVs and exact checks | Biography bank, essay and CV versions, word count, wrong-school check | Drafts stored by version with exact checks | 1 | medium | ui-reviewer, data-integrity-reviewer |
 | 4b AI essay and CV evaluator | /evaluate skill, rubric output, essay eval set, Evaluate button | Rubric feedback on a draft | 1–2 | high | ai-output-reviewer |
-| 5 Programme research and polish | /research-programme skill, Research button, README, final end-to-end pass | A new programme added in under five minutes | 1 | medium | ui-reviewer, ai-output-reviewer |
+| 5 Polish | Usage panel, README, final end-to-end pass, clearer unreadable-file page | Set up and use the tool from the README alone | 1 | medium | ui-reviewer, ai-output-reviewer |
 
 **Whole build:** about 8–12 sessions. You first see something visual or usable at the end of Phase 1 (Programmes and dashboard), around session 2–3.
 

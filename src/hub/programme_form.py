@@ -445,6 +445,7 @@ def build_programme(
         "short_name": f["short_name"],
         "school": f["school"],
         "unit": _opt(f["unit"]),
+        "official_domains": list(existing.official_domains) if existing else [],  # not on the form (#37)
         "aliases": [a.strip() for a in f["aliases"].split("\n") if a.strip()],  # one per line: commas kept
         "status": f["status"] or "not_started",
         "verification": existing.verification if existing else Verification.UNVERIFIED,

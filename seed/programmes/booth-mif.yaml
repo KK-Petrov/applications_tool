@@ -9,6 +9,9 @@ aliases:
   - Booth
   - UChicago
   - University of Chicago
+official_domains:
+  - chicagobooth.edu
+  - uchicago.edu
 status: not_started
 verification: unverified
 verification_note: Researched, not checked

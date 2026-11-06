@@ -8,10 +8,11 @@ Estimated sessions are the kit's recommendation. `/phase` and `/resume` add 1 to
 | 1 Programmes and dashboard | Done with known issues | 1–2 | 1 | medium | 2026-11-05 | C-1-01 to C-1-05 PASS (20/20 tz cases, axe 0 serious); C-1-06 confirmed by user; 369 tests, fast 25 s; both reviewers READY | low items in Phase notes |
 | 2a Recommender sheet | Not started | 1 | 0 | medium | | | |
 | 2b Recommendation email generator | Not started | 1–2 | 0 | high | | | |
+| 2c Programme research | Not started | 1–2 | 0 | high | | | |
 | 3 Reminders, calendar and digest | Not started | 1–2 | 0 | high | | | |
 | 4a Biography bank, essays, CVs and exact checks | Not started | 1 | 0 | medium | | | |
 | 4b AI essay and CV evaluator | Not started | 1–2 | 0 | high | | | |
-| 5 Programme research and polish | Not started | 1 | 0 | medium | | | |
+| 5 Polish | Not started | 1 | 0 | medium | | | |
 
 Status values: Not started · In progress · Done · Done with known issues
 
@@ -40,4 +41,4 @@ Actual ÷ estimated sessions over finished phases: 0.67 (Phase 0: 1 ÷ 1; Phase 
 - **Open:** see Known issues above; time-zone helpers (instant, primary deadline) deliberately left for Phase 1 `rules/`.
 - **Phase 0 follow-up (2026-11-05, same session; not counted in any estimate):** block style everywhere (DECISIONS #19: seeds and fixtures converted once, data and comments checked identical; one-field change = one-line diff; CRLF kept; no wrapping) and aware timestamps (DECISIONS #18 applied now: naive values rejected with a DataError naming the field; written as unquoted ISO 8601 with offset; loaded values rebuilt as plain `datetime`). Tests: 130 (123 fast in 8.9 s + 7 e2e); real-clone run 130/130; data-integrity-reviewer: ready, its medium finding (ruamel `TimeStamp` in models) fixed with 4 regression tests.
 - **Minor limitations (accepted for now, low severity):** a hand-quoted date or timestamp (`"2026-11-02"`) is rewritten unquoted on the first save, so that save writes although no value changed; a comment inside a multi-line flow collection is lost when an old flow-style file is converted (ruamel limit, documented in docs/01 §1).
-- **For later phases:** DECISIONS #13 (min 1 deadline) implies: Phase 1 Add/Edit programme form requires at least one deadline with tz and source_url; Phase 5 research preview must block Save until the user enters a deadline if the skill returned none.
+- **For later phases:** DECISIONS #13 (min 1 deadline) implies: Phase 1 Add/Edit programme form requires at least one deadline with tz and source_url; Phase 2c research preview must block Save until the user enters a deadline if the skill returned none.

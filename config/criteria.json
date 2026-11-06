@@ -212,6 +212,24 @@
       "source": "user"
     },
     {
+      "id": "C-5-01",
+      "phase": "2c",
+      "title": "Researching two programmes yields schema-valid files where every filled field has a source URL and the programme is marked unverified",
+      "method": "automated",
+      "gate": true,
+      "verify": "`uv run python tasks.py live -k research`",
+      "source": "recommended"
+    },
+    {
+      "id": "C-2c-02",
+      "phase": "2c",
+      "title": "Re-research writes nothing until the user saves; accepted deadline changes reset those deadlines to unverified; rejected changes leave the file byte-identical",
+      "method": "automated",
+      "gate": true,
+      "verify": "`uv run pytest tests/test_research_merge.py tests/e2e/test_research.py -k us18`",
+      "source": "user"
+    },
+    {
       "id": "C-3-01",
       "phase": "3",
       "title": "The reminder engine reproduces the worked example and all 30 rows of the golden reminder table",
@@ -356,18 +374,9 @@
       "source": "user"
     },
     {
-      "id": "C-5-01",
-      "phase": "5",
-      "title": "Researching two programmes yields schema-valid files where every filled field has a source URL and the programme is marked unverified",
-      "method": "automated",
-      "gate": true,
-      "verify": "`uv run python tasks.py live -k research`",
-      "source": "recommended"
-    },
-    {
       "id": "C-5-02",
       "phase": "5",
-      "title": "The full end-to-end suite passes (US-1 to US-17)",
+      "title": "The full end-to-end suite passes (US-1 to US-18)",
       "method": "automated",
       "gate": true,
       "verify": "`uv run python tasks.py test`",

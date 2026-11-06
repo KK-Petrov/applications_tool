@@ -83,6 +83,11 @@ def _plain_datetime(value: datetime) -> datetime:
 AwareTimestamp = Annotated[AwareDatetime, AfterValidator(_plain_datetime)]
 Email = Annotated[str, AfterValidator(_check_email)]
 Url = Annotated[str, StringConstraints(pattern=r"^https?://\S+$")]
+# A lowercase host name such as ``columbia.edu`` (official source domains, DECISIONS #37)
+Domain = Annotated[
+    str,
+    StringConstraints(max_length=253, pattern=r"^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}$"),
+]
 
 
 class Verification(StrEnum):

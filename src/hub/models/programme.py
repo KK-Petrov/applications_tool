@@ -7,7 +7,7 @@ from enum import StrEnum
 
 from pydantic import Field, ValidationInfo, field_validator
 
-from hub.models.common import DataModel, IanaZone, LocalDateTime, Slug, Url, Verification, unique_ids
+from hub.models.common import DataModel, Domain, IanaZone, LocalDateTime, Slug, Url, Verification, unique_ids
 
 
 class ProgrammeStatus(StrEnum):
@@ -132,6 +132,8 @@ class Programme(DataModel):
     short_name: str
     school: str
     unit: str | None = None
+    # hosts whose pages (and subdomains) count as official sources for research (DECISIONS #37)
+    official_domains: list[Domain] = Field(default_factory=list)
     aliases: list[str] = Field(default_factory=list)  # proper nouns for the wrong-school check (docs/02 §8)
     status: ProgrammeStatus = ProgrammeStatus.NOT_STARTED
     verification: Verification = Verification.UNVERIFIED
@@ -159,6 +161,13 @@ class Programme(DataModel):
         if info.data.get("verification") == Verification.VERIFIED and not sources:
             raise ValueError("a verified programme needs at least one source")
         return sources
+
+    @field_validator("official_domains")
+    @classmethod
+    def _domains_unique(cls, domains: list[str]) -> list[str]:
+        if len(set(domains)) != len(domains):
+            raise ValueError("official_domains must not repeat a domain")
+        return domains
 
     @field_validator("deadlines", "requirements", "documents", "interviews", "essays")
     @classmethod

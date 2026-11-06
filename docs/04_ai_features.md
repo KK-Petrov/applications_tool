@@ -139,12 +139,30 @@ the omitted entry appears in `unused_biography`), `rewrite_violations` (comment 
 containing a sentence of ≥ 12 words in quotation marks not present in the draft), and
 `clean_essay_false_alarms` (accuracy rated weak on a clean essay). Output `reports/eval_essay.json` and `.md`.
 
-## 7. Skill: `/research-programme` (Phase 5)
+## 7. Skill: `/research-programme` (Phase 2c)
 Input: `{"query": "Berkeley Haas MFE", "url": null, "today": "YYYY-MM-DD"}`. Tools: WebSearch, WebFetch.
 Output: a programme object matching docs/01 §3 with `verification: unverified`, every filled field paired
 with a `source_url` (fields not found are null with a note), deadlines with zone and `time_known`.
 The app validates it, shows a preview, and writes `programmes/<id>.yaml` only after the user clicks Save.
-Prefer the school's own pages; third-party sources set `verification_note: Third-party source`.
+**Official sources only (DECISIONS #31, #37).** The skill cites only the university's or school's own pages and
+proposes the programme's `official_domains`. A field no official page provides stays null with the note
+"No official source found"; the skill never falls back to a third-party source. The app checks every cited
+URL in Python: its host must equal, or be a subdomain on a dot boundary of, one of the confirmed
+`official_domains` (`business.columbia.edu` matches `columbia.edu`; `princeton.edu.evil.com` and
+`evilprinceton.edu` do not), or be on `config.research.official_shared_domains` (e.g. `mba.com` for GMAC).
+Any other source is refused at preview with a message naming the field, and Save stays blocked. The preview
+first shows the proposed `official_domains` for the user to confirm or edit; only then do the checks run.
+Save is also blocked until a deadline with `tz` and `source_url` exists (DECISIONS #13).
+
+### 7.1 Re-research
+Input: `{"programme_id": "...", "current": {stored programme}, "today": "YYYY-MM-DD"}`. The "Re-research" button
+on a programme page runs the skill for that programme; the app shows a field-by-field comparison with the
+stored data (new / changed / unchanged, each with its source URL). The user accepts or rejects each change;
+nothing is written until Save, and a save with every change rejected writes nothing. Accepted changes to a
+deadline's date, time, zone or source reset that deadline to unverified (DECISIONS #21, #30); research never
+sets `verified`. A programme without `official_domains` gets them prefilled from the hosts of its stored
+source URLs, and the user confirms them before the comparison runs. Saving keeps the file's shape and
+comments (DECISIONS #29b).
 
 ## 8. Usage and cost
 Calls happen only on explicit clicks or eval runs. The Settings page shows the month's call count and

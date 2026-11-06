@@ -49,10 +49,11 @@ A local web app that tracks US master's applications (deadlines, requirements, d
 | 1 Programmes and dashboard | Dashboard, programme page (requirements, steps, documents, interviews, curriculum), add/edit programme, time zones, verification | 1–2 | medium | ui-reviewer, data-integrity-reviewer |
 | 2a Recommender sheet | Sheet with per-programme status cells, filters, Add professor page, detail panel | 1 | medium | ui-reviewer, data-integrity-reviewer |
 | 2b Recommendation email generator | Claude Code wrapper, /rec-email skill, email eval set and graders, Generate button | 1–2 | high | ai-output-reviewer |
+| 2c Programme research | /research-programme skill (official sources only), Research a programme, Re-research with field-by-field accept/reject | 1–2 | high | ai-output-reviewer, ui-reviewer |
 | 3 Reminders, calendar and digest | Reminder engine, Google Calendar sync, Gmail digest to yourself, Task Scheduler setup | 1–2 | high | data-integrity-reviewer |
 | 4a Biography bank, essays, CVs and exact checks | Biography bank, essay and CV versions, word count, wrong-school check | 1 | medium | ui-reviewer, data-integrity-reviewer |
 | 4b AI essay and CV evaluator | /evaluate skill, rubric output, essay eval set, Evaluate button | 1–2 | high | ai-output-reviewer |
-| 5 Programme research and polish | /research-programme skill, Research button, README, final end-to-end pass | 1 | medium | ui-reviewer, ai-output-reviewer |
+| 5 Polish | Usage panel, README, final end-to-end pass, clearer unreadable-file page | 1 | medium | ui-reviewer, ai-output-reviewer |
 
 ## 5. Acceptance criteria
 | ID | Phase | Criterion | Threshold | Gate |

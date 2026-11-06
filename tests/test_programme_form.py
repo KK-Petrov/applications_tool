@@ -510,3 +510,10 @@ def test_bad_checked_date_marks_its_input(client: TestClient) -> None:
     ).text
     tag = re.search(r'<input[^>]*\bname="sources-0-checked"[^>]*>', html)
     assert tag is not None and 'aria-invalid="true"' in tag.group(0)
+
+
+def test_edit_keeps_official_domains(client: TestClient, data_dir: Path) -> None:
+    fields = set_field(_edit_fields(client, "booth-mif"), "letters_note", "Changed")
+    assert client.post("/programmes/booth-mif", data=fields).status_code == 303
+    text = (data_dir / "programmes" / "booth-mif.yaml").read_text(encoding="utf-8")
+    assert "official_domains:\n  - chicagobooth.edu\n  - uchicago.edu\n" in text
