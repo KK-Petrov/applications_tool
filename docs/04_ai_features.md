@@ -69,8 +69,10 @@ without the payload; nothing written to data_dir on failure) after adding a harn
                "interaction": null, "tone": "formal"},
  "programmes": [{"short_name": "Princeton MFin", "full_name": "Princeton Master in Finance",
                  "deadline_text": "15 December 2026, 11:59 pm ET", "submission": "via the Graduate School portal",
-                 "letters_note": "…"}],
+                 "letters_note": "…",
+                 "curriculum": {"summary": "…", "courses": [{"name": "…", "description": "…"}]}}],
  "biography": [{"id": "gmat", "category": "test", "title": "…", "detail": "…", "state": "actual"}],
+ "selected_biography_ids": ["ra-empirical", "gmat", "python"],
  "constraints": {"min_words": 180, "max_words": 280,
                  "subject": "Request for a letter of recommendation: master's programmes in finance",
                  "sign_off": "Kind regards,"}}
@@ -82,14 +84,18 @@ is built in Python from `email.subject_template` and `email.programme_type` and 
 Only programmes ticked for this letter are included. `courses` holds every course linked through
 `course_ids` (docs/01 §10), or the professor's manual course and description when none is linked
 (DECISIONS #44). `surname` is the salutation form (docs/02 §9: "Van den Berg" standing alone).
+From Phase 4a (DECISIONS #59): `curriculum` is the programme's stored curriculum, with bracketed editorial
+notes ("[Course list: run research]") removed from the summary; `biography` holds every entry and
+`selected_biography_ids` names the 3–5 chosen in Python (§2.4), most relevant first.
 
 ### 2.2 Rules in SKILL.md
 1. Formal register; open with exactly `Dear {title} {surname},` (e.g. `Dear Dr. De Vries,`); close with `Kind regards,` then the owner's name.
 2. Structure: (a) who the owner is and the course taken with the professor (term, grade if given);
    (b) what he did or learned in the course, drawn from the course description and the interaction;
-   (c) why these programmes, from goal/experience entries; (d) the programmes and deadlines as a short
-   list, copied exactly; (e) offer of CV, transcript and a short summary of points the professor could
-   speak to; ask whether the professor feels able to write a strong letter; thanks.
+   (c) why these programmes: the course-to-programme link (rule 8) and the selected entries (rule 9);
+   (d) the programmes and deadlines as a short list, copied exactly; (e) a brief offer of CV and
+   transcript, the question whether the professor feels able to write a strong letter, and thanks, kept
+   short to make room for (b) and (c) (DECISIONS #59).
 3. 180–280 words in the body. Subject: `constraints.subject`, i.e. `Request for a letter of recommendation:
    master's programmes in finance` (DECISIONS #48).
 4. Use only facts in the payload. Never invent grades, projects, conversations, rankings or praise.
@@ -99,25 +105,65 @@ Only programmes ticked for this letter are included. `courses` holds every cours
 6. Never mention programmes not in the payload.
 7. Word the opening and closing sentences anew for each professor; no fixed stock sentence; structure and
    facts unchanged. Months are written in full ("from January to June 2026"), never changing the date
-   (DECISIONS #49).
+   (DECISIONS #49). The opening and closing draw on this professor's course-to-programme link (rule 8),
+   not on a generic phrase (DECISIONS #59).
+8. **Course-to-programme link** (DECISIONS #59). Link the professor's course to at least one selected
+   programme through a programme element: a course name from that programme's `curriculum.courses`, copied
+   verbatim, or, when the programme has no stored courses, a phrase of at least 3 words copied verbatim from
+   `curriculum.summary` (no course is then named). Name the course topic in words from the professor's course
+   name or description. Declare every link in `programme_links`. Never name a course, track or feature of a
+   programme that is not in its `curriculum`.
+9. **Selected background** (DECISIONS #59). Use at least 2 of the entries in `selected_biography_ids`,
+   keeping each entry's key terms (names, numbers, distinctive words) as written; other entries only where
+   paragraph (a) needs them.
 
 ### 2.3 Output schema (`src/hub/ai/schemas/rec_email.json`)
 ```json
 {"type": "object", "additionalProperties": false,
- "required": ["subject", "body", "used_biography_ids", "warnings"],
+ "required": ["subject", "body", "used_biography_ids", "programme_links", "warnings"],
  "properties": {"subject": {"type": "string", "maxLength": 140},
                 "body": {"type": "string"},
                 "used_biography_ids": {"type": "array", "items": {"type": "string"}},
+                "programme_links": {"type": "array", "items": {"type": "object", "additionalProperties": false,
+                   "required": ["programme", "from_course_topic", "programme_element"],
+                   "properties": {"programme": {"type": "string"}, "from_course_topic": {"type": "string"},
+                                  "programme_element": {"type": "string"}}}},
                 "warnings": {"type": "array", "items": {"type": "string"}}}}
 ```
+`programme_links` is added in Phase 4a (DECISIONS #59).
+
+### 2.4 Checks in Python (`payloads.py`, `email_checks.py`; rule 13; DECISIONS #59, Phase 4a)
+The counts (3–5 selected, at least 2 used, summary phrase of at least 3 words) are parameters in
+`config/project.yaml → email`.
+- **Terms:** case-folded words and numbers, minus a fixed stop-word list.
+- **Selection:** score = 2 × terms shared with the professor's linked course names and descriptions
+  + 1 × terms shared with the selected programmes' curriculum (course names, descriptions, summary)
+  + 1 per tag found in either. Up to 5 entries with a score above 0, highest first, ties by bank order;
+  fewer than 3 are topped up to 3 in bank order. An entry with no distinctive term is never selected.
+- **Distinctive terms** of an entry: terms of its title and detail found in no other biography entry, the
+  professor's course text or the programme data.
+- **Used:** a selected entry counts as used when at least 2 of its distinctive terms appear in the body (all
+  of them if it has fewer). `used_biography_ids` is not trusted; an ID in it that fails this check is
+  reported as `biography_id_mismatches`.
+- **Valid link:** `programme` is a selected `short_name`; `from_course_topic` appears in a linked course's
+  name or description (ignoring case); `programme_element` is a stored course name of that programme,
+  verbatim, or, when the programme has no stored courses, a verbatim summary phrase of at least 3 words;
+  topic and element both appear in the body.
+- **Invented programme element:** a `programme_element` not found verbatim in that programme's stored
+  curriculum as the rule above allows. Python checks declared links only; a course named in the body but
+  not declared is left to `/grade-claims` (§3) and the 4th calibration email (§4).
+- **In the app** failed checks are warnings next to the draft and never block. A link through an unverified
+  programme adds "{short_name}'s curriculum is unverified — check the course named before sending", after
+  the deadline warnings and saved with the email (rule 11).
 
 ## 3. Skill: `/grade-claims` (eval only)
 Input: `{"text": "(email body)", "facts": (the rec-email payload)}`. Output: `{"unsupported_claims":
 [{"quote": "…", "reason": "…"}]}`. A claim is unsupported if no payload field states or directly implies
 it. Courtesy phrases ("I greatly enjoyed your course") are not claims; factual statements about
-performance, projects, contact or achievements are.
+performance, projects, contact or achievements are. From Phase 4a the facts include each programme's
+`curriculum` (DECISIONS #59): a course or feature named there is supported; one not in it is unsupported.
 
-## 4. Email eval set and graders (C-2b-01 to C-2b-04)
+## 4. Email eval set and graders (C-2b-01 to C-2b-04, C-4a-04)
 `tests/evals/email/cases/` — 10 invented professors at example.org with an invented owner biography:
 1. rich record (grade, term, interaction), one programme; 2. no grade, no interaction; 3. all four
 programmes; 4. warm tone; 5. 3,000-character pasted description; 6. biography with an **anticipated**
@@ -125,6 +171,9 @@ cum laude; 7. very short description (sparse, tempts invention); 8. UVA professo
 9. two programmes with different zones (ET and CT); 10. professor name with a particle ("Prof. van der Berg", surname "van der Berg"; salutation
 "Dear Professor Van der Berg,"). Every case sets `title` explicitly; case 8 uses `"Dr."`.
 `tests/evals/email/calibration/` — 3 hand-written emails each containing one invented claim; the grader must flag all 3.
+From Phase 4a a 4th calibration email (DECISIONS #59) names one invented programme course that is in no stored
+curriculum and is not declared in `programme_links`. It is reported as `undeclared_course_caught` (true when
+`/grade-claims` flags it), not gated; `grader_calibration_passed` stays on emails 1–3 (C-2b-04).
 
 `tasks.py eval-email` runs `/rec-email` once per case (live), then graders in `tests/evals/email/graders.py`:
 - `schema_failures`: output fails the schema.
@@ -139,6 +188,13 @@ cum laude; 7. very short description (sparse, tempts invention); 8. UVA professo
 - Payloads are built by the app's builder from the cases and frozen programme copies in
   `tests/fixtures/email_eval/` (DECISIONS #48); cases 8–10 are held out from tuning and reported separately.
 - `unsupported_claims`: total from `/grade-claims` over the 10 emails; `grader_calibration_passed`: all 3 calibration emails flagged.
+- Eval data from Phase 4a (DECISIONS #59): invented curriculum courses in the frozen Princeton, MIT and Columbia
+  copies; Booth keeps only an invented summary (the programme with no stored courses); extra invented
+  biography entries matching some cases' courses. C-2b-01 to C-2b-04 are re-run on this set.
+- `grounding_failures` (C-4a-04): emails failing any of: fewer than 2 selected entries used (§2.4), no valid
+  link, any invented programme element, words outside 180–280. Broken down into `biography_unverified`,
+  `no_valid_link`, `invented_programme_elements` and `length`; tuning and held-out cases reported separately.
+  `biography_id_mismatches` and `undeclared_course_caught` are reported, not gated.
 Writes `reports/eval_email.json` and a readable `reports/eval_email.md` with each email for the human check.
 
 ## 5. Skill: `/evaluate` (essays and CVs)

@@ -326,6 +326,20 @@
       "source": "recommended"
     },
     {
+      "id": "C-4a-04",
+      "phase": "4a",
+      "title": "Every eval email uses at least 2 of its selected biography entries (verified in the text), links the professor's course to at least one selected programme through a programme element found verbatim in the stored curriculum or summary, and contains 0 invented programme elements, while staying within 180–280 words",
+      "method": "automated",
+      "gate": true,
+      "metric": "email_grounding_failures",
+      "comparator": "==",
+      "threshold": 0,
+      "unit": "count",
+      "verify": "`uv run python tasks.py eval-email` → reports/eval_email.json: grounding_failures (tuning cases 1–7 and held-out cases 8–10 reported separately)",
+      "why": "A specific link between the professor's course and the programme makes the request personal; an invented course name in it is unrecoverable",
+      "source": "user"
+    },
+    {
       "id": "C-4b-01",
       "phase": "4b",
       "title": "Every evaluation validates against its schema and rates all four rubric criteria with a reason",

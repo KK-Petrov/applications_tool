@@ -62,11 +62,11 @@ If a command doesn't appear when you type `/` (the VS Code extension supports a 
 | 2b Recommendation email generator | Claude Code wrapper, /rec-email skill, email eval set and graders, Generate button | A tailored, formal request email per professor | 1–2 | high | ai-output-reviewer |
 | 2c Programme research and course import | /research-programme skill (official sources only), Research a programme, Re-research with field-by-field accept/reject; /extract-courses (transcript → courses.yaml, grades checked, identifiers stripped), professors created from the transcript, course suggestions on Add professor | A new programme added in under five minutes; your courses imported from your transcript; professors created with their courses; stored programmes refreshed safely | 2 | high | ai-output-reviewer, ui-reviewer, data-integrity-reviewer |
 | 3 Reminders, calendar and digest | Reminder engine, Google Calendar sync, Gmail digest to yourself, Task Scheduler setup | Reminders on your iPhone; a daily digest email | 1–2 | high | data-integrity-reviewer |
-| 4a Biography bank, essays, CVs and exact checks | Biography bank, essay and CV versions, word count, wrong-school check | Drafts stored by version with exact checks | 1 | medium | ui-reviewer, data-integrity-reviewer |
+| 4a Biography bank, essays, CVs and exact checks | Biography bank, essay and CV versions, word count, wrong-school check; grounded /rec-email (biography selection, course-to-programme link) | Drafts stored by version with exact checks; request emails that tie each professor's course to a programme | 1–2 | high | ui-reviewer, data-integrity-reviewer, ai-output-reviewer |
 | 4b AI essay and CV evaluator | /evaluate skill, rubric output, essay eval set, Evaluate button | Rubric feedback on a draft | 1–2 | high | ai-output-reviewer |
 | 5 Polish | Usage panel, README, final end-to-end pass, clearer unreadable-file page, six accepted known issues (plain-word file errors, .tmp lock message, toast focus, one-round form errors, narrow-screen sheet, post-redirect-get) | Set up and use the tool from the README alone | 1–2 | medium | ui-reviewer, ai-output-reviewer |
 
-**Whole build:** about 8–12 sessions. You first see something visual or usable at the end of Phase 1 (Programmes and dashboard), around session 2–3.
+**Whole build:** about 10–16 sessions. You first see something visual or usable at the end of Phase 1 (Programmes and dashboard), around session 2–3.
 
 Session estimates are recalibrated during the build: `/phase` and `/resume` compare actual with
 estimated sessions in `docs/PROGRESS.md` and update the remaining estimates when phases run long.

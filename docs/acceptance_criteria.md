@@ -69,6 +69,7 @@ Methods: **automated** (a test decides) · **human** (you decide, with the phase
 | C-4a-01 | The wrong-school check catches all 20 planted mentions with no false positives on 10 clean essays | wrong_school_misses_plus_false_positives == 0 | automated | yes | `uv run pytest tests/test_wrong_school.py` | – | A competitor's name in an essay is the classic reuse error |
 | C-4a-02 | Word count matches the rule in docs/02 §7 on all 15 fixtures | pass/fail | automated | yes | `uv run pytest tests/test_word_count.py` | – | – |
 | C-4a-03 | Biography, essay, version and CV user stories pass end to end (US-11 to US-14) | pass/fail | automated | yes | `uv run pytest tests/e2e/test_essays.py tests/e2e/test_biography.py` | – | – |
+| C-4a-04 | Every eval email uses at least 2 of its selected biography entries (verified in the text), links the professor's course to at least one selected programme through a programme element found verbatim in the stored curriculum or summary, and contains 0 invented programme elements, while staying within 180–280 words | email_grounding_failures == 0 | automated | yes | `uv run python tasks.py eval-email` → reports/eval_email.json: grounding_failures (tuning cases 1–7 and held-out cases 8–10 reported separately) | – | A specific link between the professor's course and the programme makes the request personal; an invented course name in it is unrecoverable |
 
 ## Phase 4b: AI essay and CV evaluator
 

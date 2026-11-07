@@ -51,7 +51,7 @@ A local web app that tracks US master's applications (deadlines, requirements, d
 | 2b Recommendation email generator | Claude Code wrapper, /rec-email skill, email eval set and graders, Generate button | 1–2 | high | ai-output-reviewer |
 | 2c Programme research and course import | /research-programme skill (official sources only), Research a programme, Re-research with field-by-field accept/reject; /extract-courses (transcript → courses.yaml, grades checked, identifiers stripped), professors created from the transcript, course suggestions on Add professor | 2 | high | ai-output-reviewer, ui-reviewer, data-integrity-reviewer |
 | 3 Reminders, calendar and digest | Reminder engine, Google Calendar sync, Gmail digest to yourself, Task Scheduler setup | 1–2 | high | data-integrity-reviewer |
-| 4a Biography bank, essays, CVs and exact checks | Biography bank, essay and CV versions, word count, wrong-school check | 1 | medium | ui-reviewer, data-integrity-reviewer |
+| 4a Biography bank, essays, CVs and exact checks | Biography bank, essay and CV versions, word count, wrong-school check; grounded /rec-email (biography selection, course-to-programme link; DECISIONS #59) | 1–2 | high | ui-reviewer, data-integrity-reviewer, ai-output-reviewer |
 | 4b AI essay and CV evaluator | /evaluate skill, rubric output, essay eval set, Evaluate button | 1–2 | high | ai-output-reviewer |
 | 5 Polish | Usage panel, README, final end-to-end pass, clearer unreadable-file page, six accepted known issues (plain-word file errors, .tmp lock message, toast focus, one-round form errors, narrow-screen sheet, post-redirect-get) | 1–2 | medium | ui-reviewer, ai-output-reviewer |
 
@@ -86,6 +86,7 @@ A local web app that tracks US master's applications (deadlines, requirements, d
 | C-4a-01 | 4a | The wrong-school check catches all 20 planted mentions with no false positives on 10 clean essays | wrong_school_misses_plus_false_positives == 0 | yes |
 | C-4a-02 | 4a | Word count matches the rule in docs/02 §7 on all 15 fixtures | pass/fail | yes |
 | C-4a-03 | 4a | Biography, essay, version and CV user stories pass end to end (US-11 to US-14) | pass/fail | yes |
+| C-4a-04 | 4a | Every eval email uses at least 2 of its selected biography entries (verified in the text), links the professor's course to at least one selected programme through a programme element found verbatim in the stored curriculum or summary, and contains 0 invented programme elements, while staying within 180–280 words | email_grounding_failures == 0 | yes |
 | C-4b-01 | 4b | Every evaluation validates against its schema and rates all four rubric criteria with a reason | evaluation_schema_failures == 0 | yes |
 | C-4b-02 | 4b | Planted flaws detected in the essay eval set | planted_flaws_detected >= 8 of 10 | yes |
 | C-4b-03 | 4b | The evaluator never rewrites: no comment exceeds 60 words or contains a replacement paragraph | pass/fail | yes |
