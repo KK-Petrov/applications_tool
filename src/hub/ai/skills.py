@@ -41,6 +41,7 @@ SKILL_TOOLS: dict[str, tuple[str, ...]] = {
     "probe-lockdown": (),
     "research-programme": ("WebSearch", "WebFetch"),  # Phase 2c
     "probe-research": ("WebSearch", "WebFetch"),  # live check of the research lockdown (DECISIONS #61)
+    "extract-courses": (),  # Phase 2c: reads the identifier-stripped transcript text only
 }
 # Skills that browse: they need many sequential turns, so they get ``claude.research_max_turns`` instead of
 # ``claude.max_turns`` (live evidence: a cap of 2 stopped a 4-fetch probe with error_max_turns; #61).

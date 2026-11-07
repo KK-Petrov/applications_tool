@@ -73,6 +73,7 @@ def _fake_claude(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
         "FAKE_CLAUDE_PIDFILE",
         "FAKE_CLAUDE_RECORDING",
         "FAKE_CLAUDE_SLEEP",
+        "FAKE_CLAUDE_DELAY",
     ):
         monkeypatch.delenv(name, raising=False)
 

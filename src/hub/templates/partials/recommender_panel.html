@@ -7,9 +7,10 @@
     <a class="button button-secondary" href="/recommenders/{{ prof.id }}/edit">Edit<span class="visually-hidden"> {{ prof.name }}</span></a>
   </div>
   <dl class="details">
-    <dt>Email</dt><dd>{{ prof.email }}</dd>
+    <dt>Email</dt><dd>{% if prof.email %}{{ prof.email }}{% else %}<span class="chip chip-urgent email-missing">Email missing</span> Add it with Edit before sending.{% endif %}</dd>
     <dt>University</dt><dd>{{ prof.university }}</dd>
-    <dt>Course</dt><dd>{{ prof.course or "Not set" }}</dd>
+    {% if prof_row.courses %}<dt>Linked courses</dt><dd><ul class="plain">{% for c in prof_row.courses %}<li>{{ c.name }}{% if c.code %} ({{ c.code }}){% endif %}{% if c.grade %} · grade {{ c.grade }}{% endif %}{% if c.term %} · {{ c.term }}{% endif %}</li>{% endfor %}</ul></dd>
+    {% else %}<dt>Course</dt><dd>{{ prof.course or "Not set" }}</dd>{% endif %}
     {% if prof.grade %}<dt>Grade</dt><dd>{{ prof.grade }}</dd>{% endif %}
     {% if prof.term %}<dt>Term</dt><dd>{{ prof.term }}</dd>{% endif %}
     {% if prof.interaction %}<dt>Specific interaction</dt><dd class="pre-line">{{ prof.interaction }}</dd>{% endif %}

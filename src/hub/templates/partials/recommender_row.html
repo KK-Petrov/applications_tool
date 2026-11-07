@@ -4,8 +4,9 @@
 <tr id="row-{{ prof.id }}"{% if selected and selected.id == prof.id %} class="selected" aria-current="true"{% endif %}{% if oob_row %} hx-swap-oob="true"{% endif %}>
   <th scope="row" class="prof-name">
     <a href="{{ sheet_url(sheet, selected=prof.id) }}#panel" hx-get="/recommenders/{{ prof.id }}/panel" hx-include="#sheet-controls" hx-target="#panel" hx-swap="outerHTML" hx-push-url="{{ sheet_url(sheet, selected=prof.id) }}" data-select-row="{{ prof.id }}">{{ prof.name }}</a>
+    {%- if not prof.email %} <span class="chip chip-urgent email-missing">Email missing</span>{% endif %}
   </th>
-  <td class="course">{{ prof.course or "" }}</td>
+  <td class="course">{{ r.course_text }}</td>
   <td>{{ prof.grade or "" }}</td>
   {% for cell in r.cells %}
   {% set cid = prof.id ~ "-" ~ cell.programme.id %}

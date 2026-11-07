@@ -148,6 +148,46 @@ class ResearchConfig(_Section):
     official_shared_domains: list[str]
 
 
+class NamesConfig(_Section):
+    """Parsing names (docs/02 §9): particles that belong to the surname, title tokens and their ranking."""
+
+    particles: list[str]
+    title_tokens: dict[str, str]  # lower-case token without full stop → title, e.g. "dr" → "Dr."
+    title_precedence: list[str]  # highest first
+
+    @model_validator(mode="after")
+    def _titles_ranked(self) -> NamesConfig:
+        missing = set(self.title_tokens.values()) - set(self.title_precedence)
+        if missing:
+            raise ValueError(f"title_precedence must rank every title: missing {sorted(missing)}")
+        return self
+
+
+class IdentifierLabels(_Section):
+    en: list[str]
+    nl: list[str]
+
+    @property
+    def all(self) -> list[str]:
+        return [*self.en, *self.nl]
+
+
+class CoursesConfig(_Section):
+    """Course import (docs/02 §10, docs/04 §9)."""
+
+    identifier_labels: IdentifierLabels
+    month_names: IdentifierLabels
+    allowed_types: list[str]
+    max_upload_bytes: int = Field(gt=0)
+    max_unpacked_bytes: int = Field(gt=0)
+    min_pdf_text_per_page: int = Field(ge=0)
+    letter_grade_order: list[str]
+    numeric_grade_scale: float = Field(gt=0)
+    removed_marker: str
+    grade_headings: list[str]  # heading-row cells that name the grade column (row check, #67)
+    credit_headings: list[str]  # heading-row cells that name the credits column
+
+
 class WrongSchoolConfig(_Section):
     own_background_terms: list[str]
     extra_terms: list[str]
@@ -195,6 +235,8 @@ class Config(_Section):
     claude: ClaudeConfig
     evaluation: EvaluationConfig
     research: ResearchConfig
+    names: NamesConfig
+    courses: CoursesConfig
     wrong_school: WrongSchoolConfig
     google: GoogleConfig
     digest: DigestConfig

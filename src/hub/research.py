@@ -91,10 +91,47 @@ def research_payload(query: str, url: str | None, today: date) -> dict[str, Any]
 
 
 def reresearch_payload(programme: Programme, today: date) -> dict[str, Any]:
-    """The input for re-research: the stored programme file and nothing else (no owner data)."""
+    """The input for re-research: only the fields research compares (DECISIONS #66). Status, steps,
+    documents, interviews, verification and every free-text note (requirement notes, ``letters_note``,
+    ``fee.note``) stay local: they may be the owner's own text, and this call has web tools. The comparison
+    itself still runs in Python against the full local file."""
+    p = programme
     return {
-        "programme_id": programme.id,
-        "current": programme.model_dump(mode="json", exclude_unset=True),
+        "programme_id": p.id,
+        "current": {
+            "id": p.id,
+            "name": p.name,
+            "short_name": p.short_name,
+            "school": p.school,
+            "unit": p.unit,
+            "official_domains": list(p.official_domains),
+            "aliases": list(p.aliases),
+            "portal_url": p.portal_url,
+            "deadlines": [
+                {
+                    "id": d.id,
+                    "label": d.label,
+                    "due_local": d.due_local.strftime("%Y-%m-%dT%H:%M"),
+                    "tz": d.tz,
+                    "time_known": d.time_known,
+                    "source_url": d.source_url,
+                }
+                for d in p.deadlines
+            ],
+            "letters_required": p.letters_required,
+            "requirements": [{"id": r.id, "label": r.label} for r in p.requirements],
+            "essays": [
+                {"id": e.id, "title": e.title, "prompt": e.prompt, "word_limit": e.word_limit}
+                for e in p.essays
+            ],
+            "curriculum": {
+                "summary": p.curriculum.summary,
+                "courses": [{"name": c.name, "description": c.description} for c in p.curriculum.courses],
+            },
+            "ai_policy": {"text": p.ai_policy.text, "source_url": p.ai_policy.source_url},
+            "fee": {"amount": p.fee.amount, "currency": p.fee.currency},
+            "sources": [{"url": s.url, "title": s.title} for s in p.sources],
+        },
         "today": today.isoformat(),
     }
 
@@ -314,6 +351,12 @@ def check_proposal(output: Any, domains: Sequence[str], shared: Sequence[str]) -
         if (msg := source_problem(f.label, f.source_url, f.filled, domains, shared)) is not None:
             refused[f.key] = msg
             problems.append(msg)
+    portal = output["portal_url"]["value"]
+    if portal and (msg := source_problem("Portal", portal, True, domains, shared, "URL")) is not None:
+        refused["portal_url"] = (
+            refused.get("portal_url") or msg
+        )  # the link itself is clicked (ai-output review)
+        problems.append(msg)
     for n, s in enumerate(output["sources"]):
         if (msg := source_problem(f"Source {n + 1}", s["url"], True, domains, shared, "URL")) is not None:
             refused[f"source:{n}"] = msg
@@ -532,7 +575,13 @@ def compare(current: Programme, output: Any, domains: Sequence[str], shared: Seq
     for key, label in SCALARS:
         item = out[key]
         old, new = _scalar_current(current, key), item["value"]
-        add(Change(key, label, _kind(old, new), _show(old), _show(new), item["source_url"], proposed=item))
+        change = Change(
+            key, label, _kind(old, new), _show(old), _show(new), item["source_url"], proposed=item
+        )
+        add(change)
+        if key == "portal_url" and change.kind in {"new", "changed"} and not change.refused:
+            # the portal link itself is clicked, so its host must be official too (#65, #67)
+            change.refused = source_problem("Portal", new, True, domains, shared, "URL")
     fee = out["fee"]
     old_fee = (current.fee.amount, current.fee.currency) if current.fee.amount is not None else None
     new_fee = (fee["amount"], fee["currency"]) if fee["amount"] is not None else None
@@ -596,9 +645,10 @@ def compare(current: Programme, output: Any, domains: Sequence[str], shared: Seq
         "Requirement",
         name=lambda x: x.label,
         out_name=lambda r: r["label"],
-        stored=lambda x: (x.label, x.note),
-        new=lambda r: (r["label"], r["note"]),
-        text=lambda v: v[0] + (f" ({v[1]})" if v[1] else ""),
+        # labels only: since #66 research never sees the owner's notes, so it can't change them (#67)
+        stored=lambda x: (x.label,),
+        new=lambda r: (r["label"],),
+        text=lambda v: v[0],
     )
     _compare_items(
         changes,
@@ -751,6 +801,8 @@ def _apply_deadline(p: Programme, change: Change, item_id: str) -> None:
     stored = p.deadlines[change.target]
     new_due = _LOCAL.validate_python(d["due_local"])
     reset = new_due != stored.due_local or d["tz"] != stored.tz or d["source_url"] != stored.source_url
+    # research saying a "time to verify" deadline's time is now known is a new claim, not a checked one
+    reset = reset or d["time_known"] != stored.time_known  # a researched "time known" claim, either way
     if d["label"] != stored.label:
         stored.label = d["label"]
     if new_due != stored.due_local:
@@ -775,7 +827,7 @@ def _apply_field(p: Programme, change: Change, prefix: str, item_id: str) -> Non
             ]
         else:
             stored = p.requirements[change.target]
-            stored.label, stored.note = item["label"], item["note"]
+            stored.label = item["label"]  # the owner's note stays (#67)
     elif prefix == "essay":
         if change.target is None:
             p.essays = [

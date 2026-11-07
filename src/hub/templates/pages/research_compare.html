@@ -4,6 +4,11 @@
 {% block before_title %}
 <nav class="breadcrumb" aria-label="Breadcrumb"><a href="/programmes">Programmes</a> <span aria-hidden="true">›</span> <a href="/programmes/{{ p.id }}">{{ p.short_name }}</a> <span aria-hidden="true">›</span> <span aria-current="page">Re-research</span></nav>
 {% endblock %}
+{% block main_attrs %}
+{%- if error %} data-focus="research-error" data-announce="{{ error }}"
+{%- elif notice %} data-focus="compare-title" data-announce="{{ notice }}"
+{%- else %} data-focus="compare-title" data-announce="Research finished. The comparison is below."
+{%- endif %}{% endblock %}
 {% block content %}
 {% if error %}<div class="form-error" role="alert" tabindex="-1" id="research-error"><p>{{ error }}</p></div>{% endif %}
 {% if notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
@@ -22,21 +27,21 @@
   <input type="hidden" name="proposal" value="{{ proposal_json }}">
   <input type="hidden" name="domains" value="{{ domains_text.split() | join(' ') }}">
   <input type="hidden" name="digest" value="{{ digest }}">
-  <h2 id="compare-title">Comparison with your stored data</h2>
+  <h2 id="compare-title" tabindex="-1">Comparison with your stored data</h2>
   <div class="table-scroll" tabindex="0" role="region" aria-labelledby="compare-title">
   <table class="table research-table compare-table">
-    <thead><tr><th scope="col">Field</th><th scope="col">Result</th><th scope="col">Stored</th><th scope="col">Research found</th><th scope="col">Source</th><th scope="col">Accept</th></tr></thead>
+    <thead><tr><th scope="col">Accept</th><th scope="col">Field</th><th scope="col">Result</th><th scope="col">Stored</th><th scope="col">Research found</th><th scope="col">Source</th></tr></thead>
     <tbody>
     {% for c in changes %}
       <tr data-change="{{ c.id }}" data-kind="{{ c.kind }}"{% if c.refused %} class="refused"{% endif %}>
+        <td>{% if c.acceptable %}<span class="field-check"><input type="checkbox" name="accept" value="{{ c.id }}" id="accept-{{ loop.index }}"><label for="accept-{{ loop.index }}">Accept<span class="visually-hidden"> {{ c.label }}</span></label></span>
+            {%- elif c.refused %}<span class="muted">Can't accept</span>{% else %}<span class="muted">Nothing to accept</span>{% endif %}</td>
         <th scope="row">{{ c.label }}</th>
         <td><span class="chip kind-{{ c.kind }}">{{ kinds[c.kind] }}</span></td>
         <td>{{ c.old if c.old is not none else "—" }}</td>
         <td>{% if c.new is not none %}{{ c.new }}{% elif c.kind == "kept" %}<span class="not-found">{{ no_official_source }}</span>{% else %}—{% endif %}</td>
         <td>{% if c.source_url %}<a class="source-link" href="{{ c.source_url }}" target="_blank" rel="noopener noreferrer">{{ c.source_url }}</a>{% else %}<span class="muted">No source</span>{% endif %}
             {%- if c.refused %}<div class="refusal">{{ c.refused }}</div>{% endif %}</td>
-        <td>{% if c.acceptable %}<span class="field-check"><input type="checkbox" name="accept" value="{{ c.id }}" id="accept-{{ loop.index }}"><label for="accept-{{ loop.index }}">Accept<span class="visually-hidden"> {{ c.label }}</span></label></span>
-            {%- elif c.refused %}<span class="muted">Can't accept</span>{% else %}<span class="muted">Nothing to accept</span>{% endif %}</td>
       </tr>
     {% endfor %}
     </tbody>

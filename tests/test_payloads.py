@@ -212,3 +212,96 @@ def test_a_deadline_in_a_dst_gap_is_moved_and_warned_about(config) -> None:
     assert payload["programmes"][0]["deadline_text"] == "14 March 2027, 3:30 am ET"
     warnings = deadline_warnings([princeton], FIXED_NOW)
     assert any("daylight-saving" in w and "Princeton MFin" in w for w in warnings), warnings
+
+
+def test_linked_courses_are_all_in_the_payload_and_the_manual_course_otherwise(config) -> None:
+    """Phase 2c: ``courses`` holds every linked course (``course_ids``); without links, the manual course."""
+    from datetime import UTC, datetime
+
+    from hub.ai.payloads import rec_email_payload
+    from hub.models.course import TranscriptCourse
+    from hub.store import Store
+
+    snapshot = Store.from_config(config).load_all()
+    prof = next(p for p in snapshot.professors if p.id == "jansen")
+    owner = snapshot.settings.owner_name
+    linked = [
+        TranscriptCourse(
+            id="c-one",
+            name="Investments",
+            code="FEB12006",
+            grade="9,0",
+            credits=6,
+            description="Portfolio choice.",
+        ),
+        TranscriptCourse(id="c-two", name="Derivatives and Risk", code="FEB12007", grade="8,0"),
+    ]
+    now = datetime(2026, 10, 30, 16, tzinfo=UTC)
+    with_links = prof.model_copy(update={"course_ids": ["c-one", "c-two", "deleted-course"]})
+    payload = rec_email_payload(
+        with_links, snapshot.programmes[:1], snapshot.biography, owner, now, config, linked
+    )
+    courses = payload["professor"]["courses"]
+    assert [(c["name"], c["code"], c["grade"], c["credits"]) for c in courses] == [
+        ("Investments", "FEB12006", "9,0", 6.0),
+        ("Derivatives and Risk", "FEB12007", "8,0", None),
+    ]
+    assert courses[0]["description"] == "Portfolio choice."
+    manual = rec_email_payload(prof, snapshot.programmes[:1], snapshot.biography, owner, now, config, linked)
+    assert [c["name"] for c in manual["professor"]["courses"]] == [prof.course]
+
+
+# ---- the manual description with linked courses (user decision, DECISIONS #66) --------------------------
+
+
+def _manual_case(config, course: str, linked: list) -> tuple[list[dict], list[str]]:  # noqa: ANN001
+    from datetime import UTC, datetime
+
+    from hub.ai.payloads import course_warnings, rec_email_payload
+    from hub.store import Store
+
+    snapshot = Store.from_config(config).load_all()
+    prof = next(p for p in snapshot.professors if p.id == "jansen")
+    prof = prof.model_copy(
+        update={
+            "course_ids": [c.id for c in linked],
+            "course": course,
+            "course_description": "Pasted syllabus.",
+        }
+    )
+    now = datetime(2026, 10, 30, 16, tzinfo=UTC)
+    payload = rec_email_payload(
+        prof, snapshot.programmes[:1], snapshot.biography, snapshot.settings.owner_name, now, config, linked
+    )
+    return payload["professor"]["courses"], course_warnings(prof, linked)
+
+
+def _course(cid: str, name: str, description: str = "", code: str | None = None):  # noqa: ANN202
+    from hub.models.course import TranscriptCourse
+
+    return TranscriptCourse(id=cid, name=name, code=code, description=description)
+
+
+def test_a_the_linked_course_with_the_manual_name_gets_the_description(config) -> None:
+    linked = [_course("ca", "Investments", "From the transcript."), _course("cb", "Derivatives", code="FEB7")]
+    for manual in ("investments", "Derivatives (FEB7)"):  # the name, or "name (code)" as Use fills it
+        courses, warnings = _manual_case(config, manual, linked)
+        target = "Investments" if manual == "investments" else "Derivatives"
+        assert next(c for c in courses if c["name"] == target)["description"] == "Pasted syllabus."
+        assert len(courses) == 2 and warnings == []
+    assert linked[0].description == "From the transcript."  # the stored course is never changed
+
+
+def test_b_else_the_only_linked_course_without_a_description_gets_it(config) -> None:
+    linked = [_course("ca", "Investments", "From the transcript."), _course("cb", "Derivatives")]
+    courses, warnings = _manual_case(config, "Something else", linked)
+    assert [c["description"] for c in courses] == ["From the transcript.", "Pasted syllabus."]
+    assert warnings == []
+
+
+def test_c_otherwise_the_manual_course_is_its_own_entry_with_a_warning(config) -> None:
+    linked = [_course("ca", "Investments"), _course("cb", "Derivatives")]  # two without a description
+    courses, warnings = _manual_case(config, "Something else", linked)
+    assert [c["name"] for c in courses] == ["Investments", "Derivatives", "Something else"]
+    assert courses[-1]["description"] == "Pasted syllabus."
+    assert warnings == ["Check which course this description belongs to."]

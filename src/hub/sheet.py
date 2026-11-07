@@ -6,11 +6,13 @@ The sheet never holds a professor's email: only the detail panel shows it.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
 from enum import StrEnum
 
 from hub.config import Config
+from hub.models.course import TranscriptCourse
 from hub.models.professor import LetterStatus, Professor
 from hub.models.programme import Programme
 from hub.rules import letters
@@ -94,6 +96,12 @@ class Row:
     action: letters.NextAction | None
     last_contact: date | None
     bucket: letters.Bucket | None
+    courses: tuple[TranscriptCourse, ...] = ()  # linked courses (courses.yaml), shown in the Course column
+
+    @property
+    def course_text(self) -> str:
+        """The Course column: the linked courses' names, else the manual course (DECISIONS #44)."""
+        return ", ".join(c.name for c in self.courses) if self.courses else self.professor.course
 
 
 @dataclass(frozen=True)
@@ -150,19 +158,21 @@ def row(
     today: date,
     now_utc: datetime,
     config: Config,
+    courses: Mapping[str, TranscriptCourse] | None = None,
 ) -> Row:
     by_id = {c.programme.id: c.programme for c in cols}
-    action = letters.next_action(professor, by_id, today, now_utc, config)
+    linked = tuple(courses[i] for i in professor.course_ids if courses and i in courses)
+    action = letters.next_action(professor, by_id, today, now_utc, config, linked)
     cells = tuple(
         Cell(c.programme, x.status.value if (x := professor.letters.get(c.programme.id)) else NO_LETTER)
         for c in cols
     )
-    return Row(professor, cells, action, last_contact(professor), letters.bucket(professor, action))
+    return Row(professor, cells, action, last_contact(professor), letters.bucket(professor, action), linked)
 
 
 def _matches(r: Row, q: str) -> bool:
     needle = q.casefold()
-    return needle in r.professor.name.casefold() or needle in r.professor.course.casefold()
+    return needle in r.professor.name.casefold() or needle in r.course_text.casefold()
 
 
 def _sort_key(sort: Sort, today: date):  # noqa: ANN202 (a key function)
@@ -188,10 +198,11 @@ def build(
     q: str = "",
     filter: Filter = Filter.ALL,
     sort: Sort = Sort.NEXT_ACTION,
+    courses: Mapping[str, TranscriptCourse] | None = None,
 ) -> Sheet:
     """The sheet for a search, filter and sort. ``today`` is the display-zone date."""
     cols = columns(programmes, professors, now_utc, config)
-    rows = [row(p, cols, today, now_utc, config) for p in professors]
+    rows = [row(p, cols, today, now_utc, config, courses) for p in professors]
     q = q.strip()
     shown = [
         r

@@ -1,0 +1,15 @@
+{#- Add professor: courses whose lecturers share the typed surname (US-21; docs/03 §4.4). "Use" fills the form in
+    the browser (app.js) and links the course; nothing is saved until Save. data-title: the title the name gives. -#}
+<div class="suggestions-inner" data-title="{{ parsed.title if parsed else '' }}">
+{% if suggestions %}
+  <p class="sub">Courses taught by {{ parsed.surname }}:</p>
+  <ul class="plain">
+  {% for c, written in suggestions %}
+    <li><button class="button button-secondary" type="button" data-use-course
+        data-course-id="{{ c.id }}" data-course-label="{{ c.name }}{% if c.code %} ({{ c.code }}){% endif %}"
+        data-course-description="{{ c.description }}" data-course-grade="{{ c.grade or '' }}" data-course-term="{{ c.term or '' }}">Use {{ c.name }}</button>
+      <span class="sub">{{ c.code or "" }}{% if c.grade %} · grade {{ c.grade }}{% endif %}{% if c.term %} · {{ c.term }}{% endif %} · {{ written }}</span></li>
+  {% endfor %}
+  </ul>
+{% endif %}
+</div>

@@ -1,27 +1,32 @@
 {% extends "base.html" %}
 {% from "_time.html" import deadline, countdown_chip with context %}
 {% from "_badge.html" import data_badge, status_chip %}
+{% from "_working.html" import working_notice %}
 {% block before_title %}
 <nav class="breadcrumb" aria-label="Breadcrumb"><a href="/programmes">Programmes</a> <span aria-hidden="true">›</span> <span aria-current="page">{{ p.short_name }}</span></nav>
 {% endblock %}
-{% block actions %}
-<a class="button button-secondary" href="/programmes/{{ p.id }}/edit">Edit</a>
-<form method="post" action="/programmes/{{ p.id }}/research" class="inline-form" id="reresearch-form" data-working>
-  <button class="button button-secondary" type="submit" data-busy-text="Researching…">Re-research</button>
-  <span class="working-note" data-working-text="Researching the official pages. This can take a few minutes; nothing is saved until you accept changes."></span>
-</form>
-{% if summary.badge.unverified %}
-<form method="post" action="/programmes/{{ p.id }}/verify" class="inline-form">
-  <button class="button button-primary" type="submit">Mark verified</button>
-</form>
-{% endif %}
-{% endblock %}
-{% block content %}
-{% if research_error %}<div class="form-error" role="alert" tabindex="-1" id="research-error"><p>{{ research_error }}</p></div>{% endif %}
+{% block main_attrs %}{% if research_error %} data-focus="research-error" data-announce="Research failed: {{ research_error }}"{% endif %}{% endblock %}
+{% block title_area %}
+<h1>{{ page.title }}</h1>
 <p class="subtitle">
   {%- if p.unit %}{{ p.unit }} · {% endif %}{{ p.school }}
   {%- if p.portal_url %} · <a href="{{ p.portal_url }}" target="_blank" rel="noopener noreferrer">Application portal</a>{% endif -%}
 </p>
+<div class="actions page-actions">
+  <a class="button button-secondary" href="/programmes/{{ p.id }}/edit" data-writes>Edit</a>
+  <form method="post" action="/programmes/{{ p.id }}/research" hx-post="/programmes/{{ p.id }}/research" hx-sync="this:drop" class="inline-form" id="reresearch-form" data-working data-notice="reresearch-notice">
+    <button class="button button-secondary" type="submit" data-busy-text="Researching…">Re-research</button>
+  </form>
+  {% if summary.badge.unverified %}
+  <form method="post" action="/programmes/{{ p.id }}/verify" class="inline-form" id="verify-form">
+    <button class="button button-primary" type="submit">Mark verified</button>
+  </form>
+  {% endif %}
+</div>
+{{ working_notice("reresearch-notice", "Nothing is saved until you accept changes.") }}
+{% endblock %}
+{% block content %}
+{% if research_error %}<div class="form-error" role="alert" tabindex="-1" id="research-error"><p>{{ research_error }}</p></div>{% endif %}
 <div class="chips">
   {{ countdown_chip(summary.countdown) }}
   {{ deadline(summary.deadline, original=true) }}

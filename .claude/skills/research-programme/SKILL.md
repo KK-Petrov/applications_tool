@@ -34,7 +34,8 @@ value; `note` only for "No official source found" or a short qualifier). List it
 - `name` (full official name), `short_name` (e.g. "Berkeley MFE"), `school` (the university), `unit` (the
   school or centre that runs it).
 - `aliases`: proper nouns someone would use for this programme or school in an essay (e.g. "Haas",
-  "Berkeley"), as written on the official page.
+  "Berkeley"), as written on the official page. Not degree abbreviations or common words ("MFE", "MSc",
+  "Finance"): they would flag every essay that mentions such a degree.
 - `portal_url`: the application page or portal.
 - `deadlines`: each published application deadline for the **upcoming** intake (after `today`):
   `label` as the page names it ("Round 1"), `due_local` = `YYYY-MM-DDTHH:MM` in the **school's** local

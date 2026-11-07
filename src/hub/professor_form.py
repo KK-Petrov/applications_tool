@@ -11,14 +11,18 @@ import csv
 import io
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import TypeAdapter, ValidationError
 
 from hub.models.common import Email
 from hub.models.professor import COURSE_DESCRIPTION_MAX_CHARS, Letter, LetterStatus, Professor, Tone
 from hub.programme_form import slugify, unique_slug
+from hub.rules import names
 from hub.rules.letters import ASKABLE
+
+if TYPE_CHECKING:
+    from hub.config import NamesConfig
 
 UNIVERSITIES = ("RSM", "UVA McIntire")  # the form's choices (docs/01 §4); anything else is "Other"
 OTHER = "Other"
@@ -45,6 +49,7 @@ FIELD_LABELS = {
     "interaction": "Specific interaction",
     "tone": "Tone",
     "file": "File",
+    "course_ids": "Linked courses",
 }
 CSV_REQUIRED = ("name", "email", "university", "course", "course_description")
 CSV_OPTIONAL = ("grade", "term", "interaction")
@@ -63,6 +68,8 @@ class ProfessorForm:
     values: dict[str, str]
     programmes: list[str]
     letter_dates: dict[str, dict[str, str]] = field(default_factory=dict)  # programme → field → YYYY-MM-DD
+    course_ids: list[str] = field(default_factory=list)  # linked courses (courses.yaml), Phase 2c
+    course_ids_shown: list[str] = field(default_factory=list)  # links the form showed (and could untick)
     errors: list[tuple[str, str]] = field(default_factory=list)  # (field, message)
 
     def has_error(self, name: str) -> bool:
@@ -84,7 +91,7 @@ def form_from_professor(p: Professor) -> ProfessorForm:
     values = {
         "name": p.name,
         "title": p.title,
-        "email": p.email,
+        "email": p.email or "",
         "university": p.university if known else OTHER,
         "university_other": "" if known else p.university,
         "course": p.course,
@@ -98,7 +105,7 @@ def form_from_professor(p: Professor) -> ProfessorForm:
         pid: {f: (d.isoformat() if (d := getattr(x, f)) else "") for f in LETTER_DATES}
         for pid, x in p.letters.items()
     }
-    return ProfessorForm(values, list(p.letters), dates)
+    return ProfessorForm(values, list(p.letters), dates, list(p.course_ids))
 
 
 def form_from_request(form: Any) -> ProfessorForm:
@@ -108,6 +115,8 @@ def form_from_request(form: Any) -> ProfessorForm:
         raw = str(form.get(name, "") or "")
         values[name] = raw.strip() if name in SINGLE_LINE else _lf(raw)
     programmes = [str(v) for v in form.getlist("programmes")]
+    course_ids = list(dict.fromkeys(str(v) for v in form.getlist("course_ids")))
+    shown = list(dict.fromkeys(str(v) for v in form.getlist("course_ids_shown")))
     dates: dict[str, dict[str, str]] = {}
     for key in form:
         if key.startswith("letter-"):
@@ -115,21 +124,26 @@ def form_from_request(form: Any) -> ProfessorForm:
                 if key.endswith("-" + f):
                     pid = key.removeprefix("letter-").removesuffix("-" + f)
                     dates.setdefault(pid, {})[f] = str(form.get(key, "")).strip()
-    return ProfessorForm(values, programmes, dates)
+    return ProfessorForm(values, programmes, dates, course_ids, shown)
 
 
 # ---- validation ----------------------------------------------------------------------------------
 
 
-def check_fields(values: dict[str, str]) -> tuple[dict[str, Any], list[tuple[str, str]]]:
-    """Validate the professor fields shared by the form and the CSV import; returns clean values."""
+def check_fields(
+    values: dict[str, str], names_cfg: NamesConfig | None = None
+) -> tuple[dict[str, Any], list[tuple[str, str]]]:
+    """Validate the professor fields shared by the form and the CSV import; returns clean values.
+
+    Email is optional (Phase 2c, DECISIONS #44: a professor created from a transcript has none yet; the sheet
+    shows "Email missing"). A blank title is taken from a title token in the name ("Dr. J. de Vries" →
+    "Dr."), else "Professor" (docs/02 §9).
+    """
     errors: list[tuple[str, str]] = []
     if not values.get("name", "").strip():
         errors.append(("name", "is required"))
     email = values.get("email", "").strip()
-    if not email:
-        errors.append(("email", "is required"))
-    else:
+    if email:
         try:
             _EMAIL.validate_python(email)
         except ValidationError:
@@ -154,8 +168,8 @@ def check_fields(values: dict[str, str]) -> tuple[dict[str, Any], list[tuple[str
         errors.append(("tone", "must be Formal or Slightly warmer"))
     clean = {
         "name": values.get("name", "").strip(),
-        "title": values.get("title", "").strip() or DEFAULT_TITLE,
-        "email": email,
+        "title": values.get("title", "").strip() or _title_from(values.get("name", ""), names_cfg),
+        "email": email or None,
         "university": university,
         "course": values.get("course", "").strip(),
         "course_description": description,
@@ -168,6 +182,11 @@ def check_fields(values: dict[str, str]) -> tuple[dict[str, Any], list[tuple[str
 
 
 MULTI_LINE = ("course_description", "interaction")
+
+
+def _title_from(name: str, names_cfg: NamesConfig | None) -> str:
+    """The title a name's title token gives ("Prof. dr. A. van den Berg" → "Professor"), else the default."""
+    return names.parse(name, names_cfg).title if names_cfg and name.strip() else DEFAULT_TITLE
 
 
 def removable(letter: Letter) -> bool:
@@ -212,6 +231,8 @@ def build_professor(
     existing: Professor | None,
     taken: set[str],
     programme_ids: dict[str, str],
+    names_cfg: NamesConfig | None = None,
+    known_courses: set[str] | None = None,
 ) -> Professor | None:
     """The professor to save, or ``None`` with ``state.errors`` filled. ``programme_ids``: id → short name.
 
@@ -220,7 +241,10 @@ def build_professor(
     status is never removed here (the form shows it ticked and disabled). Only fields whose value
     changed are assigned, so an unchanged save writes nothing (DECISIONS #16c, #29b).
     """
-    clean, errors = check_fields(state.values)
+    clean, errors = check_fields(state.values, names_cfg)
+    linked = [c for c in state.course_ids if known_courses is None or c in known_courses]
+    if len(linked) != len(state.course_ids):
+        errors.append(("course_ids", "lists a course that is no longer in courses.yaml"))
     ticked = [pid for pid in dict.fromkeys(state.programmes) if pid in programme_ids]
     letters = {k: v.model_copy(deep=True) for k, v in (existing.letters if existing else {}).items()}
     for pid in ticked:
@@ -252,8 +276,16 @@ def build_professor(
     if errors:
         return None
     if existing is None:
-        return Professor(id=new_id(clean["name"], taken), letters=letters, **clean)
+        extra = {"course_ids": linked} if linked else {}
+        return Professor(id=new_id(clean["name"], taken), letters=letters, **clean, **extra)
     professor = existing.model_copy(deep=True)
+    # A link the form didn't show (its course is missing from, or unreadable in, courses.yaml) can't have
+    # been unticked: keep it. Only shown links can be removed (an unchanged Edit wiped them; review).
+    shown = set(state.course_ids_shown)
+    kept = [i for i in existing.course_ids if i not in shown or i in linked]
+    merged = kept + [i for i in linked if i not in kept]
+    if professor.course_ids != merged:
+        professor.course_ids = merged
     for name, value in clean.items():
         if not _equivalent(name, getattr(professor, name), value):
             setattr(professor, name, value)
@@ -312,7 +344,7 @@ def parse_csv(text: str, existing: list[Professor], taken: set[str]) -> CsvResul
             [], f"The file is missing the column{'s' if len(missing) > 1 else ''}: {', '.join(missing)}."
         )
     reader.fieldnames = header
-    seen = {p.email.casefold() for p in existing}
+    seen = {p.email.casefold() for p in existing if p.email}  # an empty email is never a duplicate
     ids = set(taken)
     rows: list[CsvRow] = []
     for number, record in enumerate(reader, start=2):
@@ -329,7 +361,8 @@ def parse_csv(text: str, existing: list[Professor], taken: set[str]) -> CsvResul
         if texts:
             rows.append(CsvRow(number, name, None, texts))
             continue
-        seen.add(clean["email"].casefold())
+        if clean["email"]:
+            seen.add(clean["email"].casefold())
         professor = Professor(id=new_id(name, ids), letters={}, **clean)  # same shape as a form save
         rows.append(CsvRow(number, name, professor, []))
     return CsvResult(rows)

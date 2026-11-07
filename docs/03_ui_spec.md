@@ -79,7 +79,7 @@ App binds to `127.0.0.1:8765` only.
   Documents · Status · Data badge (with reason). Horizontal scroll box on small screens.
 - Upcoming reminders: the next 8 reminders (date, text, category chip) from the reminder engine.
 ### 4.2 Programme page — main message: "everything this application needs, and where it stands"
-Breadcrumb; title; subtitle (unit · length · how to apply); chips: deadline with days, converted time,
+Breadcrumb; title; subtitle (unit · length · how to apply) directly under the title; the actions in their own row below it (DECISIONS #63); chips: deadline with days, converted time,
 data badge, status. Buttons: Edit, Mark verified, Re-research (2c). Source box (dashed): source links with checked date and
 the verification note. Cards: Requirements (checkboxes, count), Application steps (numbered, ticks),
 Documents and score reports (table: item, how sent, status menu, updated), Interviews and assessments
@@ -108,7 +108,9 @@ so that Enter never starts a generation; DECISIONS #51). Title (default "Profess
 Phase 2c (DECISIONS #44): Title (default "Professor", pre-filled from a title in the name); Email optional;
 linked courses (chips, removable). Typing a name shows suggested courses whose lecturers match the surname;
 choosing one links it and fills course, description, grade and term; everything stays editable and
-nothing auto-saves.
+nothing auto-saves. Suggestions need JS (HTMX as you type; "Use …" fills the fields in the browser); without JS
+the fields are typed by hand. Linked courses are ticked checkboxes (untick to unlink). A blank Title is taken from a title
+token in the name, else Professor; with JS an untouched Title follows the name (DECISIONS #64).
 ### 4.5 Essays and CV — left list grouped by programme then "CV"; centre: prompt, version chip, live word
 count "n / limit words" (red when over), wrong-school hits listed under the editor with line numbers and an
 "intended" toggle, textarea, buttons Evaluate (4b), Save as new version, Discuss in Claude Code; right panel:
@@ -122,7 +124,7 @@ Phase 5: this month's AI calls and estimated cost (app calls), linking to the AI
 
 ### 4.8 Courses and course import (Phase 2c) — reached from Recommenders ("Import courses") and Add professor
 - Courses list: name, code, institution, grade, credits, term, lecturers; Import button.
-- Import: paste text or choose a .docx / PDF file. A scanned PDF is refused: "This PDF has no text layer; OCR is not supported. Export it as text or Word, or paste the text." Preview table with every field of every row; a grade not found verbatim in the document is flagged and blocks that row; Accept per row and Accept all; nothing is written before. Identifiers never appear in the preview.
+- Import: paste text or choose a .docx / PDF file. A scanned PDF is refused: "This PDF has no text layer; OCR is not supported. Export it as text or Word, or paste the text." Preview table with every field of every row; a grade not found verbatim in the document is flagged and blocks that row; Accept per row and Accept all; nothing is written before. Identifiers never appear in the preview. Every field is editable; **Check again** re-runs the checks after a correction; a row already stored is "Already imported". With JS the upload runs through HTMX with the shared busy state (DECISIONS #63); the form carries only the identifier-stripped text. "Create professors from this document" appears once a row is saved. The Recommenders toolbar has Courses and Import courses.
 - Create professors from this document: one line per lecturer (name as written, their courses with the owner's grade, "listed first" marker), sorted by best grade, nothing ticked; a match with an existing professor offers "Link to {name}" instead of creating; Create ticked professors writes them in one batch.
 
 ### 4.9 AI usage (DECISIONS #60) — main message: "what each AI call was for, what it cost, and whether it worked"
@@ -167,7 +169,7 @@ Phase 5: this month's AI calls and estimated cost (app calls), linking to the AI
     this log yet. Run `uv run hub import-usage` to add them."
 
 ## 5. States
-Every page has: loading (HTMX indicator on the triggering element), empty ("No professors yet — add one or
+Every page has: loading (HTMX indicator on the triggering element; a long AI call such as research shows the shared busy state of DECISIONS #63: spinner and busy styling on its aria-disabled button, every other write control on the page aria-disabled and inert, a notice below the actions with an elapsed timer, the limit and what leaving the page does, only the start announced, focus on the result or the error when it ends), empty ("No professors yet — add one or
 import a CSV"), error (banner naming the file and field for `DataError`; inline message for failed actions,
 e.g. "Claude Code did not respond within 120 s. Nothing was saved."). No raw IDs, "None", "NaN" or stack
 traces are ever shown.

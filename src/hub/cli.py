@@ -73,7 +73,13 @@ def email_payload(
         typer.echo("No programme to include: give --programme, or set a letter to To ask first.", err=True)
         raise typer.Exit(1)
     payload = rec_email_payload(
-        professor, chosen, snapshot.biography, snapshot.settings.owner_name, datetime.now(UTC), cfg
+        professor,
+        chosen,
+        snapshot.biography,
+        snapshot.settings.owner_name,
+        datetime.now(UTC),
+        cfg,
+        courses=snapshot.courses,
     )
     typer.echo(json.dumps(payload, indent=2, ensure_ascii=False))
 

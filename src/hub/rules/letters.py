@@ -6,12 +6,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from enum import StrEnum
 
 from hub.config import Config
+from hub.models.course import TranscriptCourse
 from hub.models.professor import Letter, LetterStatus, Professor
 from hub.models.programme import Programme
 from hub.rules.programmes import primary_deadline
@@ -129,14 +130,18 @@ def next_action(
     today: date,
     now_utc: datetime,
     config: Config,
+    linked: Sequence[TranscriptCourse] = (),
 ) -> NextAction | None:
     """Evaluate every letter, take the highest priority; ties go to the earliest date (docs/02 §4).
 
     ``today`` is the display-zone date. Letters to a programme that is not loaded (deleted or
-    unreadable file) are ignored: their dates cannot be computed.
+    unreadable file) are ignored: their dates cannot be computed. ``linked`` are the professor's courses
+    from courses.yaml: one with a name and a description counts as course details (priority 1, Phase 2c).
     """
     known = {pid: letter for pid, letter in professor.letters.items() if pid in programmes}
-    if known and not (professor.course.strip() and professor.course_description.strip()):
+    has_linked = any(c.name.strip() and c.description.strip() for c in linked)
+    manual = professor.course.strip() and professor.course_description.strip()
+    if known and not (has_linked or manual):
         return NextAction(1, "Add course details", False, None, None)
     actions = [
         a

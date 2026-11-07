@@ -538,3 +538,9 @@ def test_reresearch_with_official_domains_compares_at_once(
         {"programme_id": "princeton-mfin"},
         "app",
     )
+
+
+def test_the_portal_link_itself_must_be_official() -> None:
+    """The portal URL is a link the owner will click, so its own host is checked too (ai-output review)."""
+    out = research_output(portal_url=sourced("https://apply-example-msqf.com/start", EXAMPLE_SRC))
+    assert "Portal · URL: apply-example-msqf.com is not an official source" in _check(out).problems

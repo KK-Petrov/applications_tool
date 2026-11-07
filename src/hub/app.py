@@ -19,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from hub.config import Config, load_config
+from hub.routes.courses import build_router as courses_router
 from hub.routes.programmes import build_router as programmes_router
 from hub.routes.recommenders import build_router as recommenders_router
 from hub.routes.research import build_router as research_router
@@ -92,6 +93,7 @@ def create_app(config: Config | None = None, clock: Callable[[], datetime] | Non
     # research first: POST /programmes/research must not reach POST /programmes/{pid}
     app.include_router(research_router(web))
     app.include_router(programmes_router(web))
+    app.include_router(courses_router(web))  # before recommenders: /recommenders/course-suggestions
     app.include_router(recommenders_router(web))
     app.include_router(usage_router(web))
 

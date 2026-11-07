@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{#- Courses list (docs/03 §4.8): minimal; the biography bank shows courses in full (Phase 4a). -#}
+{% block actions %}<a class="button button-primary" href="/courses/import">Import courses</a>{% endblock %}
+{% block content %}
+<section class="card" aria-labelledby="courses-title">
+  <h2 id="courses-title">Imported courses</h2>
+  {% if courses %}
+  <div class="table-scroll" tabindex="0" role="region" aria-labelledby="courses-title">
+  <table class="table">
+    <thead><tr><th scope="col">Course</th><th scope="col">Code</th><th scope="col">Institution</th><th scope="col">Grade</th><th scope="col">Credits</th><th scope="col">Term</th><th scope="col">Lecturers</th></tr></thead>
+    <tbody>
+    {% for c in courses %}
+      <tr><th scope="row">{{ c.name }}</th><td class="mono">{{ c.code or "" }}</td><td>{{ c.institution or "" }}</td><td class="mono">{{ c.grade or "" }}</td><td class="mono">{{ "%g" | format(c.credits) if c.credits is not none else "" }}</td><td>{{ c.term or "" }}</td><td>{{ c.lecturers | join("; ") }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="empty">No courses yet. Import them from your transcript.</p>
+  {% endif %}
+</section>
+{% endblock %}

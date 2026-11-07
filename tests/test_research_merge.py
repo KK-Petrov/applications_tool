@@ -370,3 +370,60 @@ def test_us18_confirmed_domains_are_a_change_like_any_other(
     stored = YAML(typ="safe").load(path.read_text(encoding="utf-8"))
     assert stored["official_domains"] == ["princeton.edu"]
     assert stored["letters_required"] == 3 and stored["verification_note"] == "Last cycle's date"
+
+
+def test_us18_research_saying_the_time_is_now_known_resets_that_deadline(config) -> None:
+    """A deadline verified for its date only ("time to verify") must not stay verified when research says the
+    time is now known: the model's claim would be shown as checked (rule 11; data-integrity review)."""
+    store = Store.from_config(config)
+    p = _programme(config)
+    p.deadlines[0].time_known = False
+    p.verification, p.verification_note, p.verified_on = Verification.VERIFIED, None, TODAY
+    p.deadlines[0].verification = Verification.VERIFIED
+    store.save_programme(p)
+    current = _programme(config)
+    out = mirror_output(current, BCF)
+    out["deadlines"][0]["time_known"] = True
+    updated = research.apply(current, out, DOMAINS, {"deadline:main"}, TODAY)
+    assert updated is not None and updated.deadlines[0].time_known is True
+    assert updated.deadlines[0].verification is Verification.UNVERIFIED
+
+
+def test_us18_a_researched_portal_link_must_be_official(config) -> None:
+    out = mirror_output(_programme(config), BCF)
+    out["portal_url"] = sourced("https://apply-example-msqf.com/start", BCF)
+    change = _by_id(research.compare(_programme(config), out, DOMAINS, SHARED))["portal_url"]
+    assert change.refused == "Portal · URL: apply-example-msqf.com is not an official source"
+
+
+def test_us18_owner_requirement_notes_are_never_changed_by_research(config) -> None:
+    """Since #66 research never sees requirement notes, so it can't propose them: compare labels only."""
+    store = Store.from_config(config)
+    p = _programme(config)
+    p.requirements[0].note = "My own reminder"
+    store.save_programme(p)
+    current = _programme(config)
+    out = mirror_output(current, BCF)
+    out["requirements"][0]["note"] = None  # what the model returns: it never saw the note
+    key = f"requirement:{current.requirements[0].id}"
+    assert _by_id(research.compare(current, out, DOMAINS, SHARED))[key].kind == "unchanged"
+    out["requirements"][0]["label"] = "Online application (new wording)"
+    change = _by_id(research.compare(current, out, DOMAINS, SHARED))[key]
+    updated = research.apply(current, out, DOMAINS, {change.id}, TODAY)
+    assert updated is not None and updated.requirements[0].note == "My own reminder"
+
+
+def test_us18_research_saying_the_time_is_no_longer_known_resets_that_deadline(config) -> None:
+    _verified(config)
+    current = _programme(config)
+    out = mirror_output(current, BCF)
+    out["deadlines"][0]["time_known"] = False
+    updated = research.apply(current, out, DOMAINS, {"deadline:main"}, TODAY)
+    assert updated is not None and updated.deadlines[0].verification is Verification.UNVERIFIED
+
+
+def test_us18_saved_files_have_no_yaml_anchors(client: FormClient, data_dir: Path, compared: str) -> None:
+    fields = [(k, v) for k, v in form_fields(compared, "research-apply") if k != "accept"]
+    client.post(f"/programmes/{PID}/research/apply", data=[*fields, ("accept", "letters_required")])
+    text = _path(data_dir).read_text(encoding="utf-8")
+    assert "&id" not in text and "*id" not in text

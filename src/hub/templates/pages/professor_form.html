@@ -4,7 +4,7 @@
 {% from "_badge.html" import data_badge with context %}
 {% block content %}
 {% set f = state.values %}
-<form id="professor-form" class="programme-form" method="post" action="{{ action }}">
+<form id="professor-form" class="programme-form" method="post" action="{{ action }}"{% if existing %} data-existing-professor{% endif %}>
   {% if state.errors %}
   <div class="form-error" role="alert" tabindex="-1" id="form-errors" autofocus>
     <h2>Nothing was saved. Please fix:</h2>
@@ -16,18 +16,19 @@
     <div class="form-grid">
       <div class="field">
         <label for="f-name">Name</label>
-        <input id="f-name" name="name" type="text" value="{{ f.name }}" required aria-describedby="f-name-hint"{% if state.has_error("name") %} aria-invalid="true"{% endif %}>
-        <span class="hint" id="f-name-hint">As you would write it, e.g. Prof. Dr. Eva Jansen</span>
+        <input id="f-name" name="name" type="text" value="{{ f.name }}" required aria-describedby="f-name-hint"{% if state.has_error("name") %} aria-invalid="true"{% endif %}
+               hx-get="/recommenders/course-suggestions" hx-trigger="input changed delay:300ms" hx-target="#course-suggestions" hx-swap="innerHTML">
+        <span class="hint" id="f-name-hint">As you would write it, e.g. Prof. Dr. Eva Jansen. Courses you imported from that lecturer are suggested below.</span>
       </div>
       <div class="field">
         <label for="f-title">Title</label>
         <input id="f-title" name="title" type="text" value="{{ f.title }}" aria-describedby="f-title-hint"{% if state.has_error("title") %} aria-invalid="true"{% endif %}>
-        <span class="hint" id="f-title-hint">Used in “Dear {title} {surname},”, e.g. Professor or Dr.</span>
+        <span class="hint" id="f-title-hint">Used in “Dear {title} {surname},”, e.g. Professor or Dr. Taken from the name when it has one (Dr., Prof.).</span>
       </div>
       <div class="field">
         <label for="f-email">Email</label>
-        <input id="f-email" name="email" type="email" value="{{ f.email }}" required aria-describedby="f-email-hint"{% if state.has_error("email") %} aria-invalid="true"{% endif %}>
-        <span class="hint" id="f-email-hint">Used to address the email; not shown in the sheet</span>
+        <input id="f-email" name="email" type="email" value="{{ f.email }}" aria-describedby="f-email-hint"{% if state.has_error("email") %} aria-invalid="true"{% endif %}>
+        <span class="hint" id="f-email-hint">Optional. Used to address the email; not shown in the sheet</span>
       </div>
       <div class="field">
         <label for="f-university">University</label>
@@ -41,6 +42,15 @@
         <input id="f-university_other" name="university_other" type="text" value="{{ f.university_other }}" aria-describedby="f-university_other-hint"{% if state.has_error("university_other") %} aria-invalid="true"{% endif %}>
         <span class="hint" id="f-university_other-hint">Only when University is Other</span>
       </div>
+      <div class="field field-wide suggestions" id="course-suggestions"></div>
+      <fieldset class="field-wide linked-courses" id="linked-courses"{% if not linked_courses %} hidden{% endif %}>
+        <legend>Linked courses</legend>
+        <p class="hint">Imported courses used for the request email. Untick to unlink.</p>
+        {% for c in linked_courses %}
+        <input type="hidden" name="course_ids_shown" value="{{ c.id }}">
+        <div class="field-check"><input type="checkbox" id="course-{{ c.id }}" name="course_ids" value="{{ c.id }}"{% if c.id in state.course_ids %} checked{% endif %}><label for="course-{{ c.id }}">{{ c.name }}{% if c.code %} ({{ c.code }}){% endif %}{% if c.grade %} · grade {{ c.grade }}{% endif %}</label></div>
+        {% endfor %}
+      </fieldset>
       <div class="field field-wide">
         <label for="f-course">Course</label>
         <input id="f-course" name="course" type="text" value="{{ f.course }}" aria-describedby="f-course-hint">

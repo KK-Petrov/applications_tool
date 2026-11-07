@@ -53,6 +53,8 @@ def build_router(web: Web) -> APIRouter:
     shared = config.research.official_shared_domains
     web.templates.env.globals["no_official_source"] = research.NO_OFFICIAL_SOURCE
     web.templates.env.globals["config_shared"] = shared
+    # "Stops after N minutes" in the busy notice: the research timeout, rounded up to whole minutes
+    web.templates.env.globals["research_limit_minutes"] = -(-config.claude.research_timeout_s // 60)
 
     # ---- helpers ---------------------------------------------------------------------------------
 

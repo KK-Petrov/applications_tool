@@ -98,8 +98,8 @@ surname: Mulder
 title: Professor                  # used in "Dear {title} {surname},"; default "Professor", e.g. "Dr." (2b; DECISIONS #48)
 email: m.mulder@example.org       # optional (null → "Email missing"); never shown in the sheet
 university: RSM                   # free text; the form offers RSM / UVA McIntire / Other
-course_ids: []                    # links to courses.yaml (§10); with links, course and
-                                  # course_description below are not used (they stay for unlinked professors)
+course_ids: []                    # links to courses.yaml (§10); with links, `course` is not sent; a manual
+                                  # course_description fills the linked course it belongs to (docs/04 §2.1, #66)
 course: "[course name and code]"
 course_description: |             # verbatim paste, any length up to 20,000 characters, never trimmed
   ...
@@ -184,7 +184,7 @@ courses:
                                         # later without checking
 ```
 - Courses are written only when the user accepts rows in the import preview (per row or all).
-- `sources/<name>.txt` holds the **identifier-stripped** text of an imported document (docs/02 §10), with a
+- `sources/<name>.txt` (`<original file stem>-<YYYY-MM-DD>.txt`, or `pasted-text-…`; never overwritten) holds the **identifier-stripped** text of an imported document (docs/02 §10), with a
   header comment giving the original file name and its sha256. The original file (.docx, .pdf) is never stored,
   and no file under data_dir contains a student number, date of birth or national ID number.
 - Professors link to courses through `course_ids` (§4); a course can be linked to several professors.

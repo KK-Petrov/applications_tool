@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{#- Create professors from this document (US-20; docs/03 §4.8): every lecturer once, by best grade; nothing is
+    ticked; a match with an existing professor is offered for linking instead of creating. -#}
+{% block main_attrs %}{% if error %} data-focus="professors-error" data-announce="{{ error }}"{% endif %}{% endblock %}
+{% block before_title %}
+<nav class="breadcrumb" aria-label="Breadcrumb"><a href="/recommenders">Recommenders</a> <span aria-hidden="true">›</span> <a href="/courses">Courses</a> <span aria-hidden="true">›</span> <span aria-current="page">Create professors</span></nav>
+{% endblock %}
+{% block content %}
+{% if error %}<div class="form-error" role="alert" tabindex="-1" id="professors-error"><p>{{ error }}</p></div>{% endif %}
+{% if groups %}
+<form method="post" action="/courses/import/professors" id="professors-preview" class="card">
+  <input type="hidden" name="source" value="{{ source }}">
+  <input type="hidden" name="step" value="create">
+  <p>Lecturers of the courses you accepted, best grade first. Tick the ones to create; a lecturer who looks like a professor you already have is offered for linking instead. New professors have no email yet (the sheet shows "Email missing").</p>
+  {% for g in groups %}
+  <fieldset class="lecturer" data-lecturer="{{ g.key }}">
+    <legend>{{ g.written }}</legend>
+    {% if g.also_written %}<p class="sub">Also written as: {{ g.also_written | join("; ") }}</p>{% endif %}
+    <ul class="plain lecturer-courses">
+      {% for c, first in g.courses %}<li>{{ c.name }}{% if c.code %} <span class="mono">({{ c.code }})</span>{% endif %}{% if c.grade %} · grade <span class="mono">{{ c.grade }}</span>{% endif %}{% if first %} · <span class="chip chip-info">listed first</span>{% endif %}</li>{% endfor %}
+    </ul>
+    {% if g.matches %}
+      {% for p, kind in g.matches %}
+        {% if g.course_ids | reject("in", p.course_ids) | list | length == 0 %}<p class="sub">Linked to {{ p.name }}.</p>
+        {% else %}
+        <div class="field-check"><input type="checkbox" id="pick-{{ g.key }}-{{ p.id }}" name="pick" value="link:{{ g.key }}:{{ p.id }}"><label for="pick-{{ g.key }}-{{ p.id }}">Link to {{ p.name }}{% if kind == "surname" %} (same surname only; make sure it is the same person){% endif %}</label></div>
+        {% endif %}
+      {% endfor %}
+    {% else %}
+      <div class="field-check"><input type="checkbox" id="pick-{{ g.key }}" name="pick" value="create:{{ g.key }}"><label for="pick-{{ g.key }}">Create {{ g.written }} <span class="sub">(title {{ g.parsed.title }}, surname {{ g.parsed.surname }})</span></label></div>
+    {% endif %}
+  </fieldset>
+  {% endfor %}
+  <div class="research-actions"><button class="button button-primary" type="submit">Create ticked professors</button>
+    <a class="button button-secondary" href="/courses">Cancel</a></div>
+</form>
+{% else %}
+<p class="empty card">No accepted course from this document names a lecturer. <a href="/courses">Back to Courses</a></p>
+{% endif %}
+{% endblock %}

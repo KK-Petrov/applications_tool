@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{#- Import courses (US-19; docs/03 §4.8, docs/04 §9). Upload or paste → preview (nothing written) → Accept per course
+    or Accept all. Identifiers are removed in Python before anything is sent or shown (docs/02 §10). One card per
+    course, so every field stays readable at any width; a saved course is read-only (DECISIONS #65). -#}
+{% from "_working.html" import working_notice %}
+{% block main_attrs %}
+{%- if error %} data-focus="import-error" data-announce="{{ error }}"
+{%- elif rows is not none and focus_row is not none %} data-focus="row-{{ focus_row }}" data-announce="{{ notice or '' }}"
+{%- elif rows is not none and notice %} data-focus="preview-title" data-announce="{{ notice }}"
+{%- elif rows is not none %} data-focus="preview-title" data-announce="Reading finished. Check every course below."
+{%- endif %}{% endblock %}
+{% block before_title %}
+<nav class="breadcrumb" aria-label="Breadcrumb"><a href="/recommenders">Recommenders</a> <span aria-hidden="true">›</span> <a href="/courses">Courses</a> <span aria-hidden="true">›</span> <span aria-current="page">Import</span></nav>
+{% endblock %}
+{% macro field(i, name, label, value, invalid=false, wide=false) -%}
+<div class="field{% if wide %} field-wide{% endif %}">
+  <label for="row-{{ i }}-{{ name }}">{{ label }}</label>
+  <input id="row-{{ i }}-{{ name }}" name="row-{{ i }}-{{ name }}" type="text" value="{{ value }}"{% if invalid %} aria-invalid="true"{% endif %}>
+</div>
+{%- endmacro %}
+{% block content %}
+{% set nl = "\n" %}
+{% if error %}<div class="form-error" role="alert" tabindex="-1" id="import-error"><p>{{ error }}</p></div>{% endif %}
+{% if rows is none %}
+<section class="card" aria-labelledby="upload-title">
+  <h2 id="upload-title">Your transcript</h2>
+  <p>Choose a Word file (.docx) or a PDF with a text layer, or paste the text. Student numbers, dates of birth and national ID numbers are removed in the app before anything is sent to Claude Code; the original file is never stored. Nothing is saved until you accept courses.</p>
+  <form method="post" action="/courses/import" enctype="multipart/form-data" id="courses-upload" class="courses-upload"
+        hx-post="/courses/import" hx-encoding="multipart/form-data" hx-sync="this:drop" data-working data-notice="courses-notice">
+    <div class="field">
+      <label for="import-file">Transcript file</label>
+      <input id="import-file" name="file" type="file" accept=".docx,.pdf" aria-describedby="import-file-hint">
+      <span class="hint" id="import-file-hint">.docx or .pdf, up to {{ import_max_mb }} MB. A scanned PDF can't be read (no OCR).</span>
+    </div>
+    <div class="field field-wide">
+      <label for="import-paste">Or paste the text</label>
+      <textarea id="import-paste" name="pasted" rows="8"></textarea>
+    </div>
+    <div class="research-actions"><button class="button button-primary" type="submit" data-busy-text="Reading…">Read courses</button></div>
+  </form>
+  {{ working_notice("courses-notice", "Nothing is saved until you accept courses.", title="Reading the courses.", action="the import", minutes=import_limit_minutes) }}
+</section>
+{% else %}
+{% if notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
+{% if warnings %}<div class="research-warnings"><h2>Notes from the import</h2><ul>{% for w in warnings %}<li>{{ w }}</li>{% endfor %}</ul></div>{% endif %}
+<form method="post" action="/courses/import/save" id="courses-preview" class="card">
+  <h2 id="preview-title" tabindex="-1">Check every course</h2>
+  <p class="hint">Each value is as the document gives it. A grade and the credits must stand on the same row as the course in the document; a course with a problem can't be accepted until you correct it and press <strong>Check again</strong>. Lecturers: one per line.</p>
+  <input type="hidden" name="text" value="{{ text }}">
+  <input type="hidden" name="original_name" value="{{ original_name }}">
+  <input type="hidden" name="original_sha256" value="{{ original_sha256 }}">
+  <input type="hidden" name="source" value="{{ source }}">
+  <p class="hint"><a href="#import-actions">Go to Accept all</a></p>
+  {% for r in rows %}
+  {% set i = loop.index0 %}
+  {% set credits = r.credits_text if r.credits_text is defined else ('%g' | format(r.credits) if r.credits is not none else '') %}
+  <fieldset class="course-row{% if r.problems %} refused{% endif %}{% if r.saved %} saved{% endif %}" data-row="{{ i }}" id="row-{{ i }}" tabindex="-1">
+    <legend>Course {{ loop.index }}{% if r.name %}: {{ r.name }}{% endif %}</legend>
+    {% if r.saved %}
+      {#- read-only: a saved course is not edited here (it would write a near-duplicate) -#}
+      {% for name in ("name", "code", "institution", "grade", "term", "description") %}<input type="hidden" name="row-{{ i }}-{{ name }}" value="{{ r[name] or '' }}">{% endfor %}
+      <input type="hidden" name="row-{{ i }}-credits" value="{{ credits }}">
+      <input type="hidden" name="row-{{ i }}-lecturers" value="{{ r.lecturers | join('\n') }}">
+      {% set parts = [r.code, ("grade " ~ r.grade) if r.grade else "no grade", (credits ~ " credits") if credits else "", r.term, r.institution, r.lecturers | join("; ")] | select | list %}
+      <p class="course-summary"><span class="chip chip-success">Saved</span> {{ parts | join(" · ") }}</p>
+    {% else %}
+    <div class="course-fields">
+      {{ field(i, "name", "Course name", r.name, wide=true) }}
+      {{ field(i, "code", "Code", r.code or "") }}
+      {{ field(i, "grade", "Grade", r.grade or "", invalid=("Grade not found in the document" in r.problems)) }}
+      {{ field(i, "credits", "Credits", credits, invalid=("Credits not found on this course's row" in r.problems)) }}
+      {{ field(i, "term", "Term", r.term or "") }}
+      {{ field(i, "institution", "Institution", r.institution or "", wide=true) }}
+      <div class="field field-wide">
+        <label for="row-{{ i }}-lecturers">Lecturers</label>
+        <textarea id="row-{{ i }}-lecturers" name="row-{{ i }}-lecturers" rows="{{ [2, r.lecturers | length] | max }}">
+{{ r.lecturers | join("\n") }}</textarea>
+      </div>
+      <div class="field field-wide">
+        <label for="row-{{ i }}-description">Description</label>
+        <textarea id="row-{{ i }}-description" name="row-{{ i }}-description" rows="{{ [2, [10, (r.description | length) // 70 + r.description.count(nl) + 1] | min] | max }}">
+{{ r.description }}</textarea>
+      </div>
+    </div>
+    <div class="row-status">
+      {% for m in r.problems %}<p class="refusal">{{ m }}</p>{% endfor %}
+      <button class="button button-secondary" type="submit" name="accept" value="{{ i }}" aria-label="Accept {{ r.name or ('course ' ~ loop.index) }}"{% if r.problems %} disabled{% endif %}>Accept</button>
+    </div>
+    {% endif %}
+  </fieldset>
+  {% endfor %}
+  <div class="research-actions import-actions" id="import-actions">
+    <button class="button button-primary" type="submit" name="accept" value="all"{% if not acceptable %} disabled{% endif %}>Accept all</button>
+    <button class="button button-secondary" type="submit" name="accept" value="check">Check again</button>
+    <a class="button button-secondary" href="/courses/import">Start over</a>
+    <span class="hint">{{ acceptable }} of {{ rows | length }} can be accepted now.</span>
+  </div>
+</form>
+{% if any_saved %}
+<form method="post" action="/courses/import/professors" class="card" id="professors-start">
+  <input type="hidden" name="source" value="{{ source }}">
+  <p>Create a professor for each lecturer you want to ask, or link a lecturer to a professor you already have.</p>
+  <button class="button button-primary" type="submit">Create professors from this document</button>
+</form>
+{% endif %}
+{% endif %}
+{% endblock %}

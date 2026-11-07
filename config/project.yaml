@@ -88,6 +88,44 @@ evaluation:
 research:
   official_shared_domains: [mba.com]   # official non-university bodies accepted as sources (GMAC); source: user (DECISIONS #37)
 
+names:                            # lecturer and professor names (docs/02 §9; DECISIONS #44); source: recommended
+  # Particles belong to the surname ("A. van den Berg" → "van den Berg"); a run of them before the last word.
+  particles: [van, de, der, den, het, ter, te, ten, "'t", in, op, von, zu, du, da, di, la, le, del, della, dos, das]
+  title_tokens:                   # a token in a name (case-insensitive, with or without a full stop) → title
+    prof: Professor
+    professor: Professor
+    dr: Dr.
+    ir: Ir.
+    drs: Drs.
+    mr: Mr.
+    ing: Ing.
+  title_precedence: [Professor, Dr., Ir., Drs., Mr., Ing.]   # the highest-ranked token found pre-fills `title`
+
+courses:                          # course import (docs/02 §10, docs/04 §9; DECISIONS #44); source: recommended
+  identifier_labels:              # a number or date after one of these (same line, or the next line) is removed
+    en: [student number, student no, student nr, stud.nr., stud. nr., student id, student-id,
+         student identification number, "student #", id number, matriculation number, emplid, uin, banner id,
+         campus id, social security no., born,
+         registration number, date of birth, birth date, birthdate, dob, d.o.b., national id, national id number,
+         national identification number, citizen service number, social security number, ssn, passport number, bsn]
+    nl: [studentnummer, studentnr, student nummer, collegekaartnummer, geboortedatum, geb. datum, geb.datum,
+         geboren op, geboren, burgerservicenummer,
+         sofinummer, sofi-nummer, persoonsnummer, paspoortnummer, inschrijfnummer, bsn]
+  month_names:                    # for dates such as "12 March 2001" or "12 maart 2001"
+    en: [january, february, march, april, may, june, july, august, september, october, november, december,
+         jan, feb, mar, apr, jun, jul, aug, sep, sept, oct, nov, dec]
+    nl: [januari, februari, maart, april, mei, juni, juli, augustus, september, oktober, november, december,
+         mrt, okt]
+  allowed_types: [.docx, .pdf]    # plus pasted text; no OCR
+  max_upload_bytes: 10000000      # 10 MB
+  max_unpacked_bytes: 50000000    # a .docx's unpacked XML may not exceed this (zip bombs)
+  min_pdf_text_per_page: 100      # average non-space characters per page below this → "scanned", refused
+  letter_grade_order: [A+, A, A-, B+, B, B-, C+, C, C-, D+, D, D-, F]   # best first; Pass and unknown come last
+  numeric_grade_scale: 10         # numeric grades rank on this scale (Dutch 1–10); larger numbers on 100
+  removed_marker: "[removed]"
+  grade_headings: [grade, grades, result, cijfer, resultaat, beoordeling]   # a table heading row: the grade column
+  credit_headings: [credits, credit, ects, ec, studiepunten, units, credit hours, hours]   # and the credits column     # replaces each identifier in the stored and sent text
+
 wrong_school:
   own_background_terms: [RSM, Erasmus, Rotterdam, UVA, Virginia, McIntire]   # source: user's background
   extra_terms: [Wharton, Stanford, Harvard, Yale, Berkeley, Haas, NYU, Stern, Carnegie Mellon, CMU,

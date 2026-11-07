@@ -1,0 +1,407 @@
+{
+  "courses": [
+    {
+      "code": "FEB11001",
+      "name": "Mathematics I",
+      "institution": "Example School of Economics",
+      "grade": "8,0",
+      "credits": 4.0,
+      "term": "2021-2022 block 1",
+      "lecturers": [
+        "Prof. dr. A. van den Berg",
+        "Dr. J. Smit"
+      ]
+    },
+    {
+      "code": "FEB11002",
+      "name": "Microeconomics",
+      "institution": "Example School of Economics",
+      "grade": "7,5",
+      "credits": 6.0,
+      "term": "2021-2022 block 1",
+      "lecturers": [
+        "Prof. dr. ir. B. ter Horst"
+      ]
+    },
+    {
+      "code": "FEB11003",
+      "name": "Financial Accounting",
+      "institution": "Example School of Economics",
+      "grade": "6,5",
+      "credits": 4.0,
+      "term": "2021-2022 block 2",
+      "lecturers": [
+        "Prof. dr. K. Müller"
+      ]
+    },
+    {
+      "code": "FEB11004",
+      "name": "Statistics I",
+      "institution": "Example School of Economics",
+      "grade": "9,0",
+      "credits": 4.0,
+      "term": "2021-2022 block 2",
+      "lecturers": [
+        "Dr. J. de Vries"
+      ]
+    },
+    {
+      "code": "FEB11005",
+      "name": "Mathematics II",
+      "institution": "Example School of Economics",
+      "grade": "8,5",
+      "credits": 4.0,
+      "term": "2021-2022 block 3",
+      "lecturers": [
+        "Prof. dr. A. van den Berg"
+      ]
+    },
+    {
+      "code": "FEB11006",
+      "name": "Macroeconomics",
+      "institution": "Example School of Economics",
+      "grade": "7,0",
+      "credits": 6.0,
+      "term": "2021-2022 block 3",
+      "lecturers": [
+        "Prof. dr. ir. B. ter Horst"
+      ]
+    },
+    {
+      "code": "FEB11007",
+      "name": "Organisation and Strategy",
+      "institution": "Example School of Economics",
+      "grade": "6,0",
+      "credits": 4.0,
+      "term": "2021-2022 block 4",
+      "lecturers": [
+        "Dr. J. Smit"
+      ]
+    },
+    {
+      "code": "FEB11008",
+      "name": "Introduction to Finance",
+      "institution": "Example School of Economics",
+      "grade": "8,0",
+      "credits": 6.0,
+      "term": "2021-2022 block 4",
+      "lecturers": [
+        "Dr. C. in 't Veld"
+      ]
+    },
+    {
+      "code": "FEB12001",
+      "name": "Econometrics I",
+      "institution": "Example School of Economics",
+      "grade": "7,5",
+      "credits": 6.0,
+      "term": "2022-2023 block 1",
+      "lecturers": [
+        "Prof. dr. K. Müller",
+        "drs. P. Jansen"
+      ]
+    },
+    {
+      "code": "FEB12002",
+      "name": "Marketing",
+      "institution": "Example School of Economics",
+      "grade": "6,5",
+      "credits": 4.0,
+      "term": "2022-2023 block 1",
+      "lecturers": [
+        "drs. P. Jansen"
+      ]
+    },
+    {
+      "code": "FEB12003",
+      "name": "Corporate Finance",
+      "institution": "Example School of Economics",
+      "grade": "9,5",
+      "credits": 6.0,
+      "term": "2022-2023 block 2",
+      "lecturers": [
+        "Dr. L. Ødegaard"
+      ]
+    },
+    {
+      "code": "FEB12004",
+      "name": "Linear Algebra",
+      "institution": "Example School of Economics",
+      "grade": "8,5",
+      "credits": 4.0,
+      "term": "2022-2023 block 2",
+      "lecturers": [
+        "A. van den Berg"
+      ]
+    },
+    {
+      "code": "FEB12005",
+      "name": "Behavioural Economics",
+      "institution": "Example School of Economics",
+      "grade": "7,0",
+      "credits": 4.0,
+      "term": "2022-2023 block 3",
+      "lecturers": [
+        "Prof. dr. E. Bakker"
+      ]
+    },
+    {
+      "code": "FEB12006",
+      "name": "Investments",
+      "institution": "Example School of Economics",
+      "grade": "9,0",
+      "credits": 6.0,
+      "term": "2022-2023 block 3",
+      "lecturers": [
+        "Prof. dr. ir. B. ter Horst",
+        "Dr. L. Ødegaard"
+      ]
+    },
+    {
+      "code": "FEB12007",
+      "name": "Derivatives and Risk",
+      "institution": "Example School of Economics",
+      "grade": "8,0",
+      "credits": 6.0,
+      "term": "2022-2023 block 4",
+      "lecturers": [
+        "Dr. L. Ødegaard"
+      ]
+    },
+    {
+      "code": "FEB13001",
+      "name": "Empirical Methods in Finance",
+      "institution": "Example School of Economics",
+      "grade": "8,5",
+      "credits": 6.0,
+      "term": "2023-2024 block 1",
+      "lecturers": [
+        "Prof. dr. E. Bakker"
+      ]
+    },
+    {
+      "code": "FEB13002",
+      "name": "Bedrijfseconomie",
+      "institution": "Example School of Economics",
+      "grade": "7,5",
+      "credits": 4.0,
+      "term": "2023-2024 block 1",
+      "lecturers": [
+        "Prof. dr. E. Bakker"
+      ]
+    },
+    {
+      "code": "FEB13003",
+      "name": "Bachelor Thesis Finance",
+      "institution": "Example School of Economics",
+      "grade": "8,0",
+      "credits": 15.0,
+      "term": "2023-2024 block 4",
+      "lecturers": [
+        "Prof. dr. E. Bakker",
+        "Dr. J. Smit"
+      ]
+    },
+    {
+      "code": "FIN 3010",
+      "name": "Fixed Income Securities",
+      "institution": "Northfield University",
+      "grade": "A",
+      "credits": 3.0,
+      "term": "Fall 2023",
+      "lecturers": [
+        "Professor Maria Lopez"
+      ]
+    },
+    {
+      "code": "FIN 3200",
+      "name": "Portfolio Theory",
+      "institution": "Northfield University",
+      "grade": "A-",
+      "credits": 3.0,
+      "term": "Fall 2023",
+      "lecturers": [
+        "Dr. Samuel Whitmore"
+      ]
+    },
+    {
+      "code": "FIN 3300",
+      "name": "Financial Modeling in Python",
+      "institution": "Northfield University",
+      "grade": "A",
+      "credits": 3.0,
+      "term": "Fall 2023",
+      "lecturers": [
+        "Professor Maria Lopez"
+      ]
+    },
+    {
+      "code": "ECON 3410",
+      "name": "Game Theory",
+      "institution": "Northfield University",
+      "grade": "B+",
+      "credits": 3.0,
+      "term": "Fall 2023",
+      "lecturers": [
+        "Prof. Daniel O'Connor"
+      ]
+    },
+    {
+      "code": "ECON 3420",
+      "name": "Industrial Organization",
+      "institution": "Northfield University",
+      "grade": "A-",
+      "credits": 3.0,
+      "term": "Fall 2023",
+      "lecturers": [
+        "Prof. Daniel O'Connor"
+      ]
+    },
+    {
+      "code": "STAT 3100",
+      "name": "Time Series Analysis",
+      "institution": "Northfield University",
+      "grade": "A",
+      "credits": 4.0,
+      "term": "Fall 2023",
+      "lecturers": [
+        "Dr. Priya Raman"
+      ]
+    },
+    {
+      "code": "ACCT 3050",
+      "name": "Valuation",
+      "institution": "Northfield University",
+      "grade": "B+",
+      "credits": 3.0,
+      "term": "Fall 2023",
+      "lecturers": [
+        "Professor Henrik Lindqvist"
+      ]
+    },
+    {
+      "code": "COMM 2100",
+      "name": "Business Writing",
+      "institution": "Northfield University",
+      "grade": "Pass",
+      "credits": 1.0,
+      "term": "Fall 2023",
+      "lecturers": [
+        "Dr. Grace Kim"
+      ]
+    },
+    {
+      "code": "STAT 3200",
+      "name": "Machine Learning for Finance",
+      "institution": "Northfield University",
+      "grade": "A-",
+      "credits": 3.0,
+      "term": "Fall 2023",
+      "lecturers": [
+        "Dr. Priya Raman"
+      ]
+    },
+    {
+      "code": "FIN 3900",
+      "name": "Quantitative Trading Seminar",
+      "institution": "Northfield University",
+      "grade": "A",
+      "credits": 3.0,
+      "term": "Fall 2023",
+      "lecturers": [
+        "Prof. Daniel O'Connor",
+        "Dr. Priya Raman"
+      ]
+    }
+  ],
+  "identifiers": [
+    "512345",
+    "12 March 2001",
+    "123456782",
+    "S2034567",
+    "598431",
+    "12-03-2001",
+    "12 maart 2001",
+    "111222333",
+    "N00412345",
+    "03/12/2001"
+  ],
+  "keep": [
+    "123456789",
+    "2023-004512",
+    "50952",
+    "FEB12003",
+    "FIN 3010",
+    "2021-2022",
+    "Fall 2023"
+  ],
+  "swap": {
+    "code": "FEB12002",
+    "wrong_grade": "9,5"
+  },
+  "lecturers": {
+    "van den Berg A": [
+      "FEB11001",
+      "FEB11005",
+      "FEB12004"
+    ],
+    "Smit J": [
+      "FEB11001",
+      "FEB11007",
+      "FEB13003"
+    ],
+    "ter Horst B": [
+      "FEB11002",
+      "FEB11006",
+      "FEB12006"
+    ],
+    "Müller K": [
+      "FEB11003",
+      "FEB12001"
+    ],
+    "de Vries J": [
+      "FEB11004"
+    ],
+    "in 't Veld C": [
+      "FEB11008"
+    ],
+    "Jansen P": [
+      "FEB12001",
+      "FEB12002"
+    ],
+    "Ødegaard L": [
+      "FEB12003",
+      "FEB12006",
+      "FEB12007"
+    ],
+    "Bakker E": [
+      "FEB12005",
+      "FEB13001",
+      "FEB13002",
+      "FEB13003"
+    ],
+    "Lopez M": [
+      "FIN 3010",
+      "FIN 3300"
+    ],
+    "Whitmore S": [
+      "FIN 3200"
+    ],
+    "O'Connor D": [
+      "ECON 3410",
+      "ECON 3420",
+      "FIN 3900"
+    ],
+    "Raman P": [
+      "STAT 3100",
+      "STAT 3200",
+      "FIN 3900"
+    ],
+    "Lindqvist H": [
+      "ACCT 3050"
+    ],
+    "Kim G": [
+      "COMM 2100"
+    ]
+  }
+}

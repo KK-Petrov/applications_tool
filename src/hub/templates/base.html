@@ -18,15 +18,17 @@
   <div class="shell">
     {% include "_sidebar.html" %}
     <main class="main" id="main">
-      <div class="main-inner{% if page.wide %} wide{% endif %}">
+      <div class="main-inner{% if page.wide %} wide{% endif %}"{% block main_attrs %}{% endblock %}>
         {% include "_header.html" %}
         {% include "_data_errors.html" %}
         <div id="action-error" aria-live="assertive"></div>
         {% block before_title %}{% endblock %}
+        {% block title_area %}
         <div class="title-row">
           <h1>{{ page.title }}</h1>
           <div class="actions">{% block actions %}{% endblock %}</div>
         </div>
+        {% endblock %}
         {% block content %}{% endblock %}
       </div>
     </main>

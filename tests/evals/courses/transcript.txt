@@ -1,0 +1,55 @@
+EXAMPLE SCHOOL OF ECONOMICS
+Official transcript of records / Cijferlijst
+Name: Noor Example
+Student number: 512345
+Date of birth: 12 March 2001
+Burgerservicenummer (BSN): 123456782
+Student ID
+S2034567
+Studentnummer	Geboortedatum	Opleiding
+598431	12-03-2001	BSc Economie en Bedrijfseconomie
+Programme: BSc Economics and Business Economics (programme code 50952)
+Geboortedatum:
+12 maart 2001
+Diploma register 2023-004512 - Document number 123456789
+
+Courses at Example School of Economics
+Code	Course	Grade	Credits	Period	Lecturer(s)
+FEB11001	Mathematics I	8,0	4	2021-2022 block 1	Prof. dr. A. van den Berg; Dr. J. Smit
+FEB11002	Microeconomics	7,5	6	2021-2022 block 1	Prof. dr. ir. B. ter Horst
+FEB11003	Financial Accounting	6,5	4	2021-2022 block 2	Prof. dr. K. Müller
+FEB11004	Statistics I	9,0	4	2021-2022 block 2	Dr. J. de Vries
+FEB11005	Mathematics II	8,5	4	2021-2022 block 3	Prof. dr. A. van den Berg
+FEB11006	Macroeconomics	7,0	6	2021-2022 block 3	Prof. dr. ir. B. ter Horst
+FEB11007	Organisation and Strategy	6,0	4	2021-2022 block 4	Dr. J. Smit
+FEB11008	Introduction to Finance	8,0	6	2021-2022 block 4	Dr. C. in 't Veld
+FEB12001	Econometrics I	7,5	6	2022-2023 block 1	Prof. dr. K. Müller; drs. P. Jansen
+FEB12002	Marketing	6,5	4	2022-2023 block 1	drs. P. Jansen
+FEB12003	Corporate Finance	9,5	6	2022-2023 block 2	Dr. L. Ødegaard
+FEB12004	Linear Algebra	8,5	4	2022-2023 block 2	A. van den Berg
+FEB12005	Behavioural Economics	7,0	4	2022-2023 block 3	Prof. dr. E. Bakker
+FEB12006	Investments	9,0	6	2022-2023 block 3	Prof. dr. ir. B. ter Horst; Dr. L. Ødegaard
+FEB12007	Derivatives and Risk	8,0	6	2022-2023 block 4	Dr. L. Ødegaard
+FEB13001	Empirical Methods in Finance	8,5	6	2023-2024 block 1	Prof. dr. E. Bakker
+FEB13002	Bedrijfseconomie	7,5	4	2023-2024 block 1	Prof. dr. E. Bakker
+FEB13003	Bachelor Thesis Finance	8,0	15	2023-2024 block 4	Prof. dr. E. Bakker; Dr. J. Smit
+
+NORTHFIELD UNIVERSITY - Exchange semester record
+Student ID: N00412345
+Birth date: 03/12/2001
+
+Courses at Northfield University
+Code	Course	Grade	Credits	Period	Lecturer(s)
+FIN 3010	Fixed Income Securities	A	3.0	Fall 2023	Professor Maria Lopez
+FIN 3200	Portfolio Theory	A-	3.0	Fall 2023	Dr. Samuel Whitmore
+FIN 3300	Financial Modeling in Python	A	3.0	Fall 2023	Professor Maria Lopez
+ECON 3410	Game Theory	B+	3.0	Fall 2023	Prof. Daniel O'Connor
+ECON 3420	Industrial Organization	A-	3.0	Fall 2023	Prof. Daniel O'Connor
+STAT 3100	Time Series Analysis	A	4.0	Fall 2023	Dr. Priya Raman
+ACCT 3050	Valuation	B+	3.0	Fall 2023	Professor Henrik Lindqvist
+COMM 2100	Business Writing	Pass	1.0	Fall 2023	Dr. Grace Kim
+STAT 3200	Machine Learning for Finance	A-	3.0	Fall 2023	Dr. Priya Raman
+FIN 3900	Quantitative Trading Seminar	A	3.0	Fall 2023	Prof. Daniel O'Connor; Dr. Priya Raman
+
+Ref. 111222333
+Issued on 30 June 2024. This record is invented for testing.

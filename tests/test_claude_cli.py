@@ -169,6 +169,7 @@ EXPECTED_LOCKDOWN: dict[str, tuple[str, str | None, str]] = {
     "probe-lockdown": ("", None, "max_turns"),
     "research-programme": (WEB, WEB, "research_max_turns"),
     "probe-research": (WEB, WEB, "research_max_turns"),
+    "extract-courses": ("", None, "max_turns"),  # Phase 2c course import, added on purpose
 }
 
 

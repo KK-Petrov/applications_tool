@@ -1,0 +1,11 @@
+{#- The notice of a long AI call (DECISIONS #63): shown by app.js when its data-working form is submitted.
+    The timer is updated every second but is not in a live region; only the start is announced (data-start).
+    Defaults: research (research_limit_minutes); course import passes its own title, action and limit. -#}
+{% macro working_notice(id, saved_text, title="Researching the official pages.", action="the research", minutes=none) -%}
+{% set limit = minutes or research_limit_minutes %}
+<div class="working-notice" id="{{ id }}" hidden data-title="{{ title }}" data-start="{{ title }} This can take up to {{ limit }} minute{{ 's' if limit != 1 }}.">
+  <p class="working-title"><span class="spinner" aria-hidden="true"></span><strong>{{ title }}</strong></p>
+  <p class="working-meta">Elapsed: <span class="working-timer mono">0 s</span> · Stops after {{ limit }} minute{{ 's' if limit != 1 }}.</p>
+  <p class="working-leave">{{ saved_text }} If you leave this page, {{ action }} still runs to the end and is counted on the AI usage page, but its result is discarded.</p>
+</div>
+{%- endmacro %}

@@ -207,6 +207,8 @@ td .badge-unverified { overflow-wrap: break-word; }
 /* Tables scroll inside their box on small screens (docs/03 §4.1) */
 .table-scroll {  /* edge shadows appear only while there is more to scroll to */
   overflow-x: auto; max-width: 100%;
+  position: relative;  /* contains absolutely positioned children (visually-hidden text), which escaped the
+                          box and made the page scroll sideways at 390 px (Phase 1 known issue; #63) */
   background:
     linear-gradient(to right, var(--color-surface) 30%, transparent) left / 40px 100% no-repeat local,
     linear-gradient(to left, var(--color-surface) 30%, transparent) right / 40px 100% no-repeat local,
@@ -427,7 +429,6 @@ table.usage td:nth-child(3) { min-width: 220px; }  /* "For" keeps room on phones
 .research-start .research-actions { grid-column: 1 / -1; }
 .research-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 12px; }
 .working-note { color: var(--color-text-secondary); }
-.inline-form .working-note:empty { display: none; }
 .form-heading { margin: 24px 0 8px; }
 .research-domains textarea { font-family: var(--font-mono); }
 .research-table th[scope="row"] { text-align: left; font-weight: var(--weight-medium); white-space: nowrap; }
@@ -452,3 +453,69 @@ fieldset.research-deadline legend { font-weight: var(--weight-semibold); padding
 @media (max-width: 760px) {
   .research-start { grid-template-columns: 1fr; }
 }
+
+/* Page header with a subtitle (programme page): title, subtitle, then the actions in their own row (#63) */
+.page-actions { flex-wrap: wrap; margin: 0 0 16px; }
+
+/* Long AI calls: the shared busy state (DECISIONS #63). No opacity dimming (#55): muted colours keep 4.5:1. */
+.button.is-working { display: inline-flex; align-items: center; gap: 8px; }
+.button.is-working::before, .spinner {
+  content: ""; display: inline-block; width: 14px; height: 14px; flex: none;
+  border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
+  animation: hub-spin 0.8s linear infinite;
+}
+.button-secondary[aria-disabled="true"] { color: var(--color-text-muted); border-color: var(--color-border); cursor: progress; }
+[data-locked] { cursor: not-allowed; }
+.working-notice {
+  background: var(--color-info-bg); color: var(--color-info); border: 1px solid var(--color-info);
+  border-radius: var(--radius-card); padding: 12px 16px; margin: 0 0 16px; max-width: 72ch;
+}
+.working-notice p { margin: 0 0 4px; }
+.working-notice p:last-child { margin: 0; }
+.working-title { display: flex; align-items: center; gap: 8px; }
+@keyframes hub-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .button.is-working::before, .spinner { animation: none; border-right-color: currentColor; border-style: dotted; }
+}
+/* The busy state of a data-working form is shown by its spinner and notice, never by htmx's dimming (#55) */
+[data-working].htmx-request, [data-working] .htmx-request { opacity: 1; }
+
+/* Course import and professors from a document (docs/03 §4.4, §4.8; Phase 2c) */
+.courses-upload { display: grid; gap: 12px; }
+.lecturer { border: 1px solid var(--color-border); border-radius: var(--radius-card); padding: 12px 16px; margin: 0 0 12px; }
+.lecturer legend { font-weight: var(--weight-semibold); padding: 0 4px; }
+.lecturer .sub, .suggestions .sub { color: var(--color-text-secondary); font-size: var(--font-size-small); }
+.lecturer-courses li { margin: 2px 0; }
+.suggestions ul { margin: 4px 0 0; }
+.suggestions li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 4px 0; }
+.suggestions:empty { display: none; }
+.linked-courses { border: 0; padding: 0; margin: 0; }
+.linked-courses legend { font-weight: var(--weight-medium); padding: 0; }
+.email-missing { margin-left: 6px; }
+
+/* Import preview: one card per course (ui review, DECISIONS #65); fields wrap at any width */
+.import-actions {  /* always in reach on a long preview (ui review round 2) */
+  position: sticky; bottom: 0; z-index: 2; background: var(--color-surface);
+  border-top: 1px solid var(--color-border); padding: 12px 0; margin: 0;
+}
+.course-row { border: 1px solid var(--color-border); border-radius: var(--radius-card); padding: 12px 16px; margin: 0 0 12px; min-width: 0; }
+.course-row legend { font-weight: var(--weight-semibold); padding: 0 4px; overflow-wrap: anywhere; }
+.course-row:focus { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.course-row.refused { border-color: var(--color-danger); background: var(--color-danger-bg); }
+.course-row.saved { background: var(--color-success-bg); border-color: var(--color-success); }
+.course-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px 12px; }
+.course-fields input, .course-fields textarea { width: 100%; min-width: 0; }
+.course-summary { margin: 0; overflow-wrap: anywhere; }
+.row-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 8px; }
+.row-status .refusal { margin: 0; }
+
+/* Disabled buttons look disabled (ui review, #65): muted colours, never opacity (#55) */
+.button:disabled, .button:disabled:hover {
+  background: var(--color-neutral-bg); color: var(--color-text-muted); border-color: var(--color-border); cursor: not-allowed;
+}
+
+/* A long call that ended without a page (network failure, server error): the notice turns into the error (#65) */
+.working-notice.working-failed { background: var(--color-danger-bg); color: var(--color-danger); border-color: var(--color-danger); }
+.working-notice.working-failed .spinner, .working-notice.working-failed .working-meta,
+.working-notice.working-failed .working-leave { display: none; }
+.working-error:focus { outline: 2px solid var(--color-danger); outline-offset: 2px; }

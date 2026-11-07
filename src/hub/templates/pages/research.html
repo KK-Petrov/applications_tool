@@ -6,6 +6,11 @@
   {%- if target %} <a href="/programmes/{{ target.id }}">{{ target.short_name }}</a> <span aria-hidden="true">›</span> <span aria-current="page">Re-research</span>
   {%- else %} <span aria-current="page">Research a programme</span>{% endif %}</nav>
 {% endblock %}
+{% block main_attrs %}
+{%- if error %} data-focus="research-error" data-announce="{{ error }}"
+{%- elif mode == "domains" %} data-focus="domains-title" data-announce="Research finished. Confirm the official domains."
+{%- elif mode == "preview" %} data-focus="{{ 'research-problems' if proposal.problems else 'found-title' }}" data-announce="Sources checked."
+{%- endif %}{% endblock %}
 {% block content %}
 {% if error %}<div class="form-error" role="alert" tabindex="-1" id="research-error"><p>{{ error }}</p></div>{% endif %}
 
@@ -17,7 +22,7 @@
 
 {% elif mode == "domains" %}
 <form method="post" action="{{ action }}" id="research-domains" class="card research-domains">
-  <h2>Confirm the official domains</h2>
+  <h2 id="domains-title" tabindex="-1">Confirm the official domains</h2>
   <p>Only pages on these domains, or their subdomains, count as official sources{% if config_shared %} (plus {{ config_shared | join(", ") }}){% endif %}. Check that each one is the school's own domain before the sources are checked.</p>
   {% if domain_problems %}
   <div class="form-error" role="alert" id="domain-problems"><h2>Please fix:</h2>
@@ -39,14 +44,14 @@
 
 {% elif mode == "preview" %}
 {% if proposal.problems %}
-<div class="form-error" role="alert" id="research-problems">
+<div class="form-error" role="alert" id="research-problems" tabindex="-1">
   <h2>Save is blocked until these are fixed:</h2>
   <ul>{% for m in proposal.problems %}<li>{{ m }}</li>{% endfor %}</ul>
 </div>
 {% endif %}
 <p class="note">Everything here is <strong>Unverified</strong> (researched, not checked) until you check it against its source and press <strong>Mark verified</strong> on the programme page. Official domains: <span class="mono">{{ proposal.domains | join(", ") }}</span>.</p>
 <section class="card" aria-labelledby="found-title">
-  <h2 id="found-title">What research found</h2>
+  <h2 id="found-title" tabindex="-1">What research found</h2>
   <div class="table-scroll" tabindex="0" role="region" aria-labelledby="found-title">
   <table class="table research-table">
     <thead><tr><th scope="col">Field</th><th scope="col">Value</th><th scope="col">Source</th></tr></thead>

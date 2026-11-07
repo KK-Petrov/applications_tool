@@ -33,6 +33,7 @@ from ruamel.yaml.scalarstring import DoubleQuotedScalarString, LiteralScalarStri
 
 from hub.config import Config
 from hub.models import Biography, Professor, Programme, Settings
+from hub.models.course import Courses, TranscriptCourse
 
 log = logging.getLogger(__name__)
 
@@ -42,6 +43,8 @@ SETTINGS_FILE = "settings.yaml"
 BIOGRAPHY_FILE = "biography.yaml"
 PROGRAMMES_DIR = "programmes"
 PROFESSORS_DIR = "professors"
+COURSES_FILE = "courses.yaml"
+SOURCES_DIR = "sources"
 
 
 class DataError(Exception):
@@ -67,6 +70,7 @@ class Snapshot:
     professors: list[Professor]
     biography: Biography
     errors: list[DataError] = field(default_factory=list)
+    courses: list[TranscriptCourse] = field(default_factory=list)
 
 
 def format_loc(loc: tuple[int | str, ...]) -> str | None:
@@ -262,6 +266,9 @@ def _yaml() -> YAML:
     yaml.width = NO_WRAP  # never wrap a scalar, however long
     yaml.indent(mapping=2, sequence=4, offset=2)
     yaml.default_flow_style = False  # new nodes are block style (DECISIONS #19)
+    # never anchors or aliases (&id001 / *id001): a shared date made them, and a hand edit then broke or
+    # changed every copy (data-integrity review, #67)
+    yaml.representer.ignore_aliases = lambda *_: True
     yaml.representer.add_representer(  # write "null" explicitly, as the seed files do
         type(None), lambda rep, _: rep.represent_scalar("tag:yaml.org,2002:null", "null")
     )
@@ -520,6 +527,57 @@ class Store:
     def save_biography(self, biography: Biography) -> bool:
         return self._save(self.data_dir / BIOGRAPHY_FILE, biography)
 
+    # ---- courses and imported documents (docs/01 §10) -------------------------------------------------
+
+    def load_courses(self) -> Courses:
+        path = self.data_dir / COURSES_FILE
+        return self._load(path, Courses) if path.exists() else Courses()
+
+    def add_courses(self, new: list[TranscriptCourse]) -> None:
+        """Append courses to ``courses.yaml`` (created if missing). An id already in the file is refused:
+        ids are never reused (docs/01 §1)."""
+        if not new:
+            return
+        current = self.load_courses()
+        taken = {c.id for c in current.courses}
+        clash = [c.id for c in new if c.id in taken]
+        if clash:
+            raise DataError(
+                COURSES_FILE, "courses", f"course id {clash[0]} already exists; nothing was written"
+            )
+        current.courses = [*current.courses, *new]
+        self._save(self.data_dir / COURSES_FILE, current)
+
+    def create_source_text(self, name: str, content: str) -> None:
+        """Write ``sources/<name>`` (the identifier-stripped text of an imported document), never over an
+        existing file. The original document is never stored (docs/01 §10)."""
+        folder = self.data_dir / SOURCES_DIR
+        with _CREATE_LOCK:
+            if folder.is_dir() and any(p.name.casefold() == name.casefold() for p in folder.iterdir()):
+                raise DataError(f"{SOURCES_DIR}/{name}", None, "already exists; nothing was written")
+            self.write_bytes_atomic(folder / name, content.encode("utf-8"))
+        log.info("saved %s/%s", SOURCES_DIR, name)
+
+    def source_with_sha(self, sha256: str) -> str | None:
+        """The ``sources/`` file already made from the document with this sha256 (its header line), if any:
+        accepting from an older copy of the preview reuses it instead of writing a second one (#67)."""
+        folder = self.data_dir / SOURCES_DIR
+        if not folder.is_dir():
+            return None
+        wanted = f"# sha256: {sha256}"
+        for path in sorted(folder.glob("*.txt")):
+            try:
+                head = path.read_text(encoding="utf-8").splitlines()[:2]
+            except OSError:
+                continue
+            if wanted in head:
+                return path.name
+        return None
+
+    def source_names(self) -> set[str]:
+        folder = self.data_dir / SOURCES_DIR
+        return {p.name for p in folder.iterdir()} if folder.is_dir() else set()
+
     # ---- everything ------------------------------------------------------------------------------
 
     def load_all(self) -> Snapshot:
@@ -535,6 +593,15 @@ class Store:
             biography = self.load_biography()
         except DataError as err:
             biography, errors = Biography(), [*errors, err]
+        try:
+            courses = self.load_courses().courses
+        except DataError as err:
+            courses, errors = [], [*errors, err]
         return Snapshot(
-            settings, programmes, professors, biography, [*errors, *programme_errors, *professor_errors]
+            settings,
+            programmes,
+            professors,
+            biography,
+            [*errors, *programme_errors, *professor_errors],
+            courses,
         )

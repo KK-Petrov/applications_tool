@@ -10,6 +10,7 @@ It never contacts anything. Behaviour is chosen by environment variables:
   prints text that is not JSON; ``is_error`` prints a result with ``is_error: true``; ``no_structured``
   prints a successful result without ``structured_output``; ``schema_mismatch`` prints a
   ``structured_output`` that breaks the rec-email schema.
+- ``FAKE_CLAUDE_DELAY``: seconds the ``ok`` mode waits before answering (a slow, successful call).
 - ``FAKE_CLAUDE_LOG``: if set, one JSON line per call is appended: argv, stdin and cwd (for assertions).
 """
 
@@ -61,6 +62,7 @@ def main() -> int:
             fh.write(json.dumps({"argv": argv, "stdin": stdin, "cwd": os.getcwd()}) + "\n")
     mode = os.environ.get("FAKE_CLAUDE_MODE", "ok")
     if mode == "ok":
+        time.sleep(float(os.environ.get("FAKE_CLAUDE_DELAY", "0")))  # a slow but successful call
         path = Path(os.environ.get("FAKE_CLAUDE_RECORDING") or RECORDINGS / f"{_skill(argv)}.json")
         if not path.is_file():
             print(f"fake_claude: no recording {path.name}", file=sys.stderr)

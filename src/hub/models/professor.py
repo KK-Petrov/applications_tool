@@ -56,9 +56,10 @@ class Professor(DataModel):
     name: str
     surname: str | None = None  # default: last token of ``name``
     title: str = "Professor"  # "Dear {title} {surname},"; e.g. "Dr." (Phase 2b, DECISIONS #48)
-    email: Email
+    email: Email | None = None  # optional (Phase 2c): a professor created from a transcript has none yet
     university: str
-    course: str
+    course_ids: list[Slug] = Field(default_factory=list)  # links to courses.yaml (docs/01 §10)
+    course: str = ""  # the manual course; not used while course_ids links a course
     course_description: str = Field(default="", max_length=COURSE_DESCRIPTION_MAX_CHARS)  # verbatim
     grade: str | None = None
     term: str | None = None

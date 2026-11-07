@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import re
 from datetime import date
 from pathlib import Path
 
@@ -45,17 +46,45 @@ def test_new_research_payload_has_exactly_query_url_today() -> None:
     assert research.research_payload("Example MSQF", None, TODAY)["url"] is None
 
 
-def test_reresearch_payload_is_the_stored_programme_only(config, data_dir: Path) -> None:
+def test_reresearch_payload_carries_only_researched_fields(config) -> None:
+    """User decision (DECISIONS #66, superseding "current = the stored file"): ``current`` holds only what
+    research compares; status, steps, documents, interviews, verification and free-text notes stay local."""
     programme = next(p for p in Store.from_config(config).load_programmes()[0] if p.id == "princeton-mfin")
     payload = research.reresearch_payload(programme, TODAY)
     assert list(payload) == ["programme_id", "current", "today"]
     assert payload["programme_id"] == "princeton-mfin" and payload["today"] == "2026-10-30"
-    stored = YAML(typ="safe").load(
-        (data_dir / "programmes" / "princeton-mfin.yaml").read_text(encoding="utf-8")
-    )
-    assert json.loads(json.dumps(payload["current"], default=str)) == json.loads(
-        json.dumps(stored, default=str)
-    )
+    current = payload["current"]
+    assert set(current) == {
+        "id", "name", "short_name", "school", "unit", "official_domains", "aliases", "portal_url",
+        "deadlines", "letters_required", "requirements", "essays", "curriculum", "ai_policy", "fee",
+        "sources",
+    }  # fmt: skip
+    assert set(current["deadlines"][0]) == {"id", "label", "due_local", "tz", "time_known", "source_url"}
+    assert all(set(r) == {"id", "label"} for r in current["requirements"])
+    assert set(current["fee"]) == {"amount", "currency"}
+    assert current["deadlines"][0]["due_local"] == "2026-12-15T23:59"
+
+
+def test_no_owner_note_reaches_the_reresearch_call(
+    client: FormClient, config, data_dir: Path, tmp_path: Path, calls: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Markers planted in every free-text place of the programme file never reach the fake's stdin."""
+    store = Store.from_config(config)
+    p = next(x for x in store.load_programmes()[0] if x.id == "princeton-mfin")
+    p.steps[0].note = "MARKER-STEP"
+    p.documents[0].note = "MARKER-DOCUMENT"
+    p.requirements[0].note = "MARKER-REQUIREMENT"
+    p.letters_note = "MARKER-LETTERS"
+    p.fee.note = "MARKER-FEE"
+    p.interviews[0].notes = "MARKER-INTERVIEW"
+    store.save_programme(p)
+    rec = write_recording(tmp_path, mirror_output(p, p.sources[0].url), "mirror.json")
+    monkeypatch.setenv("FAKE_CLAUDE_RECORDING", str(rec))
+    assert client.post("/programmes/princeton-mfin/research", data={}).status_code == 200
+    (stdin,) = _stdins(calls)
+    assert "MARKER" not in stdin, [m for m in re.findall(r"MARKER-[A-Z]+", stdin)]
+    sent = json.loads(stdin)["current"]
+    assert "interviews" not in sent and "steps" not in sent and "documents" not in sent
 
 
 def test_builders_can_only_take_programme_data() -> None:

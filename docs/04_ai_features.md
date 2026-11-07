@@ -96,7 +96,10 @@ warning (DECISIONS #48). `submission` is null (no stored field says how letters 
 is built in Python from `email.subject_template` and `email.programme_type` and copied by the model.
 Only programmes ticked for this letter are included. `courses` holds every course linked through
 `course_ids` (docs/01 §10), or the professor's manual course and description when none is linked
-(DECISIONS #44). `surname` is the salutation form (docs/02 §9: "Van den Berg" standing alone).
+(DECISIONS #44). With links, a manual description fills (a) the linked course whose name (or "name
+(code)") equals the manual course, ignoring case, else (b) the only linked course without a description, else (c) it is
+sent as its own course entry and the draft gets the warning "Check which course this description belongs to."; the
+stored courses never change (DECISIONS #66). `surname` is the salutation form (docs/02 §9: "Van den Berg" standing alone).
 From Phase 4a (DECISIONS #59): `curriculum` is the programme's stored curriculum, with bracketed editorial
 notes ("[Course list: run research]") removed from the summary; `biography` holds every entry and
 `selected_biography_ids` names the 3–5 chosen in Python (§2.4), most relevant first.
@@ -296,7 +299,12 @@ pages with `checked` = today, and "No official source found" in `letters_note` /
 is null.
 
 ### 7.1 Re-research
-Input: `{"programme_id": "...", "current": {stored programme}, "today": "YYYY-MM-DD"}`. The "Re-research" button
+Input: `{"programme_id": "...", "current": {…}, "today": "YYYY-MM-DD"}` where `current` holds only what research
+compares (DECISIONS #66, user decision; supersedes "the stored programme file"): id, name, short_name, school, unit,
+official_domains, aliases, portal_url, deadlines (id, label, due_local, tz, time_known, source_url), letters_required,
+requirements (id, label), essays, curriculum, ai_policy, fee (amount, currency) and sources (url, title). Status, steps,
+documents, interviews, verification and every free-text note (requirement notes, letters_note, fee.note) stay local:
+the owner's own text never reaches the call that has web tools. The comparison runs in Python against the full file. The "Re-research" button
 on a programme page runs the skill for that programme; the app shows a field-by-field comparison with the
 stored data (new / changed / unchanged, each with its source URL). The user accepts or rejects each change;
 nothing is written until Save, and a save with every change rejected writes nothing. Accepted changes to a
@@ -305,7 +313,9 @@ sets `verified`. A programme without `official_domains` gets them prefilled from
 source URLs, and the user confirms them before the comparison runs. Saving keeps the file's shape and
 comments (DECISIONS #29b).
 Details (DECISIONS #62): deadlines, requirements and essays are matched by `id`, then by label/title ignoring
-case; curriculum courses by name. A stored value research didn't find is shown as "Not found by research,
+case; curriculum courses by name. Requirements compare their label only: research never sees the owner's requirement notes
+(#66), so it never changes them (#67). Any researched change to a deadline's `time_known` resets that deadline (#67).
+The portal link itself must be on an official domain, in new research and in re-research. A stored value research didn't find is shown as "Not found by research,
 kept" and is never removed. Confirmed domains that differ from the stored ones are a row like any other
 (`official_domains`), so rejecting every row writes nothing. A row whose source is not official shows the
 refusal and has no Accept box; the other rows can still be accepted. Accepting any non-deadline row sets the
@@ -363,8 +373,10 @@ Output (`src/hub/ai/schemas/extract_courses.json`):
 Rules in SKILL.md: copy names, codes, grades and credits exactly as written; lecturers as written, in the
 document's order; never infer, round or convert a grade; a field not in the document is null; never output a
 student number, date of birth or national ID number. Python then strips identifiers again, checks every grade
-verbatim against the source text (docs/02 §10), validates the schema and shows the preview; nothing is written
-until the user accepts.
+against its own row in the source text (row-anchored: on the same line or table row as the course's code or
+name; DECISIONS #64, docs/02 §10), validates the schema and shows the preview; nothing is written until the user
+accepts. The call is `run_skill("extract-courses", …, action="import_courses", subject={}, source="app")`, with no
+tools and `claude.timeout_s`.
 Eval set `tests/evals/courses/`: an invented 28-course transcript (invented student, institutions and lecturers)
 as .docx, text PDF and pasted text, with identifiers in several formats in English and Dutch, course codes and
 other numbers that resemble IDs, and `expected.json`. `tasks.py live -k courses` grades: every course found with

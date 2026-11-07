@@ -23,12 +23,14 @@ from starlette.datastructures import UploadFile
 from hub import sheet as sheets
 from hub.ai.email_checks import anticipated_terms, app_warnings, unselected_terms
 from hub.ai.payloads import (
+    course_warnings,
     deadline_warnings,
     is_unverified_warning,
     programmes_by_deadline,
     rec_email_payload,
 )
 from hub.ai.skills import SkillError, load_schema, run_skill
+from hub.models.course import TranscriptCourse
 from hub.models.professor import COURSE_DESCRIPTION_MAX_CHARS, GeneratedEmail, LetterStatus, Professor
 from hub.professor_form import (
     CSV_OPTIONAL,
@@ -108,7 +110,11 @@ def build_router(web: Web) -> APIRouter:
             q=params.get("q", ""),
             filter=sheets.parse_filter(params.get("filter")),
             sort=sheets.parse_sort(params.get("sort")),
+            courses=course_map(snapshot),
         )
+
+    def course_map(snapshot: Snapshot) -> dict[str, TranscriptCourse]:
+        return {c.id: c for c in snapshot.courses}
 
     def sheet_url(sheet: sheets.Sheet, **extra: str) -> str:
         """The sheet's own address with its search, filter and sort (and e.g. ``selected``)."""
@@ -142,7 +148,9 @@ def build_router(web: Web) -> APIRouter:
         )
         return {
             "prof": professor,
-            "prof_row": sheets.row(professor, sheet.columns, web.today(snapshot), web.clock(), config),
+            "prof_row": sheets.row(
+                professor, sheet.columns, web.today(snapshot), web.clock(), config, course_map(snapshot)
+            ),
             "askable": askable,
             "askable_cols": [c for c in sheet.columns if c.programme.id in askable_ids],
             "date_labels": LETTER_DATE_LABELS,
@@ -171,6 +179,20 @@ def build_router(web: Web) -> APIRouter:
         if selected and (email_error or flashed):
             extra["email_error"] = email_error or flashed
         imported = params.get("imported", "")
+        created, linked = params.get("created", ""), params.get("linked", "")
+        created_note = None
+        if created.isdigit() or linked.isdigit():  # after "Create professors from this document" (US-20)
+            n, m = int(created or 0), int(linked or 0)
+            parts = [f"created {n} professor{'' if n == 1 else 's'}"] if n else []
+            parts += [f"linked {m} lecturer{'' if m == 1 else 's'} to existing professors"] if m else []
+            sentence = " and ".join(parts) or "nothing was created"
+            created_note = sentence[:1].upper() + sentence[1:] + "."
+            if n:
+                created_note += (
+                    " The new professor has no email yet: add it with Edit before sending."
+                    if n == 1
+                    else " The new professors have no email yet: add them with Edit before sending."
+                )
         return web.render(
             request,
             "pages/recommenders.html",
@@ -179,6 +201,7 @@ def build_router(web: Web) -> APIRouter:
             status_code=status_code,
             selected=selected,
             imported=int(imported) if imported.isdigit() else None,
+            created_note=created_note,
             action_error=action_error,
             **common(sheet),
             **extra,
@@ -229,7 +252,9 @@ def build_router(web: Web) -> APIRouter:
             SHEET_PAGE,
             snapshot,
             **common(sheet),
-            r=sheets.row(professor, sheet.columns, web.today(snapshot), web.clock(), config),
+            r=sheets.row(
+                professor, sheet.columns, web.today(snapshot), web.clock(), config, course_map(snapshot)
+            ),
             selected=selected,
             focus_cell=programme_id,
             oob_totals=True,
@@ -294,7 +319,9 @@ def build_router(web: Web) -> APIRouter:
         now = web.clock()
         chosen = programmes_by_deadline([by_id[x] for x in chosen_ids], now)
         owner = snapshot.settings.owner_name
-        payload = rec_email_payload(professor, chosen, snapshot.biography, owner, now, config)
+        payload = rec_email_payload(
+            professor, chosen, snapshot.biography, owner, now, config, courses=snapshot.courses
+        )
         try:
             result = run_skill(
                 "rec-email",
@@ -313,7 +340,10 @@ def build_router(web: Web) -> APIRouter:
         checks = app_warnings(subject, body, payload, unselected_terms(chosen, others), terms)
         # The urgent unverified alerts come only from the app's own check, never from the model's text.
         model_notes = [w for w in result.data["warnings"] if not is_unverified_warning(w)]
-        warnings = list(dict.fromkeys([*deadline_warnings(chosen, now), *checks, *model_notes]))
+        course_notes = course_warnings(professor, snapshot.courses)  # DECISIONS #66 (c)
+        warnings = list(
+            dict.fromkeys([*deadline_warnings(chosen, now), *course_notes, *checks, *model_notes])
+        )
         snapshot = store.load_all()
         fresh = find(snapshot, pid)
         fresh.emails.append(
@@ -364,7 +394,9 @@ def build_router(web: Web) -> APIRouter:
             snapshot,
             **common(sheet),
             **panel_context(snapshot, professor, sheet),
-            r=sheets.row(professor, sheet.columns, web.today(snapshot), web.clock(), config),
+            r=sheets.row(
+                professor, sheet.columns, web.today(snapshot), web.clock(), config, course_map(snapshot)
+            ),
             selected=professor,
             email_error=error,
         )
@@ -405,6 +437,12 @@ def build_router(web: Web) -> APIRouter:
             max_description=COURSE_DESCRIPTION_MAX_CHARS,
             claude_timeout=config.claude.timeout_s,
             letter_status=sheets.LETTER_STATUS,
+            # the links the form showed (an unticked one stays listed, unticked, after a validation error)
+            linked_courses=[
+                course_map(snapshot)[i]
+                for i in dict.fromkeys([*(state.course_ids_shown or state.course_ids), *state.course_ids])
+                if i in course_map(snapshot)
+            ],
         )
 
     @router.get("/recommenders/new", response_class=HTMLResponse)
@@ -426,15 +464,16 @@ def build_router(web: Web) -> APIRouter:
         form = await request.form()
         state = form_from_request(form)
         names = {p.id: p.short_name for p in snapshot.programmes}
-        professor = build_professor(state, existing, taken_ids(snapshot), names)
+        known = {c.id for c in snapshot.courses}
+        professor = build_professor(state, existing, taken_ids(snapshot), names, config.names, known)
         email = state.values.get("email", "").strip().casefold()
-        if existing is not None and existing.email.casefold() == email:
+        if existing is not None and (existing.email or "").casefold() == email:
             email = ""  # unchanged: older duplicates stay editable (only a new email is checked)
         twin = next(
             (
                 p
                 for p in snapshot.professors
-                if email and p.email.casefold() == email and (not existing or p.id != existing.id)
+                if email and (p.email or "").casefold() == email and (not existing or p.id != existing.id)
             ),
             None,
         )

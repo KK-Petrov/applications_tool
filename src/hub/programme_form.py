@@ -28,6 +28,7 @@ from starlette.datastructures import FormData
 from hub.config import Config
 from hub.models.common import Verification
 from hub.models.programme import Programme
+from hub.rules.names import TRANSLITERATE
 from hub.store import format_loc
 
 # group → (fields typed by the user, hidden identity fields, singular noun for buttons and labels)
@@ -86,8 +87,14 @@ class FormState:
 
 
 def slugify(text: str, fallback: str = "item") -> str:
-    """Lowercase ASCII slug ``[a-z0-9-]`` (e.g. "Résumé / CV" → "resume-cv"), at most 60 characters."""
-    ascii_text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii").lower()
+    """Lowercase ASCII slug ``[a-z0-9-]`` (e.g. "Résumé / CV" → "resume-cv", "Ødegaard" → "odegaard"),
+    at most 60 characters."""
+    ascii_text = (
+        unicodedata.normalize("NFKD", text.translate(TRANSLITERATE))
+        .encode("ascii", "ignore")
+        .decode("ascii")
+        .lower()
+    )
     slug = re.sub(r"[^a-z0-9]+", "-", ascii_text).strip("-")[:60].strip("-")
     return slug if len(slug) >= 2 else fallback
 

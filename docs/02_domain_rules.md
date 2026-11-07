@@ -197,12 +197,44 @@ Whitfield.
 
 ## 10. Identifiers and grades in imported documents (Phase 2c, DECISIONS #44)
 Rule 13: both checks run in Python, never in the model.
-1. **Identifier stripping is label-anchored.** A number or date is removed only when it follows an identifier
-   label (`courses.identifier_labels`, English and Dutch: student number, student ID, studentnummer, date of
-   birth, geboortedatum, BSN, burgerservicenummer, national ID, …), on the same line after optional
-   punctuation. A standalone 9-digit number is treated as a BSN, and removed, only if it passes the BSN 11-check.
-   Course codes, grades, credits and years are kept. Stripping runs on the text before it is sent to
-   `/extract-courses` and again on every returned field.
-2. **Grades are facts.** A grade returned by the skill is accepted only if the exact string occurs in the
-   stripped source text; otherwise the preview flags it ("Grade not found in the document") and the row can't
-   be accepted until the user corrects or clears it.
+1. **Identifier stripping is label-anchored and fails closed** (`src/hub/courses/identifiers.py`; DECISIONS #64,
+   #65). A number or date is removed only when an identifier label (`courses.identifier_labels`, English and Dutch:
+   student number / nr. / ID / identification number, matriculation or registration number, date of birth, DOB,
+   SSN, BSN, studentnummer, stud.nr., geboortedatum, geboren (op), burgerservicenummer, …) anchors it:
+   - **same line:** the first number of 2+ digits (a letter prefix and digit groups such as "123 456 782" allowed),
+     date (numeric either way round; with a month name in English or Dutch, also abbreviated and with a 2-digit or
+     'YY year: 12-MAR-01, 2001-Mar-12, 12 maart '01; with an ordinal "12th"/"3rd of"; a Roman month 12.III.2001;
+     month and year "March 2001") or US SSN after the label, before the next label or, in a table row, the next
+     tab; in a **key/value row** ("Student number<TAB>512345") the value is the next cell (DECISIONS #67);
+   - **label on one line, value on the next:** a label with no number on its line takes the value that **leads**
+     the next non-empty line ("Student ID" / "S2034567", or a short "4123"); anything else first stops the import;
+   - **table label row, then value row:** a tab-separated pair is matched column by column ("Studentnummer
+     Opleiding  Geboortedatum" / "598431  56966 BSc …  12-03-2001": the middle column's programme code is kept);
+     without tabs (a PDF row) the k values must lead the next line, in order.
+   **Fail closed:** the value must be taken whole: a digit just before it; just after it, past separators, a digit,
+   a month word, a Roman month or 'YY (an unknown format such as "12/3 2001"); another number later in its segment
+   ("512345, previously 498765"); or a label whose value can't be found stops the import with "The document
+   mentions "<label>" on line <n>, but the app could not find its value to remove whole. Nothing was sent to
+   Claude. …"; nothing is sent to the model or written. A standalone 9-digit number is treated as a BSN, and
+   removed, only if it passes the 11-check; a US SSN shape (123-45-6789) is removed even without a label. Course codes, grades, credits and years are kept. Each removed value
+   becomes `courses.removed_marker` ("[removed]"). Stripping runs on the text before it is sent to
+   `/extract-courses` and again on every returned field (there, an unresolved label is left alone). The original
+   file's name (stored in the source header) loses every date pattern and every run of 6 or more digits, and is
+   kept on one line; the header's sha256 is written only if it is 64 hex digits.
+2. **Grades and credits are facts, anchored to their row** (DECISIONS #64, #65; stricter than "anywhere in the
+   text"). A row of the stripped text is the course's row when it holds the course's code **and** name (or, when
+   the code is on no line, its name on word boundaries, so "Mathematics I" doesn't match "Mathematics II"). The
+   grade is accepted only if its exact string stands on that row as a whole value **outside the row's own name,
+   code, term and one credits value** ("8" doesn't match "8,5"; "A" doesn't match "A-", "A+" or an initial "A.";
+   a grade equal to the credits "4", the year "2021" or "block 1" is not found; a real grade "6" with credits "6"
+   still is, since the row then holds 6 twice). The credits must stand on the row too, compared as numbers ("3",
+   "3.0", "3.00", "7,5" all equal 3 or 7.5). With a term, only rows that also hold it count ("Term not found on this
+   course's row" otherwise: a course taken twice has two rows). In a tab table under a heading row naming a grade or
+   credits column (`courses.grade_headings`, `credit_headings`), the grade must be that column's cell exactly and the
+   credits that column's number (DECISIONS #67). Otherwise
+   the row is flagged ("Grade not found in the document", "Credits not found on this course's row", "Course not
+   found in the document") and can't be accepted until the user corrects it. The same check is used by the app's
+   preview and the live grader. Known limit: a wrong grade that equals another value printed on that row (an
+   extra column) passes; the live eval also compares every grade with `expected.json`.
+3. **Scanned PDFs:** a PDF whose average non-space text per page is below `courses.min_pdf_text_per_page` is
+   refused: "This PDF has no text layer; OCR is not supported. Export it as text or Word, or paste the text."
