@@ -175,7 +175,10 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .chip-success, .status-submitted, .badge-verified { background: var(--color-success-bg); color: var(--color-success); }
 .badge-unverified { background: var(--color-urgent-bg); color: var(--color-urgent-text); border: 1px solid var(--color-urgent); }
 .badge-reason { font-weight: var(--weight-regular); }
-td .badge-unverified { white-space: normal; border-radius: var(--radius-button); }
+/* The reason is free text (docs/02 §3), so the badge wraps wherever it sits (tiles, alert, lists, cells) */
+.badge-unverified { white-space: normal; overflow-wrap: anywhere; border-radius: var(--radius-button); }
+/* In auto-layout tables, anywhere would shrink the column's minimum width to one character */
+td .badge-unverified { overflow-wrap: break-word; }
 .chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 
 /* Deadline provenance component */

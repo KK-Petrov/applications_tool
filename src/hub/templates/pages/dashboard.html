@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_time.html" import deadline, countdown_chip with context %}
+{% from "_badge.html" import data_badge with context %}
 {% block content %}
 {% set t = board.tiles %}
 {% if board.alert %}
@@ -12,8 +13,8 @@
     {%- else -%}{{ s.programme.short_name }} deadline: {{ s.countdown.label }}{%- endif -%}
   </h2>
   <p class="alert-detail">
-    {% if a.kind.value == "letters" %}{{ a.letters_required }} letters needed, {{ a.letters_confirmed }} confirmed{% if a.letters_assumed %} (number assumed){% endif %} · deadline {{ deadline(s.deadline) }}
-    {% else %}{{ deadline(s.deadline) }} · requirements {{ s.requirements[0] }} / {{ s.requirements[1] }} done{% endif %}
+    {% if a.kind.value == "letters" %}{{ a.letters_required }} letters needed, {{ a.letters_confirmed }} confirmed{% if a.letters_assumed %} (number assumed){% endif %} · deadline {{ deadline(s.deadline) }}{% if s.badge.unverified %} {{ data_badge(s.badge) }}{% endif %}
+    {% else %}{{ deadline(s.deadline) }}{% if s.badge.unverified %} {{ data_badge(s.badge) }}{% endif %} · requirements {{ s.requirements[0] }} / {{ s.requirements[1] }} done{% endif %}
     · <a href="/programmes/{{ s.programme.id }}">Open {{ s.programme.short_name }}</a>
   </p>
 </section>
@@ -24,7 +25,7 @@
     <h2 class="tile-label">Next deadline</h2>
     {% if t.next_deadline %}
     <p class="tile-value mono">{{ t.next_deadline.countdown.label }}</p>
-    <p class="tile-sub">{{ t.next_deadline.programme.short_name }} · {{ deadline(t.next_deadline.deadline) }}</p>
+    <p class="tile-sub">{{ t.next_deadline.programme.short_name }} · {{ deadline(t.next_deadline.deadline) }}{% if t.next_deadline.badge.unverified %} {{ data_badge(t.next_deadline.badge) }}{% endif %}</p>
     {% else %}<p class="tile-value">Nothing due</p>{% endif %}
   </div>
   <div class="tile">

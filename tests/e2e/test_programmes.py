@@ -13,6 +13,8 @@ import pytest
 from playwright.sync_api import Page, expect
 from ruamel.yaml import YAML
 
+from hub.rules.programmes import NOT_CHECKED_REASON
+
 pytestmark = pytest.mark.e2e
 
 PROGRAMMES = ["princeton-mfin", "mit-sloan-mfin", "booth-mif", "columbia-msfe"]
@@ -99,6 +101,132 @@ def test_provenance_unverified_is_marked_with_reason(page: Page, live_server: st
         expect(badge).to_be_visible()
         expect(badge).to_contain_text("Unverified")
         expect(badge).to_contain_text(reason)
+
+
+# The smallest element around a deadline that also holds an Unverified badge must not hold another
+# programme's deadline: otherwise the badge belongs to something else (e.g. a table row lower down).
+_BADGE_SCOPE_JS = """
+(el) => {
+  const pid = el.dataset.deadline.split(":")[0];
+  for (let node = el.parentElement; node; node = node.parentElement) {
+    if (node.querySelector(".badge-unverified")) {
+      const others = [...node.querySelectorAll("[data-deadline]")]
+        .filter((d) => d.dataset.deadline.split(":")[0] !== pid);
+      if (others.length) return null;
+      return [...node.querySelectorAll(".badge-unverified")].map((b) => b.textContent);
+    }
+  }
+  return null;
+}
+"""
+
+
+def test_provenance_every_unverified_deadline_has_its_badge(
+    page: Page, live_server: str, data_dir: Path
+) -> None:
+    """Rule 11 / C-1-01: next to every unverified programme's deadline sits a badge with that programme's
+    reason (2b ui review rounds 4-6: the generate checklist, then the dashboard alert strip and Next deadline
+    tile, printed one with no badge beside it). Pages: _pages() plus the Add and Edit professor forms."""
+    reasons = {}
+    for pid in PROGRAMMES:
+        raw = YAML(typ="safe").load((data_dir / "programmes" / f"{pid}.yaml").read_text(encoding="utf-8"))
+        if raw["verification"] != "verified":
+            reasons[pid] = raw.get("verification_note") or NOT_CHECKED_REASON
+    assert reasons, "the fixture should have unverified programmes"
+    pages = _pages(live_server) + [
+        live_server + "/recommenders/new",
+        live_server + "/recommenders/jansen/edit",
+    ]
+    missing = []
+    for url in pages:
+        page.goto(url, wait_until="domcontentloaded")
+        deadlines = page.locator("main [data-deadline]")
+        for i in range(deadlines.count()):
+            el = deadlines.nth(i)
+            key = el.get_attribute("data-deadline") or ""
+            pid = key.split(":")[0]
+            if pid not in reasons:
+                continue
+            badges = el.evaluate(_BADGE_SCOPE_JS)
+            if not badges or not any(reasons[pid] in text for text in badges):
+                missing.append(f"{url.removeprefix(live_server)}: {key} (badges: {badges})")
+    assert not missing, "unverified deadlines without their badge beside them: " + "; ".join(missing)
+
+
+LONG_NOTE = (
+    "Taken from a forum post about last year's cycle; the admissions office has not replied to my email"
+)
+
+URL_NOTE = "https://example.com/admissions/faq/deadlines-for-the-2027-entry-cycle-not-yet-confirmed"
+
+# The smallest box around each badge that it must stay inside: the tile or the alert on the dashboard.
+_BADGE_OVERFLOW_JS = """
+() => [...document.querySelectorAll(".tile .badge-unverified, .alert .badge-unverified")].map((b) => {
+  const box = b.closest(".tile, .alert");
+  const style = getComputedStyle(box);
+  const inner = box.getBoundingClientRect().right - parseFloat(style.paddingRight);
+  return b.getBoundingClientRect().right - inner;
+})
+"""
+
+
+@pytest.mark.parametrize("viewport", [(1280, 720), (1100, 720), (760, 900), (390, 844)])
+@pytest.mark.parametrize(
+    "note", ["Researched, not checked", "Deadline changed, not checked", LONG_NOTE, URL_NOTE]
+)
+def test_unverified_badge_wraps_inside_its_tile_and_alert(
+    page: Page, live_server: str, data_dir: Path, note: str, viewport: tuple[int, int]
+) -> None:
+    """2b ui review round 6: the chip could not wrap, so longer reasons (docs/02 §3; free-text notes) spilled
+    out of the Next deadline tile and the alert, and a long note scrolled the whole page at 390 px."""
+    path = data_dir / "programmes" / "princeton-mfin.yaml"
+    text = path.read_text(encoding="utf-8")
+    assert "verification_note: Last cycle's date" in text
+    path.write_text(
+        text.replace("verification_note: Last cycle's date", f'verification_note: "{note}"'), "utf-8"
+    )
+    page.set_viewport_size({"width": viewport[0], "height": viewport[1]})
+    for url in ("/", "/recommenders?selected=jansen", "/recommenders/new"):
+        page.goto(live_server + url, wait_until="domcontentloaded")
+        expect(page.locator("main .badge-unverified").first).to_contain_text(note)
+        if url == "/":
+            overflow = page.evaluate(_BADGE_OVERFLOW_JS)
+            assert len(overflow) >= 2, "expected the badge in the alert and the Next deadline tile"
+            assert max(overflow) <= 0.5, f"badge sticks out of its box by {max(overflow):.0f} px"
+        widths = page.evaluate("[document.documentElement.scrollWidth, document.documentElement.clientWidth]")
+        assert widths[0] <= widths[1], f"{url}: page scrolls sideways ({widths[0]} > {widths[1]})"
+
+
+# Lines taken by the word "Unverified" (the badge's first text node) in each badge on the page.
+_UNVERIFIED_WORD_LINES_JS = """
+() => [...document.querySelectorAll("main .badge-unverified")].map((b) => {
+  const range = document.createRange();
+  range.selectNodeContents(b.firstChild);
+  return range.getClientRects().length;
+})
+"""
+
+
+@pytest.mark.parametrize("viewport", [(1280, 720), (1100, 720), (760, 900), (390, 844)])
+@pytest.mark.parametrize("note", [None, LONG_NOTE, URL_NOTE])
+def test_unverified_badge_never_breaks_inside_a_word_in_the_table(
+    page: Page, live_server: str, data_dir: Path, note: str | None, viewport: tuple[int, int]
+) -> None:
+    """2b ui review round 7: a global overflow-wrap: anywhere let the auto-layout table squeeze the column
+    to one character, so the badge printed one letter per line on / and /programmes."""
+    if note:
+        path = data_dir / "programmes" / "princeton-mfin.yaml"
+        text = path.read_text(encoding="utf-8")
+        assert "verification_note: Last cycle's date" in text
+        path.write_text(
+            text.replace("verification_note: Last cycle's date", f'verification_note: "{note}"'), "utf-8"
+        )
+    page.set_viewport_size({"width": viewport[0], "height": viewport[1]})
+    for url in ("/", "/programmes"):
+        page.goto(live_server + url, wait_until="domcontentloaded")
+        lines = page.evaluate(_UNVERIFIED_WORD_LINES_JS)
+        assert len(lines) >= 4, f"{url}: expected a badge per programme row"
+        assert max(lines) == 1, f"{url}: the word Unverified is broken over {max(lines)} lines"
 
 
 def test_provenance_time_to_verify_and_school_original(page: Page, live_server: str) -> None:
