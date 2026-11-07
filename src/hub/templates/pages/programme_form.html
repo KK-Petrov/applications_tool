@@ -41,6 +41,14 @@
 {%- endmacro %}
 
 {% block content %}
+{% if existing is none %}
+<section class="card research-card" aria-labelledby="research-title">
+  <h2 id="research-title">Research it instead</h2>
+  <p>Let Claude Code fill the programme from the school's own pages, with a source for every value.</p>
+  {% include "partials/research_start.html" %}
+</section>
+<h2 class="form-heading">Or add it by hand</h2>
+{% endif %}
 {% set f = state.fields %}
 <form id="programme-form" class="programme-form" method="post" action="{{ action }}">
   {% if state.errors %}

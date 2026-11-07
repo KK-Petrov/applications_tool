@@ -420,3 +420,35 @@ fieldset.tone legend { font-weight: var(--weight-medium); padding: 0; }
 .usage-totals .total-row th, .usage-totals .total-row td { font-weight: var(--weight-semibold); }
 table.usage td:first-child, table.usage td:nth-child(4), table.usage td:nth-child(5) { white-space: nowrap; }
 table.usage td:nth-child(3) { min-width: 220px; }  /* "For" keeps room on phones; the table scrolls in its region */
+
+/* Programme research and re-research (docs/03 §4.2, docs/04 §7; Phase 2c) */
+.research-card { margin-bottom: 16px; }
+.research-start { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 12px 16px; align-items: start; }
+.research-start .research-actions { grid-column: 1 / -1; }
+.research-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 12px; }
+.working-note { color: var(--color-text-secondary); }
+.inline-form .working-note:empty { display: none; }
+.form-heading { margin: 24px 0 8px; }
+.research-domains textarea { font-family: var(--font-mono); }
+.research-table th[scope="row"] { text-align: left; font-weight: var(--weight-medium); white-space: nowrap; }
+.research-table td, .research-table th { vertical-align: top; }
+.research-table .source-link, .source-url { overflow-wrap: anywhere; }
+.research-table .sub { color: var(--color-text-secondary); font-size: var(--font-size-small); white-space: pre-line; }
+.not-found { background: var(--color-urgent-bg); color: var(--color-urgent-text); border-radius: var(--radius-button); padding: 2px 6px; }
+.refusal { color: var(--color-danger); font-weight: var(--weight-medium); margin-top: 4px; }
+tr.refused { background: var(--color-danger-bg); }
+.muted { color: var(--color-text-muted); }
+.source-list li { margin: 4px 0; }
+.source-url { color: var(--color-text-secondary); font-size: var(--font-size-small); }
+.research-warnings { background: var(--color-info-bg); color: var(--color-info); border-radius: var(--radius-card); padding: 12px 16px; margin: 0 0 16px; }
+.research-warnings h2, .research-warnings h3 { margin: 0 0 4px; font-size: var(--font-size-body); }
+.research-warnings ul { margin: 0; padding-left: 20px; }
+fieldset.research-deadline { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-card); padding: 12px 16px; margin: 0 0 12px; }
+fieldset.research-deadline legend { font-weight: var(--weight-semibold); padding: 0 4px; }
+.kind-new { background: var(--color-info-bg); color: var(--color-info); }
+.kind-changed { background: var(--color-urgent-bg); color: var(--color-urgent-text); }
+.kind-unchanged { background: var(--color-neutral-bg); color: var(--color-neutral); }
+.kind-kept { background: var(--color-neutral-bg); color: var(--color-text-secondary); }
+@media (max-width: 760px) {
+  .research-start { grid-template-columns: 1fr; }
+}

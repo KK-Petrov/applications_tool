@@ -252,3 +252,141 @@ def check_usage_log(path: Path, root: Path) -> Path:
     if resolved != base and base not in resolved.parents:
         raise UsageLogOutsideTmp(f"AI usage log {resolved} is outside the test's tmp_path {base}")
     return path
+
+
+# ---- research (Phase 2c): invented skill outputs for the fake Claude Code -------------------------------
+
+NO_OFFICIAL_SOURCE = "No official source found"
+EXAMPLE_SRC = "https://grad.example.edu/msqf"
+EXAMPLE_DEADLINES_SRC = "https://www.example.edu/admissions/deadlines"
+
+
+def sourced(value: Any, url: str | None, note: str | None = None) -> dict[str, Any]:
+    """One researched field: its value, the official page it came from, and an optional note."""
+    return {"value": value, "source_url": url, "note": note}
+
+
+def not_found() -> dict[str, Any]:
+    return sourced(None, None, NO_OFFICIAL_SOURCE)
+
+
+def research_output(**overrides: Any) -> dict[str, Any]:
+    """A complete, valid /research-programme output for an invented programme on example.edu."""
+    out: dict[str, Any] = {
+        "verification": "unverified",
+        "official_domains": ["example.edu"],
+        "sources": [
+            {"url": EXAMPLE_SRC, "title": "MS in Quantitative Finance, Example University"},
+            {"url": EXAMPLE_DEADLINES_SRC, "title": "Admissions deadlines, Example University"},
+        ],
+        "name": sourced("Example University Master of Science in Quantitative Finance", EXAMPLE_SRC),
+        "short_name": sourced("Example MSQF", EXAMPLE_SRC),
+        "school": sourced("Example University", EXAMPLE_SRC),
+        "unit": sourced("Example School of Business", EXAMPLE_SRC),
+        "aliases": sourced(["Example University", "Example Business School"], EXAMPLE_SRC),
+        "portal_url": sourced("https://apply.example.edu/msqf", EXAMPLE_SRC),
+        "deadlines": [
+            {
+                "id": None,
+                "label": "Round 1",
+                "due_local": "2027-01-05T17:00",
+                "tz": "America/New_York",
+                "time_known": True,
+                "source_url": EXAMPLE_DEADLINES_SRC,
+            }
+        ],
+        "letters_required": sourced(2, EXAMPLE_SRC),
+        "letters_note": sourced("One letter should be academic", EXAMPLE_SRC),
+        "requirements": [
+            {"id": None, "label": "Resume", "note": None, "source_url": EXAMPLE_SRC},
+            {"id": None, "label": "Two letters of recommendation", "note": None, "source_url": EXAMPLE_SRC},
+        ],
+        "essays": [
+            {
+                "id": None,
+                "title": "Statement of purpose",
+                "prompt": "Why this programme, and why now?",
+                "word_limit": 500,
+                "source_url": EXAMPLE_SRC,
+            }
+        ],
+        "curriculum_summary": sourced("Three semesters of quantitative finance", EXAMPLE_SRC),
+        "curriculum_courses": [
+            {"name": "Stochastic Calculus for Finance", "description": None, "source_url": EXAMPLE_SRC}
+        ],
+        "ai_policy": not_found(),
+        "fee": {"amount": 100, "currency": "USD", "note": None, "source_url": EXAMPLE_SRC},
+        "warnings": [],
+    }
+    out.update(overrides)
+    return out
+
+
+def mirror_output(programme: Any, src: str) -> dict[str, Any]:
+    """A /research-programme output that states exactly what ``programme`` already stores (every field
+    "unchanged"), citing ``src`` for fields without their own source. Tests then change one thing."""
+    p = programme
+    return {
+        "verification": "unverified",
+        "official_domains": list(p.official_domains),
+        "sources": [{"url": s.url, "title": s.title} for s in p.sources],
+        "name": sourced(p.name, src),
+        "short_name": sourced(p.short_name, src),
+        "school": sourced(p.school, src),
+        "unit": sourced(p.unit, src) if p.unit else not_found(),
+        "aliases": sourced(list(p.aliases), src) if p.aliases else not_found(),
+        "portal_url": sourced(p.portal_url, src) if p.portal_url else not_found(),
+        "deadlines": [
+            {
+                "id": d.id,
+                "label": d.label,
+                "due_local": d.due_local.strftime("%Y-%m-%dT%H:%M"),
+                "tz": d.tz,
+                "time_known": d.time_known,
+                "source_url": d.source_url,
+            }
+            for d in p.deadlines
+        ],
+        "letters_required": sourced(p.letters_required, src)
+        if p.letters_required is not None
+        else not_found(),
+        "letters_note": sourced(p.letters_note, src) if p.letters_note else not_found(),
+        "requirements": [
+            {"id": r.id, "label": r.label, "note": r.note, "source_url": src} for r in p.requirements
+        ],
+        "essays": [
+            {"id": e.id, "title": e.title, "prompt": e.prompt, "word_limit": e.word_limit, "source_url": src}
+            for e in p.essays
+        ],
+        "curriculum_summary": sourced(p.curriculum.summary, src) if p.curriculum.summary else not_found(),
+        "curriculum_courses": [
+            {"name": c.name, "description": c.description, "source_url": src} for c in p.curriculum.courses
+        ],
+        "ai_policy": sourced(p.ai_policy.text, p.ai_policy.source_url) if p.ai_policy.text else not_found(),
+        "fee": {
+            "amount": p.fee.amount,
+            "currency": p.fee.currency,
+            "note": p.fee.note,
+            "source_url": src if p.fee.amount is not None else None,
+        },
+        "warnings": [],
+    }
+
+
+def write_recording(folder: Path, output: dict[str, Any], name: str = "research.json") -> Path:
+    """A CLI result whose ``structured_output`` is ``output``, for ``FAKE_CLAUDE_RECORDING``."""
+    path = folder / name
+    result = {
+        "type": "result",
+        "subtype": "success",
+        "is_error": False,
+        "num_turns": 9,
+        "duration_ms": 61000,
+        "result": "",
+        "total_cost_usd": 0.4,
+        "permission_denials": [],
+        "structured_output": output,
+        "session_id": "00000000-0000-4000-8000-000000000000",
+    }
+    path.write_text(json.dumps(result), encoding="utf-8")
+    return path

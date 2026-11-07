@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{#- Research a programme (US-16) and the domains step of re-research (US-18); docs/04 §7.
+    mode: start (query) · domains (confirm official domains) · preview (sources, nulls, deadlines, Save). -#}
+{% block before_title %}
+<nav class="breadcrumb" aria-label="Breadcrumb"><a href="/programmes">Programmes</a> <span aria-hidden="true">›</span>
+  {%- if target %} <a href="/programmes/{{ target.id }}">{{ target.short_name }}</a> <span aria-hidden="true">›</span> <span aria-current="page">Re-research</span>
+  {%- else %} <span aria-current="page">Research a programme</span>{% endif %}</nav>
+{% endblock %}
+{% block content %}
+{% if error %}<div class="form-error" role="alert" tabindex="-1" id="research-error"><p>{{ error }}</p></div>{% endif %}
+
+{% if mode == "start" %}
+<section class="card">
+  <p>Claude Code searches the school's own pages and proposes the programme with a source for every value. You confirm the school's domains, review the result, then save it. It stays <strong>Unverified</strong> until you check it against the sources.</p>
+  {% include "partials/research_start.html" %}
+</section>
+
+{% elif mode == "domains" %}
+<form method="post" action="{{ action }}" id="research-domains" class="card research-domains">
+  <h2>Confirm the official domains</h2>
+  <p>Only pages on these domains, or their subdomains, count as official sources{% if config_shared %} (plus {{ config_shared | join(", ") }}){% endif %}. Check that each one is the school's own domain before the sources are checked.</p>
+  {% if domain_problems %}
+  <div class="form-error" role="alert" id="domain-problems"><h2>Please fix:</h2>
+    <ul>{% for m in domain_problems %}<li>{{ m }}</li>{% endfor %}</ul></div>
+  {% endif %}
+  <input type="hidden" name="step" value="check">
+  <input type="hidden" name="proposal" value="{{ proposal_json }}">
+  <div class="field">
+    <label for="research-domains-input">Official domains</label>
+    <textarea id="research-domains-input" name="domains" rows="3" aria-describedby="research-domains-hint"{% if domain_problems %} aria-invalid="true"{% endif %}>
+{{ domains_text }}</textarea>
+    <span class="hint" id="research-domains-hint">One per line, e.g. princeton.edu. A bare suffix such as edu is not accepted.</span>
+  </div>
+  {% if warnings %}
+  <div class="research-warnings"><h3>Notes from research</h3><ul>{% for w in warnings %}<li>{{ w }}</li>{% endfor %}</ul></div>
+  {% endif %}
+  <div class="research-actions"><button class="button button-primary" type="submit">Check sources</button></div>
+</form>
+
+{% elif mode == "preview" %}
+{% if proposal.problems %}
+<div class="form-error" role="alert" id="research-problems">
+  <h2>Save is blocked until these are fixed:</h2>
+  <ul>{% for m in proposal.problems %}<li>{{ m }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+<p class="note">Everything here is <strong>Unverified</strong> (researched, not checked) until you check it against its source and press <strong>Mark verified</strong> on the programme page. Official domains: <span class="mono">{{ proposal.domains | join(", ") }}</span>.</p>
+<section class="card" aria-labelledby="found-title">
+  <h2 id="found-title">What research found</h2>
+  <div class="table-scroll" tabindex="0" role="region" aria-labelledby="found-title">
+  <table class="table research-table">
+    <thead><tr><th scope="col">Field</th><th scope="col">Value</th><th scope="col">Source</th></tr></thead>
+    <tbody>
+    {% for f in proposal.fields %}
+      {% set refusal = proposal.refused.get(f.key) %}
+      <tr{% if refusal %} class="refused"{% endif %}>
+        <th scope="row">{{ f.label }}</th>
+        <td>{% if f.filled %}{{ f.value }}{% if f.note %}<div class="sub">{{ f.note }}</div>{% endif %}
+            {%- else %}<span class="not-found">{{ f.note or no_official_source }}</span>{% endif %}</td>
+        <td>{% if f.source_url %}<a class="source-link" href="{{ f.source_url }}" target="_blank" rel="noopener noreferrer">{{ f.source_url }}</a>{% else %}<span class="muted">No source</span>{% endif %}
+            {%- if refusal %}<div class="refusal">{{ refusal }}</div>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <h3>Sources cited</h3>
+  <ul class="plain source-list">
+  {% for s in proposal.output.sources %}
+    {% set refusal = proposal.refused.get("source:" ~ loop.index0) %}
+    <li><a class="source-link" href="{{ s.url }}" target="_blank" rel="noopener noreferrer">{{ s.title }}</a> <span class="mono source-url">{{ s.url }}</span>{% if refusal %}<div class="refusal">{{ refusal }}</div>{% endif %}</li>
+  {% else %}
+    <li class="muted">No sources listed.</li>
+  {% endfor %}
+  </ul>
+  {% if proposal.output.warnings %}
+  <div class="research-warnings"><h3>Notes from research</h3><ul>{% for w in proposal.output.warnings %}<li>{{ w }}</li>{% endfor %}</ul></div>
+  {% endif %}
+</section>
+
+<form method="post" action="/programmes/research/save" id="research-save" class="card">
+  <input type="hidden" name="proposal" value="{{ proposal_json }}">
+  <input type="hidden" name="domains" value="{{ proposal.domains | join(' ') }}">
+  <h2>Deadlines</h2>
+  <p class="hint">A deadline needs its time zone and an official source. Leave the time empty if the page gives none (it is then marked "time to verify"). After changing a deadline, press <strong>Check again</strong>.</p>
+  {% for d in deadlines %}
+  {% set i = loop.index0 %}
+  <fieldset class="row research-deadline">
+    <legend>Deadline {{ loop.index }}</legend>
+    <div class="field"><label for="deadline-{{ i }}-label">Label</label><input id="deadline-{{ i }}-label" name="deadline-{{ i }}-label" type="text" value="{{ d.label }}"></div>
+    <div class="field"><label for="deadline-{{ i }}-date">Date</label><input id="deadline-{{ i }}-date" name="deadline-{{ i }}-date" type="date" value="{{ d.date }}"></div>
+    <div class="field"><label for="deadline-{{ i }}-time">Time</label><input id="deadline-{{ i }}-time" name="deadline-{{ i }}-time" type="time" value="{{ d.time }}"></div>
+    <div class="field"><label for="deadline-{{ i }}-tz">Time zone</label><input id="deadline-{{ i }}-tz" name="deadline-{{ i }}-tz" type="text" list="research-zones" value="{{ d.tz }}"></div>
+    <div class="field field-check"><input id="deadline-{{ i }}-time_known" name="deadline-{{ i }}-time_known" type="checkbox"{% if d.time_known %} checked{% endif %}><label for="deadline-{{ i }}-time_known">Time stated on the page</label></div>
+    <div class="field field-wide"><label for="deadline-{{ i }}-source_url">Source URL</label><input id="deadline-{{ i }}-source_url" name="deadline-{{ i }}-source_url" type="text" inputmode="url" value="{{ d.source_url }}"></div>
+  </fieldset>
+  {% endfor %}
+  <datalist id="research-zones">{% for z in all_zones %}<option value="{{ z }}">{% endfor %}</datalist>
+  <div class="research-actions">
+    <button class="button button-primary" type="submit"{% if not proposal.can_save %} disabled aria-describedby="research-problems"{% endif %}>Save programme</button>
+    <button class="button button-secondary" type="submit" formaction="/programmes/research" name="step" value="check">Check again</button>
+  </div>
+</form>
+{% endif %}
+{% endblock %}

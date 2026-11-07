@@ -463,6 +463,17 @@ class Store:
     def save_programme(self, programme: Programme) -> bool:
         return self._save(self.data_dir / PROGRAMMES_DIR / f"{programme.id}.yaml", programme)
 
+    def create_programme(self, programme: Programme) -> None:
+        """Write a new programme file (a researched programme), never over an existing one."""
+        self._create(self.data_dir / PROGRAMMES_DIR, programme.id, programme)
+
+    def programme_digest(self, programme_id: str) -> str:
+        """sha256 of the programme file's exact bytes: re-research refuses to save over a file that
+        changed since its comparison was shown."""
+        return hashlib.sha256(
+            self._read_bytes(self.data_dir / PROGRAMMES_DIR / f"{programme_id}.yaml")
+        ).hexdigest()
+
     # ---- professors ------------------------------------------------------------------------------
 
     def load_professor(self, path: Path) -> Professor:
@@ -480,14 +491,17 @@ class Store:
         return self._save(self.data_dir / PROFESSORS_DIR / f"{professor.id}.yaml", professor)
 
     def create_professor(self, professor: Professor) -> None:
-        """Write a new professor file, never over an existing one (Add and CSV import).
+        """Write a new professor file, never over an existing one (Add and CSV import)."""
+        self._create(self.data_dir / PROFESSORS_DIR, professor.id, professor)
+
+    def _create(self, folder: Path, item_id: str, model: BaseModel) -> None:
+        """Write ``<folder>/<item_id>.yaml`` only if no file of that name exists.
 
         The check ignores case, because Windows treats ``Lee.yaml`` and ``lee.yaml`` as one file, and it
         runs under a lock with the write, so two concurrent creates cannot pick the same file.
         """
-        folder = self.data_dir / PROFESSORS_DIR
         with _CREATE_LOCK:
-            name = f"{professor.id}.yaml".casefold()
+            name = f"{item_id}.yaml".casefold()
             existing = [p for p in folder.glob("*") if p.name.casefold() == name] if folder.is_dir() else []
             if existing:
                 raise DataError(
@@ -495,7 +509,7 @@ class Store:
                     None,
                     "already exists; nothing was written",
                 )
-            self._save(folder / f"{professor.id}.yaml", professor)
+            self._save(folder / f"{item_id}.yaml", model)
 
     # ---- biography -------------------------------------------------------------------------------
 

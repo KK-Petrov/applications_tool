@@ -50,6 +50,12 @@
   {% set rows = board.rows %}{% include "_programme_table.html" %}
 </section>
 
+<section class="card research-card" aria-labelledby="research-title">
+  <h2 id="research-title">Add a programme</h2>
+  <p>Research it from the school's own pages, or <a href="/programmes/new">add it by hand</a>.</p>
+  {% include "partials/research_start.html" %}
+</section>
+
 <section class="card" aria-labelledby="upcoming-title">
   <h2 id="upcoming-title">Upcoming reminders</h2>
   <p class="empty">Reminders arrive in Phase 3.</p>

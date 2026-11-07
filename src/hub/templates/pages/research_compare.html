@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{#- Re-research comparison (US-18; docs/04 §7.1): each field new / changed / unchanged / kept with its source;
+    Accept boxes start unticked; nothing is written until "Save accepted changes". -#}
+{% block before_title %}
+<nav class="breadcrumb" aria-label="Breadcrumb"><a href="/programmes">Programmes</a> <span aria-hidden="true">›</span> <a href="/programmes/{{ p.id }}">{{ p.short_name }}</a> <span aria-hidden="true">›</span> <span aria-current="page">Re-research</span></nav>
+{% endblock %}
+{% block content %}
+{% if error %}<div class="form-error" role="alert" tabindex="-1" id="research-error"><p>{{ error }}</p></div>{% endif %}
+{% if notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
+{% if refused %}
+<div class="form-error" role="alert" id="research-refused">
+  <h2>These rows can't be accepted (their source is not official):</h2>
+  <ul>{% for m in refused %}<li>{{ m }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+<p class="note">Tick the changes to keep; nothing is saved until you press <strong>Save accepted changes</strong>. An accepted change to a deadline's date, time, zone or source marks that deadline unverified; any other accepted change marks the programme unverified (researched, not checked). Research never removes what you have stored.</p>
+{% if warnings %}
+<div class="research-warnings"><h2>Notes from research</h2><ul>{% for w in warnings %}<li>{{ w }}</li>{% endfor %}</ul></div>
+{% endif %}
+
+<form method="post" action="/programmes/{{ p.id }}/research/apply" id="research-apply" class="card">
+  <input type="hidden" name="proposal" value="{{ proposal_json }}">
+  <input type="hidden" name="domains" value="{{ domains_text.split() | join(' ') }}">
+  <input type="hidden" name="digest" value="{{ digest }}">
+  <h2 id="compare-title">Comparison with your stored data</h2>
+  <div class="table-scroll" tabindex="0" role="region" aria-labelledby="compare-title">
+  <table class="table research-table compare-table">
+    <thead><tr><th scope="col">Field</th><th scope="col">Result</th><th scope="col">Stored</th><th scope="col">Research found</th><th scope="col">Source</th><th scope="col">Accept</th></tr></thead>
+    <tbody>
+    {% for c in changes %}
+      <tr data-change="{{ c.id }}" data-kind="{{ c.kind }}"{% if c.refused %} class="refused"{% endif %}>
+        <th scope="row">{{ c.label }}</th>
+        <td><span class="chip kind-{{ c.kind }}">{{ kinds[c.kind] }}</span></td>
+        <td>{{ c.old if c.old is not none else "—" }}</td>
+        <td>{% if c.new is not none %}{{ c.new }}{% elif c.kind == "kept" %}<span class="not-found">{{ no_official_source }}</span>{% else %}—{% endif %}</td>
+        <td>{% if c.source_url %}<a class="source-link" href="{{ c.source_url }}" target="_blank" rel="noopener noreferrer">{{ c.source_url }}</a>{% else %}<span class="muted">No source</span>{% endif %}
+            {%- if c.refused %}<div class="refusal">{{ c.refused }}</div>{% endif %}</td>
+        <td>{% if c.acceptable %}<span class="field-check"><input type="checkbox" name="accept" value="{{ c.id }}" id="accept-{{ loop.index }}"><label for="accept-{{ loop.index }}">Accept<span class="visually-hidden"> {{ c.label }}</span></label></span>
+            {%- elif c.refused %}<span class="muted">Can't accept</span>{% else %}<span class="muted">Nothing to accept</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="research-actions"><button class="button button-primary" type="submit">Save accepted changes</button>
+    <a class="button button-secondary" href="/programmes/{{ p.id }}">Cancel</a></div>
+</form>
+
+<form method="post" action="/programmes/{{ p.id }}/research" id="research-recheck" class="card research-domains">
+  <h2>Official domains</h2>
+  <input type="hidden" name="step" value="check">
+  <input type="hidden" name="proposal" value="{{ proposal_json }}">
+  <div class="field">
+    <label for="research-recheck-domains">Domains used for this comparison</label>
+    <textarea id="research-recheck-domains" name="domains" rows="2" aria-describedby="research-recheck-hint">
+{{ domains_text }}</textarea>
+    <span class="hint" id="research-recheck-hint">One per line. Change them and press Check again to redo the comparison (no new research).</span>
+  </div>
+  <div class="research-actions"><button class="button button-secondary" type="submit">Check again</button></div>
+</form>
+{% endblock %}

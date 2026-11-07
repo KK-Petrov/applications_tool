@@ -23,8 +23,16 @@ Command (argv list, never a shell string), locked down (DECISIONS #47):
   --tools "{the skill's tools, e.g. WebSearch,WebFetch; empty for rec-email}" \
   --disallowedTools "{every other tool: Bash, PowerShell, Edit, Write, Read, …}" \
   --strict-mcp-config --settings '{"disableAllHooks": true}' --no-session-persistence \
-  --max-turns {claude.max_turns}
+  --max-turns {claude.max_turns, or claude.research_max_turns for a skill with web tools} \
+  --allowedTools "{the skill's tools; the flag is left out for a skill without tools}"
 ```
+`dontAsk` denies every tool that isn't approved, even one listed in `--tools`, so a skill's own tools (and only
+those) are approved by name with `--allowedTools`. Skills that browse need many dependent turns, so they get
+`claude.research_max_turns` (40). Both were proved live in Phase 2c (DECISIONS #61): without `--allowedTools`,
+WebSearch and WebFetch were denied; a cap of 2 stopped four dependent fetches (`error_max_turns`); under these
+flags the session had only WebSearch, WebFetch and StructuredOutput, and a control run without the lockdown
+did run its shell command and write its file (`uv run python tasks.py live tests/test_claude_live.py -k
+"web_tools or web_turn"`).
 No settings file applies to these calls (not the project's `.claude/settings.json`), so project skills
 don't load either: the skill reaches the model as its SKILL.md (`--append-system-prompt-file`). The Phase 2b
 live check proved that a call can't run a command or write a file, and that a control run without these
@@ -260,6 +268,33 @@ Any other source is refused at preview with a message naming the field, and Save
 first shows the proposed `official_domains` for the user to confirm or edit; only then do the checks run.
 Save is also blocked until a deadline with `tz` and `source_url` exists (DECISIONS #13).
 
+**Payload: programme data only** (the call has web tools, so fetched pages could steer it): new research sends
+exactly `{query, url, today}`, re-research `{programme_id, current, today}` with `current` the stored programme
+file; no biography, professor, course or settings data (`hub.research.research_payload` /
+`reresearch_payload`, pinned by tests/test_research_payloads.py). Turn cap `claude.research_max_turns`, timeout
+`claude.research_timeout_s`; `--allowedTools WebSearch,WebFetch` (§1.1, DECISIONS #61).
+
+**Output** (`src/hub/ai/schemas/research_programme.json`, DECISIONS #62): `verification` (only `"unverified"`),
+`official_domains`, `sources: [{url, title}]`, `warnings`, and the fields below. A one-value field is
+`{"value", "source_url", "note"}`: `name`, `short_name`, `school`, `unit`, `aliases` (a list), `portal_url`,
+`letters_required` (integer), `letters_note`, `curriculum_summary`, `ai_policy` (the policy text). List items
+carry their own `source_url`: `deadlines: [{id, label, due_local, tz, time_known, source_url}]`,
+`requirements: [{id, label, note}]`, `essays: [{id, title, prompt, word_limit}]`,
+`curriculum_courses: [{name, description}]`; `fee` is `{amount, currency, note, source_url}`. Research does
+not fill steps, documents or interviews (the owner's own workflow). `id` is null for a new item and the stored
+id for the same item on re-research.
+
+**Checks in Python** (`src/hub/research.py`, rule 13): a filled field without a source, or with a source not on
+the confirmed domains, is refused naming it (`"Deadline 1 · Source URL: example-aggregator.com is not an official
+source"`, `"Source 3 · URL: …"`); a URL with userinfo, an IP address or a scheme other than http(s) is never
+official. Confirmed domains are lower-cased and deduplicated; a single-label name (`edu`) or a public suffix
+(`ac.uk`, `edu.au`, `github.io`; offline list from the `publicsuffixlist` package) is refused. Name, short name
+and school are required; deadlines are checked like the form (zone, date and time). The new programme is
+written with `Store.create_programme` (never over an existing file; a taken id gets `-2`): `verification:
+unverified`, `verification_note: "Researched, not checked"`, every deadline unverified, `sources` = the cited
+pages with `checked` = today, and "No official source found" in `letters_note` / `fee.note` when that value
+is null.
+
 ### 7.1 Re-research
 Input: `{"programme_id": "...", "current": {stored programme}, "today": "YYYY-MM-DD"}`. The "Re-research" button
 on a programme page runs the skill for that programme; the app shows a field-by-field comparison with the
@@ -269,6 +304,16 @@ deadline's date, time, zone or source reset that deadline to unverified (DECISIO
 sets `verified`. A programme without `official_domains` gets them prefilled from the hosts of its stored
 source URLs, and the user confirms them before the comparison runs. Saving keeps the file's shape and
 comments (DECISIONS #29b).
+Details (DECISIONS #62): deadlines, requirements and essays are matched by `id`, then by label/title ignoring
+case; curriculum courses by name. A stored value research didn't find is shown as "Not found by research,
+kept" and is never removed. Confirmed domains that differ from the stored ones are a row like any other
+(`official_domains`), so rejecting every row writes nothing. A row whose source is not official shows the
+refusal and has no Accept box; the other rows can still be accepted. Accepting any non-deadline row sets the
+programme to `unverified` with "Researched, not checked" (rule 11); a deadline-only change keeps the
+programme's verification (#21) and resets that deadline. A label-only deadline change keeps its
+verification. Accepted rows add their source to `sources` (checked today) if it isn't there. Apply is refused
+if the file's sha256 changed since the comparison ("The file changed since the comparison. Nothing was
+saved.").
 
 ## 8. Usage and cost (DECISIONS #60)
 Calls happen only on explicit clicks or eval runs. Every `run_skill` call states what it is for with three

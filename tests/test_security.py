@@ -164,6 +164,14 @@ NEW_WRITE_ROUTES = {
     "mark as requested": ("/recommenders/jansen/mark-requested", {"data": {"programmes": "princeton-mfin"}}),
     # Phase 2b
     "generate email": ("/recommenders/jansen/email", {"data": {"programmes": "princeton-mfin"}}),
+    # Phase 2c: research and re-research (a refused request never reaches Claude Code)
+    "research": ("/programmes/research", {"data": {"query": "Example MSQF"}}),
+    "research save": ("/programmes/research/save", {"data": {"proposal": "{}", "domains": "example.edu"}}),
+    "re-research": ("/programmes/princeton-mfin/research", {"data": {}}),
+    "re-research apply": (
+        "/programmes/princeton-mfin/research/apply",
+        {"data": {"proposal": "{}", "domains": "princeton.edu", "accept": "letters_required"}},
+    ),
 }
 
 

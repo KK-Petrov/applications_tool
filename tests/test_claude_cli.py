@@ -19,7 +19,7 @@ import pytest
 
 from hub.ai import usage
 from hub.ai.claude_cli import LOCKED_OUT_TOOLS, build_argv
-from hub.ai.skills import SKILL_TOOLS, SkillError, run_skill
+from hub.ai.skills import SKILL_TOOLS, WEB_SKILLS, SkillError, run_skill
 from hub.app import create_app
 
 from helpers import (
@@ -149,7 +149,6 @@ def test_every_skill_call_is_locked_down(config, skill: str) -> None:
     assert _flag(argv, "--permission-mode") == "dontAsk"
     assert _flag(argv, "--permission-prompts") == "none"
     assert "--no-session-persistence" in argv
-    assert int(_flag(argv, "--max-turns")) == config.claude.max_turns <= 3
     for unsafe in (
         "--bare",
         "--dangerously-skip-permissions",
@@ -159,10 +158,47 @@ def test_every_skill_call_is_locked_down(config, skill: str) -> None:
         assert unsafe not in argv
 
 
+# The lockdown of every skill, written out by hand (DECISIONS #61): (--tools, --allowedTools or None when the
+# flag must be absent, which turn cap). A new skill, or a skill given tools, fails these tests until it is
+# added here on purpose.
+WEB = "WebSearch,WebFetch"
+EXPECTED_LOCKDOWN: dict[str, tuple[str, str | None, str]] = {
+    "rec-email": ("", None, "max_turns"),
+    "grade-claims": ("", None, "max_turns"),
+    "probe-skill": ("", None, "max_turns"),
+    "probe-lockdown": ("", None, "max_turns"),
+    "research-programme": (WEB, WEB, "research_max_turns"),
+    "probe-research": (WEB, WEB, "research_max_turns"),
+}
+
+
+def test_every_skill_has_a_written_out_lockdown() -> None:
+    assert set(SKILL_TOOLS) == set(EXPECTED_LOCKDOWN)
+
+
+@pytest.mark.parametrize("skill", sorted(EXPECTED_LOCKDOWN))
+def test_each_skill_gets_exactly_its_tools_approvals_and_turn_cap(config, skill: str) -> None:
+    tools, approved, cap = EXPECTED_LOCKDOWN[skill]
+    argv = build_argv(skill, SCHEMA, config, executable=["claude"])
+    assert argv.count("--tools") == 1 and _flag(argv, "--tools") == tools
+    # dontAsk denies every tool that isn't approved, so a skill's own tools (and only those) are approved by
+    # name; a skill without tools gets no --allowedTools at all.
+    if approved is None:
+        assert "--allowedTools" not in argv
+    else:
+        assert argv.count("--allowedTools") == 1 and _flag(argv, "--allowedTools") == approved
+    # Browsing needs many dependent turns (A0: a cap of 2 ended error_max_turns); the others take 2.
+    assert argv.count("--max-turns") == 1
+    assert int(_flag(argv, "--max-turns")) == getattr(config.claude, cap)
+    assert config.claude.max_turns <= 3
+
+
 def test_only_research_gets_web_tools_and_no_skill_gets_a_shell_or_file_tool() -> None:
     assert SKILL_TOOLS["rec-email"] == ()
     assert SKILL_TOOLS["grade-claims"] == ()
     assert set(SKILL_TOOLS["research-programme"]) == {"WebSearch", "WebFetch"}
+    assert {"research-programme", "probe-research"} == WEB_SKILLS  # pinned: no skill browses by accident
+    assert {s for s, tools in SKILL_TOOLS.items() if tools} == WEB_SKILLS
     for skill, tools in SKILL_TOOLS.items():
         assert not set(tools) & {
             "Bash",

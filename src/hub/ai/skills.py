@@ -40,7 +40,11 @@ SKILL_TOOLS: dict[str, tuple[str, ...]] = {
     "probe-skill": (),
     "probe-lockdown": (),
     "research-programme": ("WebSearch", "WebFetch"),  # Phase 2c
+    "probe-research": ("WebSearch", "WebFetch"),  # live check of the research lockdown (DECISIONS #61)
 }
+# Skills that browse: they need many sequential turns, so they get ``claude.research_max_turns`` instead of
+# ``claude.max_turns`` (live evidence: a cap of 2 stopped a 4-fetch probe with error_max_turns; #61).
+WEB_SKILLS: frozenset[str] = frozenset(s for s, tools in SKILL_TOOLS.items() if tools)
 
 
 @dataclass(frozen=True)

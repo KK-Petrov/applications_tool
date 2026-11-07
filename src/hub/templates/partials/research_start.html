@@ -1,0 +1,17 @@
+{#- "Research a programme" (US-16): on the dashboard, Add programme and the research page. A long request: app.js
+    marks it busy (data-working) and announces it; the server re-checks everything. -#}
+<form method="post" action="/programmes/research" id="research-run" class="research-start" data-working>
+  <div class="field">
+    <label for="research-query">Programme to research</label>
+    <input id="research-query" name="query" type="text" value="{{ query | default('', true) }}" aria-describedby="research-query-hint">
+    <span class="hint" id="research-query-hint">School and programme, e.g. "Berkeley Haas MFE". Only the school's own pages are used as sources.</span>
+  </div>
+  <div class="field">
+    <label for="research-url">Official page (optional)</label>
+    <input id="research-url" name="url" type="text" inputmode="url" value="{{ url | default('', true) }}">
+  </div>
+  <div class="research-actions">
+    <button class="button button-primary" type="submit" data-busy-text="Researching…">Research a programme</button>
+    <span class="working-note" data-working-text="Researching the official pages. This can take a few minutes; nothing is saved until you press Save."></span>
+  </div>
+</form>

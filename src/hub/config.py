@@ -132,6 +132,7 @@ class ClaudeConfig(_Section):
     usage_log: str  # the app's AI usage log, relative to data_dir unless absolute (DECISIONS #60)
     run_usage_log: str  # eval and live calls' usage log, relative to the repository unless absolute
     max_turns: int = Field(ge=1)  # lockdown: turn cap per call
+    research_max_turns: int = Field(ge=1)  # turn cap for skills that browse (WebSearch/WebFetch; #61)
     eval_concurrency: int = Field(ge=1)  # parallel live calls in tasks.py eval-email
 
 

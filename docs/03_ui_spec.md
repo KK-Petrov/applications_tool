@@ -17,8 +17,8 @@ App binds to `127.0.0.1:8765` only.
 | `POST /programmes/{id}/verify` | Mark verified (docs/02 §6) |
 | `POST /programmes/{id}/requirements/{rid}`, `/steps/{n}`, `/documents/{did}` | Toggle / set status (partial) |
 | `POST /programmes/{id}/interviews` | Add or edit an interview/assessment |
-| `POST /programmes/research`, `POST /programmes/research/save` | Research a new programme: preview, then save (2c) |
-| `POST /programmes/{id}/research`, `POST /programmes/{id}/research/apply` | Re-research: comparison, then save the accepted changes (2c) |
+| `POST /programmes/research`, `POST /programmes/research/save` | Research a new programme (2c): runs the skill and shows the domains step; with `step=check` checks the confirmed domains and shows the preview (editable deadline rows); save re-runs every check and creates the file. Entry form on the dashboard and Add programme |
+| `POST /programmes/{id}/research`, `POST /programmes/{id}/research/apply` | Re-research (2c): runs the skill, then the domains step (programme without `official_domains`) or the comparison; `step=check` redoes the checks without a new call; apply saves the accepted rows (`accept`, with the comparison's file `digest`) |
 | `GET /recommenders` | Recommender sheet (query: `q`, `filter`, `sort`, `selected`) |
 | `GET /recommenders/new`, `POST /recommenders` | Add professor |
 | `GET /recommenders/{id}/panel` | Detail panel partial |

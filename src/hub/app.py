@@ -21,6 +21,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from hub.config import Config, load_config
 from hub.routes.programmes import build_router as programmes_router
 from hub.routes.recommenders import build_router as recommenders_router
+from hub.routes.research import build_router as research_router
 from hub.routes.usage import USAGE_PAGE
 from hub.routes.usage import build_router as usage_router
 from hub.security import LocalOriginMiddleware
@@ -88,6 +89,8 @@ def create_app(config: Config | None = None, clock: Callable[[], datetime] | Non
         board = dashboard(snapshot.programmes, snapshot.professors, clock(), config, web.display_tz(snapshot))
         return web.render(request, "pages/dashboard.html", PAGES[0], snapshot, board=board)
 
+    # research first: POST /programmes/research must not reach POST /programmes/{pid}
+    app.include_router(research_router(web))
     app.include_router(programmes_router(web))
     app.include_router(recommenders_router(web))
     app.include_router(usage_router(web))

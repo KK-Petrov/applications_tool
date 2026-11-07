@@ -43,6 +43,7 @@ dependencies = [
     { name = "google-auth-oauthlib" },
     { name = "jinja2" },
     { name = "jsonschema" },
+    { name = "publicsuffixlist" },
     { name = "pydantic" },
     { name = "python-multipart" },
     { name = "ruamel-yaml" },
@@ -68,6 +69,7 @@ requires-dist = [
     { name = "google-auth-oauthlib", specifier = ">=1.2" },
     { name = "jinja2", specifier = ">=3.1" },
     { name = "jsonschema", specifier = ">=4.23" },
+    { name = "publicsuffixlist", specifier = ">=1.1.2.20261106" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "python-multipart", specifier = ">=0.0.12" },
     { name = "ruamel-yaml", specifier = ">=0.18" },
@@ -609,6 +611,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/fc/1b/dcc64f358fcb51811b58ae40b3d28f820725f116d86487cc20bd4b130701/protobuf-7.36.2-cp310-abi3-win32.whl", hash = "sha256:912c1221170e16c08d1f086762f563dd61ff83c18b5fa6652952dfaded66f728", size = 442998, upload-time = "2026-09-17T20:07:55.826Z" },
     { url = "https://files.pythonhosted.org/packages/8a/55/b77bda4e5e5f5971fb51b07663694690e9afdb9402136c16a522bd621cad/protobuf-7.36.2-cp310-abi3-win_amd64.whl", hash = "sha256:a300819d441e078a5608c0d3c709796bb548136058fda017ae51d425b44fd353", size = 456514, upload-time = "2026-09-17T20:07:57.188Z" },
     { url = "https://files.pythonhosted.org/packages/e4/04/d52c7016b04b6c5108f26691f9d33ec82a9b65d041f1a9c771137693d618/protobuf-7.36.2-py3-none-any.whl", hash = "sha256:bdb3a345d48db958e6ce1f18e508beb0cc981d64f24088427549c866cd039f1e", size = 179806, upload-time = "2026-09-17T20:07:58.211Z" },
+]
+
+[[package]]
+name = "publicsuffixlist"
+version = "1.1.2.20261106"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/93/58/25ba5f0cc8871ba7149211c6bc6ecc6ab6beabcb8079db45e8ca251e4159/publicsuffixlist-1.1.2.20261106.tar.gz", hash = "sha256:6688f0eb52baa4f07d196ef4d0410ea44aa3cc741283116a000f6a89a4d041b7", size = 106709, upload-time = "2026-11-06T10:43:25.408Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/54/92/4d99101c827c49e27f112e4c59fb55743e44bf6fad713e1e6428f654b542/publicsuffixlist-1.1.2.20261106-py3-none-any.whl", hash = "sha256:cda0b4c588b03f116bad6704fa46556739cb380a292cf3c5b9fdf58104239a95", size = 109471, upload-time = "2026-11-06T10:43:23.252Z" },
 ]
 
 [[package]]

@@ -8,8 +8,10 @@ answer comes back as ``structured_output``.
 
 **Lockdown.** A headless call can't run commands, read or write files, use MCP servers or run hooks, and no
 settings file applies (``--setting-sources ""``: not the project's ``.claude/settings.json``, not the user's).
-It gets only the tools its skill needs (``SKILL_TOOLS``) and at most ``claude.max_turns`` turns. Because no
-settings source is loaded, project skills aren't either, so the skill's SKILL.md is passed with
+It gets only the tools its skill needs (``SKILL_TOOLS``), approved by name with ``--allowedTools`` because
+``dontAsk`` denies everything else, and at most ``claude.max_turns`` turns (``claude.research_max_turns``
+for skills that browse; DECISIONS #61). Because no settings source is loaded, project skills aren't
+either, so the skill's SKILL.md is passed with
 ``--append-system-prompt-file`` (the docs/04 §1.1 fallback). Chosen and proved by the Phase 2b live check
 (tests/test_claude_live.py; DECISIONS #47).
 """
@@ -28,6 +30,7 @@ from typing import Any
 
 from hub.ai.skills import (
     SKILL_TOOLS,
+    WEB_SKILLS,
     BackendReply,
     SkillError,
     failed,
@@ -95,6 +98,10 @@ def build_argv(
         raise ValueError(f"unknown skill {skill!r}")
     allowed = SKILL_TOOLS[skill] if tools is None else tools
     denied = [t for t in LOCKED_OUT_TOOLS if t not in allowed]
+    turns = config.claude.research_max_turns if skill in WEB_SKILLS else config.claude.max_turns
+    # ``dontAsk`` denies any tool that isn't pre-approved, even one listed in ``--tools``; a skill's own
+    # tools (and only those) are approved by name. A skill with no tools gets no rule (DECISIONS #61).
+    approved = ["--allowedTools", ",".join(allowed)] if allowed else []
     return [
         *executable,
         "-p",
@@ -120,7 +127,8 @@ def build_argv(
         NO_HOOKS,
         "--no-session-persistence",
         "--max-turns",
-        str(config.claude.max_turns),
+        str(turns),
+        *approved,
     ]
 
 

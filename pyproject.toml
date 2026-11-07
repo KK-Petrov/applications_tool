@@ -16,6 +16,7 @@ dependencies = [
     "google-api-python-client>=2.150",
     "google-auth-oauthlib>=1.2",
     "typer>=0.12",
+    "publicsuffixlist>=1.1.2.20261106",
 ]
 
 [project.scripts]

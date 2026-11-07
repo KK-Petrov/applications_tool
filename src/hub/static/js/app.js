@@ -221,6 +221,47 @@
     }
   });
 
+  // Research and Re-research (normal POSTs that can take minutes, DECISIONS #61): mark the button busy
+  // (aria-disabled keeps focus on it), show and announce what is happening, refuse a second submit.
+  document.addEventListener("submit", function (event) {
+    var form = event.target;
+    if (!form.hasAttribute || !form.hasAttribute("data-working")) {
+      return;
+    }
+    if (form.dataset.busy === "true") {
+      event.preventDefault();
+      return;
+    }
+    form.dataset.busy = "true";
+    var button = event.submitter || form.querySelector("button[type=submit]");
+    if (button) {
+      button.setAttribute("aria-disabled", "true");
+      button.dataset.label = button.textContent;
+      button.textContent = button.dataset.busyText || button.textContent;
+    }
+    var note = form.querySelector(".working-note");
+    if (note) {
+      note.textContent = note.dataset.workingText;
+      announce(note.dataset.workingText);
+    }
+  });
+  window.addEventListener("pageshow", function (event) {
+    if (!event.persisted) {
+      return;
+    }
+    document.querySelectorAll("form[data-working]").forEach(function (form) {
+      delete form.dataset.busy;
+      form.querySelectorAll("[aria-disabled=true]").forEach(function (button) {
+        button.removeAttribute("aria-disabled");
+        button.textContent = button.dataset.label || button.textContent;
+      });
+      var note = form.querySelector(".working-note");
+      if (note) {
+        note.textContent = "";
+      }
+    });
+  });
+
   // Back to the Add/Edit page from the browser's back-forward cache: the page comes back as it was left,
   // still busy, which would silently block every later submit. Reset the busy state.
   window.addEventListener("pageshow", function (event) {
