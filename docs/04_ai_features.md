@@ -323,7 +323,7 @@ programme to `unverified` with "Researched, not checked" (rule 11); a deadline-o
 programme's verification (#21) and resets that deadline. A label-only deadline change keeps its
 verification. Accepted rows add their source to `sources` (checked today) if it isn't there. Apply is refused
 if the file's sha256 changed since the comparison ("The file changed since the comparison. Nothing was
-saved.").
+saved."). **Accept all changes / Clear all** (DECISIONS #68): boxes start unticked; Accept all changes ticks every row that can be accepted (new or changed, source official) but never a refused row, a "Not found by research, kept" row or the `official_domains` row; Clear all unticks every box; nothing is saved until Save accepted changes, which re-checks everything as above. A count reads "{n} of {total} changes selected · {r} refused" (total = every new or changed row, refused rows and the domains row included; no refused part when r is 0). With JS the buttons tick in place; without JS they submit to `/research/select`, which re-renders the comparison with those rows ticked (keeping valid ticks already made) and writes nothing.
 
 ## 8. Usage and cost (DECISIONS #60)
 Calls happen only on explicit clicks or eval runs. Every `run_skill` call states what it is for with three
@@ -372,7 +372,7 @@ Output (`src/hub/ai/schemas/extract_courses.json`):
 ```
 Rules in SKILL.md: copy names, codes, grades and credits exactly as written; lecturers as written, in the
 document's order; never infer, round or convert a grade; a field not in the document is null; never output a
-student number, date of birth or national ID number. Python then strips identifiers again, checks every grade
+student number, date of birth or national ID number. The text is sent only after the user has reviewed the stripped text and pressed Send to Claude (DECISIONS #70). Python then strips identifiers again, checks every grade
 against its own row in the source text (row-anchored: on the same line or table row as the course's code or
 name; DECISIONS #64, docs/02 §10), validates the schema and shows the preview; nothing is written until the user
 accepts. The call is `run_skill("extract-courses", …, action="import_courses", subject={}, source="app")`, with no

@@ -197,6 +197,7 @@ Whitfield.
 
 ## 10. Identifiers and grades in imported documents (Phase 2c, DECISIONS #44)
 Rule 13: both checks run in Python, never in the model.
+0. **Invisible characters first** (DECISIONS #69): before any label or value matching, every Unicode default-ignorable code point (#74: also the combining grapheme joiner, variation selectors, Hangul fillers) and format character (category Cf: zero-width space, zero-width (non-)joiner, byte-order mark, soft hyphen, direction marks …) is removed and every space character (category Zs: no-break, narrow no-break, thin, figure …) becomes a plain space, so neither can hide a label ("Student\u200Bnumber") or split a value ("51\u200B2345"). The normalised text is what is shown, sent and stored; the original file name is normalised the same way.
 1. **Identifier stripping is label-anchored and fails closed** (`src/hub/courses/identifiers.py`; DECISIONS #64,
    #65). A number or date is removed only when an identifier label (`courses.identifier_labels`, English and Dutch:
    student number / nr. / ID / identification number, matriculation or registration number, date of birth, DOB,
@@ -210,15 +211,14 @@ Rule 13: both checks run in Python, never in the model.
      the next non-empty line ("Student ID" / "S2034567", or a short "4123"); anything else first stops the import;
    - **table label row, then value row:** a tab-separated pair is matched column by column ("Studentnummer
      Opleiding  Geboortedatum" / "598431  56966 BSc …  12-03-2001": the middle column's programme code is kept);
-     without tabs (a PDF row) the k values must lead the next line, in order.
+     without tabs (a PDF row) the k values must lead the next line, in order. Each such value must be taken whole as on the label's line (no month word, Roman month or 'YY right after it, and no digit after the last one), and nothing ID-shaped (5+ digits, or a date) may remain on the line after the labels' values; otherwise the import stops: the app can't tell which is the identifier (DECISIONS #73, #74). A bracket after a label belongs to it only without digits ("(BSN)"). In fields Claude returns, a value not taken whole is removed with every other candidate after its label (#74). At Read the marker "[removed]" is never a value; at Send it may fill a label's slot but never hides a number after it (#73).
    **Fail closed:** the value must be taken whole: a digit just before it; just after it, past separators, a digit,
    a month word, a Roman month or 'YY (an unknown format such as "12/3 2001"); another number later in its segment
    ("512345, previously 498765"); or a label whose value can't be found stops the import with "The document
    mentions "<label>" on line <n>, but the app could not find its value to remove whole. Nothing was sent to
    Claude. …"; nothing is sent to the model or written. A standalone 9-digit number is treated as a BSN, and
    removed, only if it passes the 11-check; a US SSN shape (123-45-6789) is removed even without a label. Course codes, grades, credits and years are kept. Each removed value
-   becomes `courses.removed_marker` ("[removed]"). Stripping runs on the text before it is sent to
-   `/extract-courses` and again on every returned field (there, an unresolved label is left alone). The original
+   becomes `courses.removed_marker` ("[removed]"). Stripping runs on the text when it is read, again (strictly) when the user presses Send to Claude after reviewing it (DECISIONS #70; a label followed by the marker counts as already removed, so stripping stripped text changes nothing), and on every returned field (there, an unresolved label is left alone). The original
    file's name (stored in the source header) loses every date pattern and every run of 6 or more digits, and is
    kept on one line; the header's sha256 is written only if it is 64 hex digits.
 2. **Grades and credits are facts, anchored to their row** (DECISIONS #64, #65; stricter than "anywhere in the

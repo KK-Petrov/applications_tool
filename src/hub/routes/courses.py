@@ -2,9 +2,11 @@
 
 - ``GET /courses``: the minimal list (the biography bank shows courses in full in Phase 4a).
 - ``GET/POST /courses/import``: a .docx, a text PDF or pasted text → text → identifiers stripped in Python
-  (a label whose value can't be found stops here, before anything is sent) → ``/extract-courses`` → every
-  returned field stripped again → the preview, where each grade is checked against its own row. Nothing is
-  written: the form carries only the identifier-stripped text and the rows.
+  (a label whose value can't be found stops here) → the **review** of exactly the text that would be sent,
+  each removed value highlighted (DECISIONS #70). No AI call, nothing written.
+- ``POST /courses/import/send``: "Send to Claude" on the review: the text is stripped again (strict) →
+  ``/extract-courses`` → every returned field stripped again → the preview, where each grade is checked
+  against its own row. Nothing is written: the forms carry only the identifier-stripped text and the rows.
 - ``POST /courses/import/save``: Accept (one row) or Accept all writes the rows that pass every check to
   ``courses.yaml`` with ``confirmed: true``; the first accept writes ``sources/<name>.txt``.
 - ``POST /courses/import/professors``: every lecturer of the document's confirmed courses once; nothing is
@@ -65,6 +67,7 @@ def build_router(web: Web) -> APIRouter:
         snapshot = store.load_all()
         extra.setdefault("error", None)
         extra.setdefault("rows", None)
+        extra.setdefault("review", None)
         return web.render(
             request, "pages/courses_import.html", IMPORT_PAGE, snapshot, status_code=status, **extra
         )
@@ -88,8 +91,25 @@ def build_router(web: Web) -> APIRouter:
             return None, err.message
         return result.data, None
 
+    def render_review(
+        request: Request, text: str, original: str, sha: str, status: int = 200, error: str | None = None
+    ) -> HTMLResponse:
+        """The text that "Send to Claude" would send, each removed value highlighted; nothing sent yet."""
+        return render_import(
+            request,
+            status,
+            review=True,
+            text=text,
+            original_name=original,
+            original_sha256=sha,
+            marker=cfg.removed_marker,
+            removed_count=text.count(cfg.removed_marker),
+            error=error,
+        )
+
     @router.post("/courses/import", response_class=HTMLResponse)
     async def import_read(request: Request) -> HTMLResponse:
+        """Read courses: extract and strip, then the review step. No AI call happens here (DECISIONS #70)."""
         form = await request.form()
         upload = form.get("file")
         pasted = str(form.get("pasted", "") or "")
@@ -106,23 +126,27 @@ def build_router(web: Web) -> APIRouter:
             stripped = identifiers.strip(text, cfg)
         except (extract.ExtractError, identifiers.UnresolvedIdentifier) as err:
             return render_import(request, 409, error=str(err))
+        return render_review(request, stripped, identifiers.clean_filename(original, cfg), sha)
+
+    @router.post("/courses/import/send", response_class=HTMLResponse)
+    async def import_send(request: Request) -> HTMLResponse:
+        """Send to Claude: the reviewed text, stripped again (strict; stripping stripped text changes
+        nothing), is the only document text sent. A failure shows the review again, so Send can be retried."""
+        form = await request.form()
+        original = identifiers.clean_filename(str(form.get("original_name", "")), cfg)
+        sha = str(form.get("original_sha256", ""))
+        sha = sha if re.fullmatch(r"[0-9a-f]{64}", sha) else "not recorded"
+        try:
+            stripped = identifiers.strip(_lf(str(form.get("text", ""))), cfg, marker_fills_slot=True)
+        except identifiers.UnresolvedIdentifier as err:
+            return render_import(request, 409, error=str(err))
+        if not stripped.strip():
+            return render_import(request, 409, error=NOTHING_GIVEN)
         output, error = await run_in_threadpool(call, stripped)
         if output is None:
-            if original == PASTED:  # the paste may hold identifiers, so the form never sends it back
-                error = (
-                    f"{error} The pasted text is not kept (it may contain personal numbers): paste it again."
-                )
-            return render_import(request, 409, error=error)
+            return render_review(request, stripped, original, sha, 409, error)
         rows = [importer.strip_row(r, cfg) for r in output["courses"]]
-        return render_preview(
-            request,
-            stripped,
-            identifiers.clean_filename(original, cfg),
-            sha,
-            "",
-            rows,
-            output.get("warnings", []),
-        )
+        return render_preview(request, stripped, original, sha, "", rows, output.get("warnings", []))
 
     def rows_from_form(form: Any) -> list[dict[str, Any]]:
         rows: dict[int, dict[str, Any]] = {}

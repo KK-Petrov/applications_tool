@@ -22,6 +22,7 @@ field the model returns (there, not strict).
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
 from functools import cache
 from typing import TYPE_CHECKING
@@ -33,6 +34,39 @@ MIN_ID_DIGITS = 5  # on the next line, a number shorter than this is not taken f
 SAME_LINE_MIN_DIGITS = 2  # on the label's own line, any number this long is its value
 TAB = "\t"
 NEWLINE = "\n"
+
+
+# Unicode Default_Ignorable_Code_Point ranges that are not category Cf (combining grapheme joiner, Hangul
+# fillers, variation selectors, ...); every Cf character is removed as well (DECISIONS #69, #74)
+DEFAULT_IGNORABLE = (
+    (0x034F, 0x034F),
+    (0x115F, 0x1160),
+    (0x17B4, 0x17B5),
+    (0x180B, 0x180F),
+    (0x2060, 0x206F),
+    (0x3164, 0x3164),
+    (0xFE00, 0xFE0F),
+    (0xFFA0, 0xFFA0),
+    (0xFFF0, 0xFFF8),
+    (0x1BCA0, 0x1BCA3),
+    (0x1D173, 0x1D17A),
+    (0xE0000, 0xE0FFF),
+)
+
+
+def _ignorable(ch: str) -> bool:
+    code = ord(ch)
+    return unicodedata.category(ch) == "Cf" or any(lo <= code <= hi for lo, hi in DEFAULT_IGNORABLE)
+
+
+def normalise(text: str) -> str:
+    """``text`` without invisible characters (every format character, category Cf: zero-width space, joiners,
+    byte-order mark, soft hyphen, direction marks; and every other default-ignorable code point: combining
+    grapheme joiner, variation selectors, Hangul fillers) and with every space character (category Zs:
+    no-break, narrow no-break, thin, figure ...) as a plain space. Runs before any label or value matching, so
+    an invisible character can neither hide a label ("Student<U+200B>number") nor split a value
+    ("51<U+200B>2345"). The text shown, sent and stored is this normalised text (DECISIONS #69, #74)."""
+    return "".join(" " if unicodedata.category(ch) == "Zs" else ch for ch in text if not _ignorable(ch))
 
 
 class UnresolvedIdentifier(Exception):
@@ -47,16 +81,20 @@ class _Patterns:
     file_date: re.Pattern[str]
     near_date: re.Pattern[str]  # a month word, Roman month or 'YY next to a value
     ssn: re.Pattern[str]
+    marker: str
+    marker_fills_slot: bool  # Send mode: a marker may fill a label's value slot (#73)
 
 
 @cache
-def _patterns(labels: tuple[str, ...], months: tuple[str, ...]) -> _Patterns:
+def _patterns(
+    labels: tuple[str, ...], months: tuple[str, ...], marker: str, marker_fills_slot: bool
+) -> _Patterns:
     def words(label: str) -> str:
         return r"[\s\-]*".join(re.escape(w) for w in re.split(r"[\s\-]+", label.strip()))
 
     alternatives = "|".join(words(lb) for lb in sorted(set(labels), key=len, reverse=True))
     # the label, then an optional bracketed abbreviation such as "(BSN)"
-    label = re.compile(rf"(?<![\w])(?:{alternatives})(?![\w])(?:\s*\([^)\n]{{0,30}}\))?", re.IGNORECASE)
+    label = re.compile(rf"(?<![\w])(?:{alternatives})(?![\w])(?:\s*\([^)\n\d]{{0,30}}\))?", re.IGNORECASE)
     month = "|".join(re.escape(m) for m in sorted(set(months), key=len, reverse=True))
     ordinal = r"(?:st|nd|rd|th|ste|de|e)?"  # 12th, 3rd; Dutch 1ste, 12de, 12e
     roman = "XII|XI|X|IX|VIII|VII|VI|V|IV|III|II|I"  # a month as a Roman numeral (12.III.2001)
@@ -76,16 +114,19 @@ def _patterns(labels: tuple[str, ...], months: tuple[str, ...]) -> _Patterns:
     # start of a date ("598431 12-03-2001" is two values)
     number = r"[A-Za-z]{0,3}\d{2,}(?:[ .]\d{2,4}(?![\d\-/.]))*"
     ssn = r"\d{3}-\d{2}-\d{4}"  # US social security number
-    value = re.compile(rf"(?<![\w])(?:{date}|{ssn}|{number})(?![\w])", re.IGNORECASE)
+    # the marker is a value only in the Send mode (#73): at Read a document's own "[removed]" proves nothing
+    removed = re.escape(marker) + "|" if marker_fills_slot else ""
+    value = re.compile(rf"(?<![\w])(?:{removed}{date}|{ssn}|{number})(?![\w])", re.IGNORECASE)
     bsn = re.compile(r"(?<![\w.,\-/])\d{9}(?![\w.,\-/])")
     file_date = re.compile(r"\d{1,2}[-./_]\d{1,2}[-./_]\d{2,4}|\d{4}[-./_]\d{1,2}[-./_]\d{1,2}")
     near_date = re.compile(rf"(?:{month}|{roman})(?![a-z])|'\d", re.IGNORECASE)
     standalone_ssn = re.compile(r"(?<![\w\-])\d{3}-\d{2}-\d{4}(?![\w\-])")
-    return _Patterns(label, value, bsn, file_date, near_date, standalone_ssn)
+    return _Patterns(label, value, bsn, file_date, near_date, standalone_ssn, marker, marker_fills_slot)
 
 
-def _p(cfg: CoursesConfig) -> _Patterns:
-    return _patterns(tuple(cfg.identifier_labels.all), tuple(cfg.month_names.all))
+def _p(cfg: CoursesConfig, marker_fills_slot: bool = False) -> _Patterns:
+    labels, months = tuple(cfg.identifier_labels.all), tuple(cfg.month_names.all)
+    return _patterns(labels, months, cfg.removed_marker, marker_fills_slot)
 
 
 def passes_bsn_check(digits: str) -> bool:
@@ -100,6 +141,9 @@ def _values(text: str, p: _Patterns, min_digits: int = MIN_ID_DIGITS) -> list[re
     """Possible identifiers in ``text``: a date, or a number with ``min_digits`` or more digits."""
     out = []
     for m in p.value.finditer(text):
+        if m.group(0) == p.marker:
+            out.append(m)
+            continue
         digits = sum(ch.isdigit() for ch in m.group(0))
         is_date = bool(re.search(r"[-/.]\d|[A-Za-z]{3}", m.group(0))) and not re.fullmatch(
             r"[A-Za-z]{0,3}\d[\d .]*", m.group(0)
@@ -140,14 +184,16 @@ def _cell_spans(line: str) -> list[tuple[int, int]]:
     return spans
 
 
-def strip(text: str, cfg: CoursesConfig, *, strict: bool = True) -> str:
+def strip(text: str, cfg: CoursesConfig, *, strict: bool = True, marker_fills_slot: bool = False) -> str:
     """``text`` with every label-anchored identifier and every 11-check-valid standalone 9-digit number
     replaced by ``cfg.removed_marker``. With ``strict`` (a document before it is sent), a label whose value
     can't be found and taken whole raises ``UnresolvedIdentifier`` (fail closed); without it (fields the model
-    returned) such a label is left."""
-    p = _p(cfg)
+    returned) such a label is left. ``marker_fills_slot`` is the Send mode (#73): the text was stripped at
+    Read, so a marker may stand in a label's value slot; it is never an ID-shaped token, so a number after
+    it still stops the import. At Read the marker is never a value."""
+    p = _p(cfg, marker_fills_slot)
     marker = cfg.removed_marker
-    lines = text.split(NEWLINE)
+    lines = normalise(text).split(NEWLINE)
     pending: list[tuple[int, str, int | None]] = []  # (line number, label, table column) for the next line
     for i, line in enumerate(lines):
         if pending and line.strip():
@@ -194,6 +240,12 @@ def strip(text: str, cfg: CoursesConfig, *, strict: bool = True) -> str:
             elif not _taken_whole(segment, found, p):
                 if strict:
                     raise _unresolved(i + 1, label.group(0).strip())
+                # a field Claude returned: remove every candidate after the label (over-removal is the safe
+                # side; review round 3: "Student ID (512345): 598431" kept both)
+                spans.extend(
+                    (label.end() + m.start(), label.end() + m.end())
+                    for m in _values(segment, p, SAME_LINE_MIN_DIGITS)
+                )
             else:
                 spans.append((label.end() + found.start(), label.end() + found.end()))
         lines[i] = _replace(line, spans, marker)
@@ -223,25 +275,39 @@ def _next_line_values(
                 return None
             spans.append((start + found.start(), start + found.end()))
         return spans
+    # without tabs, more ID-shaped tokens (5+ digits, or a date; never the marker) than labels: the app can't
+    # tell which is the identifier, so the import stops (user decision, #73)
+    id_shaped = [m for m in _values(line, p, MIN_ID_DIGITS) if m.group(0) != p.marker]
+    markers = line.count(p.marker) if p.marker_fills_slot else 0  # Send mode: a marker takes a slot
+    if len(id_shaped) + markers > len(pending):
+        return None
     # without tabs: the values must lead the line, in order ("598431 12-03-2001 BSc …"); anything else first
     # (a course code, a word) means the value isn't there and the import stops (#67)
     spans: list[tuple[int, int]] = []
     pos = len(line) - len(line.lstrip())
-    for _ in pending:
+    for n in range(len(pending)):
         found = next((m for m in _values(line[pos:], p, SAME_LINE_MIN_DIGITS) if m.start() == 0), None)
         if found is None:
             return None
         spans.append((pos + found.start(), pos + found.end()))
         rest = line[pos + found.end() :]
-        if p.near_date.match(rest.lstrip(" ,./-")):
-            return None
         skipped = _SEPARATORS.match(rest)
+        after = rest[skipped.end() :] if skipped else rest
+        # taken whole, as on the label's own line (review round 3, F1): no month word, Roman month or 'YY
+        # right after it, and after the last value no digit ("12/3 2001", "5123-45", "2019 512345")
+        if p.near_date.match(after) or (n == len(pending) - 1 and after[:1].isdigit()):
+            return None
         pos += found.end() + (skipped.end() if skipped else 0)
+    # nothing ID-shaped may remain on the line after the labels' values (F4: Read and Send count alike)
+    tail = line[pos:]
+    if _values(tail, p, MIN_ID_DIGITS) or (p.marker_fills_slot and p.marker in tail):
+        return None
     return spans
 
 
 def _has_digits_outside_labels(line: str, p: _Patterns) -> bool:
-    return any(ch.isdigit() for ch in p.label.sub(" ", line))
+    rest = p.label.sub(" ", line)
+    return any(ch.isdigit() for ch in rest) or (p.marker_fills_slot and p.marker in rest)
 
 
 def _unresolved(line_no: int, label: str) -> UnresolvedIdentifier:
@@ -255,5 +321,5 @@ def clean_filename(name: str, cfg: CoursesConfig) -> str:
     """The original file's name as stored in the source header: dates and runs of 6 or more digits removed
     (a file name has no label to anchor on, and may hold a student number or a birth date); one line only."""
     p = _p(cfg)
-    out = p.file_date.sub(cfg.removed_marker, " ".join(name.replace("\r", " ").split(NEWLINE)))
+    out = p.file_date.sub(cfg.removed_marker, " ".join(normalise(name).replace("\r", " ").split(NEWLINE)))
     return re.sub(r"\d{6,}", cfg.removed_marker, out)

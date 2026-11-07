@@ -516,6 +516,23 @@ class Change:
         return self.kind in {"new", "changed"} and self.refused is None
 
 
+def accept_all_ids(changes: Sequence[Change]) -> list[str]:
+    """The rows "Accept all changes" ticks, in comparison order (DECISIONS #68): every row that can be
+    accepted (new or changed, source official), except ``official_domains``, which the user confirms by hand.
+    Never a refused, kept or unchanged row. Ticking is not saving: apply re-checks everything."""
+    return [c.id for c in changes if c.acceptable and c.id != "official_domains"]
+
+
+def selection_text(changes: Sequence[Change], ticked: set[str]) -> str:
+    """'{n} of {total} changes selected · {r} refused': total counts every new or changed row (refused rows
+    and the domains row included), n only ticked rows that can be accepted; no refused part when r is 0."""
+    total = sum(1 for c in changes if c.kind in {"new", "changed"})
+    selected = sum(1 for c in changes if c.acceptable and c.id in ticked)
+    refused = sum(1 for c in changes if c.refused)
+    text = f"{selected} of {total} change{'' if total == 1 else 's'} selected"
+    return text + (f" · {refused} refused" if refused else "")
+
+
 def _kind(old: Any, new: Any) -> str:
     if new is None or new == []:
         return "unchanged" if old is None or old == [] else "kept"

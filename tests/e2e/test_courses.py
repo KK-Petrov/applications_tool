@@ -68,6 +68,7 @@ def _import(page: Page, live_server: str, file: str) -> None:
     page.wait_for_url("**/courses/import")
     page.get_by_label("Transcript file").set_input_files(str(EVAL / file))
     page.get_by_role("button", name="Read courses").click()
+    page.get_by_role("button", name="Send to Claude").click()  # after the review step (#70)
     page.locator("#courses-preview").wait_for(timeout=20000)
 
 
@@ -116,7 +117,46 @@ def test_us19_pasted_text(page: Page, live_server: str, data_dir: Path, rows) ->
     page.goto(live_server + "/courses/import", wait_until="domcontentloaded")
     page.get_by_label("Or paste the text").fill((EVAL / "transcript.txt").read_text(encoding="utf-8"))
     page.get_by_role("button", name="Read courses").click()
+    page.get_by_role("button", name="Send to Claude").click()  # after the review step (#70)
     expect(page.locator("#courses-preview [data-row]")).to_have_count(28)
+
+
+def test_us19_nothing_is_sent_before_send_to_claude(
+    page: Page, live_server: str, data_dir: Path, rows, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The review step (DECISIONS #70): the stripped text with each removed value highlighted; no AI call
+    and nothing written until Send to Claude; Cancel sends nothing."""
+    calls = tmp_path / "fake-calls.jsonl"
+    monkeypatch.setenv("FAKE_CLAUDE_LOG", str(calls))
+
+    def count() -> int:
+        return len(calls.read_text(encoding="utf-8").splitlines()) if calls.exists() else 0
+
+    page.goto(live_server + "/courses/import", wait_until="domcontentloaded")
+    page.get_by_label("Transcript file").set_input_files(str(EVAL / "transcript.docx"))
+    page.get_by_role("button", name="Read courses").click()
+    review = page.get_by_role("region", name="Text to be sent")
+    expect(review).to_contain_text("FEB11001")
+    expect(page.locator("#review-title")).to_be_focused()
+    sent = page.locator("#courses-send input[name=text]").input_value()
+    assert sent.count("[removed]") > 0
+    expect(review.locator("mark.removed")).to_have_count(sent.count("[removed]"))
+    for identifier in EXPECTED["identifiers"]:
+        assert identifier not in page.content()
+    assert count() == 0  # no AI call before Send
+    assert not _serious(page), _serious(page)
+    page.set_viewport_size({"width": 390, "height": 800})
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    assert not _serious(page), _serious(page)
+    page.get_by_role("link", name="Cancel").click()
+    page.wait_for_url("**/courses/import")
+    expect(page.get_by_label("Transcript file")).to_be_visible()
+    assert count() == 0 and not (data_dir / "courses.yaml").exists() and not (data_dir / "sources").exists()
+    page.get_by_label("Transcript file").set_input_files(str(EVAL / "transcript.docx"))
+    page.get_by_role("button", name="Read courses").click()
+    page.get_by_role("button", name="Send to Claude").click()
+    expect(page.locator("#courses-preview [data-row]")).to_have_count(28)
+    assert count() == 1
 
 
 # ---- US-20 -----------------------------------------------------------------------------------------------

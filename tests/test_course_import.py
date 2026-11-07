@@ -233,7 +233,8 @@ def calls(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return path
 
 
-def _upload(client: FormClient, fmt: str):
+def _read(client: FormClient, fmt: str):
+    """Step 1, Read courses: extract and strip, then the review page (no AI call; DECISIONS #70)."""
     name = FORMATS[fmt]
     if fmt == "txt":
         return client.post("/courses/import", data={"pasted": (EVAL / name).read_text(encoding="utf-8")})
@@ -245,6 +246,18 @@ def _upload(client: FormClient, fmt: str):
     return client.post(
         "/courses/import", files={"file": (name, (EVAL / name).read_bytes(), mime)}, data={"pasted": ""}
     )
+
+
+def _send(client: FormClient, review_html: str):
+    """Step 2, Send to Claude: the review form as a browser submits it."""
+    return client.post("/courses/import/send", data=form_fields(review_html, "courses-send"))
+
+
+def _upload(client: FormClient, fmt: str):
+    """Read, then Send (session 2: the review step comes between; disclosed helper change, DECISIONS #70)."""
+    review = _read(client, fmt)
+    assert review.status_code == 200, review.text[:500]
+    return _send(client, review.text)
 
 
 def _changed(before: dict, after: dict) -> set[str]:
@@ -326,9 +339,7 @@ def test_a_failed_call_writes_only_its_usage_line(
 ) -> None:
     monkeypatch.setenv("FAKE_CLAUDE_MODE", "exit")
     before = data_snapshot(data_dir)
-    res = client.post(
-        "/courses/import", data={"pasted": (EVAL / "transcript.txt").read_text(encoding="utf-8")}
-    )
+    res = _upload(client, "txt")  # Read, then Send (disclosed: the call now happens at Send, #70)
     assert res.status_code == 409 and "Nothing was saved." in res.text
     assert_only_usage_line(
         data_dir, before, ok=False, error="failed", action="import_courses", subject={}, source="app"
@@ -782,3 +793,258 @@ def test_an_unticked_link_stays_unticked_after_a_validation_error(
 def test_a_short_value_leading_the_next_line_is_removed_and_the_course_kept() -> None:
     out = identifiers.strip("Student ID\n4123\nFEB11001\tMathematics I\t8,0\n", CFG.courses)
     assert "4123" not in out and "FEB11001\tMathematics I\t8,0" in out
+
+
+# ---- format characters (session 2, DECISIONS #69) -------------------------------------------------------
+# A zero-width space, soft hyphen, joiner or byte-order mark inside a label hid it from the label match, and
+# one between a value's digits split the value. Cf characters are removed and NBSP / narrow NBSP read as
+# spaces before any matching; a label whose value can't be taken whole still stops the import.
+
+ZWSP, SHY, ZWNJ, ZWJ, BOM, NBSP, NNBSP = "​", "­", "‌", "‍", "﻿", " ", " "
+
+
+@pytest.mark.parametrize(
+    ("text", "gone"),
+    [
+        (f"Student{ZWSP} number: 512345\n", "512345"),
+        (f"Stu{SHY}dent number: 512345\n", "512345"),
+        (f"Student{ZWSP}nummer: 512345\n", "512345"),
+        (f"Student{ZWNJ}nummer: 512345\n", "512345"),
+        (f"Student{ZWJ}nummer: 512345\n", "512345"),
+        (f"{BOM}Studentnummer: 512345\n", "512345"),
+        (f"Student{NBSP}number: 512345\n", "512345"),
+        (f"Date of{NNBSP}birth: 12 March 2001\n", "12 March 2001"),
+        (f"Geboorte{SHY}datum\n12{ZWSP}-03-2001\n", "12-03-2001"),  # label and next-line value
+        (f"Student number: 51{ZWSP}2345\n", "512345"),  # a value split by a zero-width space
+        (f"Studentnummer\t{ZWSP}Geboorte{SHY}datum\n598431\t12-03-2001\n", "12-03-2001"),  # table
+    ],
+)
+def test_format_characters_never_hide_a_label_or_split_a_value(text: str, gone: str) -> None:
+    out = identifiers.strip(text, CFG.courses)
+    assert gone not in out and _alnum(gone) not in _alnum(out), out
+    assert CFG.courses.removed_marker in out
+    assert not any(ch in out for ch in (ZWSP, SHY, ZWNJ, ZWJ, BOM)), repr(out)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        f"Student{ZWSP}number: 12/3 2001\n",  # recognised now, and its value can't be taken whole
+        f"Date of{SHY} birth\nsee the attached letter\n",
+        f"Student{ZWSP} ID\nsee letter FEB11001\n",
+    ],
+)
+def test_a_label_with_format_characters_still_fails_closed(text: str) -> None:
+    with pytest.raises(identifiers.UnresolvedIdentifier):
+        identifiers.strip(text, CFG.courses)
+
+
+def test_returned_fields_with_format_characters_are_stripped() -> None:
+    row = {**_output()["courses"][0], "description": f"Stu{SHY}dent number 512345 on file"}
+    assert "512345" not in importer.strip_row(row, CFG.courses)["description"]
+
+
+def test_the_file_name_loses_a_number_split_by_a_zero_width_space() -> None:
+    assert "512345" not in _alnum(identifiers.clean_filename(f"transcript 51{ZWSP}2345.pdf", CFG.courses))
+
+
+# ---- review before sending (session 2, DECISIONS #70) ---------------------------------------------------
+# Read courses extracts and strips the text and shows it for review, each removed value highlighted; nothing
+# is sent to Claude until Send to Claude. The review form carries only the stripped text (plus the cleaned
+# file name and the original's sha256); Send strips it again (strict) before the call.
+
+MARK = '<mark class="removed">'
+
+
+@pytest.mark.parametrize("fmt", list(FORMATS))
+def test_read_shows_the_stripped_text_for_review_and_sends_nothing(
+    client: FormClient, data_dir: Path, calls: Path, fmt: str
+) -> None:
+    before = data_snapshot(data_dir)
+    res = _read(client, fmt)
+    assert res.status_code == 200
+    assert not calls.exists()  # no AI call before Send
+    assert data_snapshot(data_dir) == before  # nothing written, not even a usage line
+    html = res.text
+    _assert_no_identifier(html, "the review page")
+    fields = form_fields(html, "courses-send")
+    assert sorted(k for k, _ in fields) == ["original_name", "original_sha256", "text"]
+    text = dict(fields)["text"]
+    assert text == identifiers.strip(_text(fmt), CFG.courses)  # exactly the stripped text
+    marker = CFG.courses.removed_marker
+    assert text.count(marker) > 0 and html.count(MARK + marker + "</mark>") == text.count(marker)
+    assert re.search(r'<button[^>]*type="submit"[^>]*>Send to Claude</button>', html)
+    assert re.search(r'<a[^>]*href="/courses/import"[^>]*>Cancel</a>', html)
+    assert 'id="courses-preview"' not in html
+
+
+def test_send_calls_claude_once_with_the_reviewed_text(
+    client: FormClient, data_dir: Path, fake_rows, calls: Path
+) -> None:
+    review = _read(client, "docx").text
+    text = dict(form_fields(review, "courses-send"))["text"]
+    res = _send(client, review)
+    assert res.status_code == 200 and 'id="courses-preview"' in res.text
+    (call,) = [json.loads(line) for line in calls.read_text(encoding="utf-8").splitlines()]
+    assert json.loads(call["stdin"])["text"] == text
+
+
+@pytest.mark.parametrize("fmt", list(FORMATS))
+def test_stripping_stripped_text_again_changes_nothing(fmt: str) -> None:
+    """Send strips again strictly in the Send mode, where a marker may fill a label's value slot (#73)."""
+    once = identifiers.strip(_text(fmt), CFG.courses)
+    assert identifiers.strip(once, CFG.courses, marker_fills_slot=True) == once
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Student ID\n\nS2034567\nFEB1\tCourse\t8,0\n",
+        "Studentnummer\tGeboortedatum\tOpleiding\n598431\t12-03-2001\tBSc\n",
+        "Student number\t512345\n",
+        "Date of birth - 12 March 2001\n",
+    ],
+)
+def test_every_label_layout_strips_idempotently(text: str) -> None:
+    once = identifiers.strip(text, CFG.courses)
+    assert identifiers.strip(once, CFG.courses, marker_fills_slot=True) == once
+
+
+def test_send_strips_a_tampered_text_again(client: FormClient, fake_rows, calls: Path) -> None:
+    review = _read(client, "txt").text
+    tampered = "Student number: 512345\nFEB1\tCourse\t8,0\n"
+    client.post("/courses/import/send", data=set_field(form_fields(review, "courses-send"), "text", tampered))
+    (call,) = [json.loads(line) for line in calls.read_text(encoding="utf-8").splitlines()]
+    assert "512345" not in call["stdin"]
+
+
+def test_a_failed_send_shows_the_review_again_with_the_error(
+    client: FormClient, data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FAKE_CLAUDE_MODE", "exit")
+    review = _read(client, "txt").text
+    res = _send(client, review)
+    assert res.status_code == 409 and "Nothing was saved." in res.text
+    assert form_fields(res.text, "courses-send") == form_fields(review, "courses-send")  # Send can be retried
+
+
+# ---- the marker is never a value; extra ID-shaped values after lone labels stop (user decision, #73) -------
+# At Read the marker "[removed]" never counts as a value. On a value line after k lone labels (no tabs: the
+# values must lead the line), if more ID-shaped tokens (5+ digits, or a date) stand on it than labels, the app
+# can't tell which one is the identifier, so the import stops (fail closed). At Send (the text was stripped
+# at Read) a marker may fill a label's value slot, but is never an ID-shaped token: a number after it stops.
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Student number\n[removed] 512345\n",
+        "Student ID\n598431 512345\n",
+        "Student number: [removed]\n",  # the marker is not a value at Read
+        "Studentnummer Geboortedatum\n598431 12-03-2001 704512\n",  # 3 ID-shaped tokens, 2 labels
+    ],
+)
+def test_a_marker_or_an_extra_id_shaped_value_stops_the_import(text: str) -> None:
+    with pytest.raises(identifiers.UnresolvedIdentifier) as err:
+        identifiers.strip(text, CFG.courses)
+    assert "Nothing was sent to Claude" in str(err.value)
+
+
+@pytest.mark.parametrize(
+    ("text", "gone"),
+    [
+        ("Student ID\n\nS2034567\n", "S2034567"),
+        ("Student ID\nS2034567 BSc Econometrics 2021\n", "S2034567"),  # a year has 4 digits: not ID-shaped
+        ("Studentnummer Geboortedatum\n598431 12-03-2001 BSc\n", "12-03-2001"),
+        ("Student number: 512345\n", "512345"),
+    ],
+)
+def test_single_value_cases_still_strip(text: str, gone: str) -> None:
+    out = identifiers.strip(text, CFG.courses)
+    assert gone not in out and CFG.courses.removed_marker in out
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Student number\n[removed] 512345\n",
+        "Student number: [removed] 512345\n",
+        "Student number: [removed], previously 512345\n",
+    ],
+)
+def test_at_send_a_number_after_the_marker_still_stops(text: str) -> None:
+    with pytest.raises(identifiers.UnresolvedIdentifier):
+        identifiers.strip(text, CFG.courses, marker_fills_slot=True)
+
+
+def test_a_document_that_contains_the_marker_text_is_never_trusted_at_read() -> None:
+    with pytest.raises(identifiers.UnresolvedIdentifier):
+        identifiers.strip("Date of birth [removed]\nFEB1\tCourse\t8,0\n", CFG.courses)
+
+
+# ---- data-integrity review round 3 (DECISIONS #74) ------------------------------------------------------
+# F1: a next-line value is taken whole (nothing number- or date-like right after it); F4: after the labels'
+# values, nothing ID-shaped may remain on that line (Read and Send alike); F3: a bracket after a label holds
+# no digits; F2: every default-ignorable character is removed and every space character reads as a space.
+
+
+@pytest.mark.parametrize("send", [False, True])
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Date of birth\n12/3 2001\n",  # F1
+        "Student ID\n5123-45\n",  # F1
+        "Student ID\n2019 512345\n",  # F1
+        "Student ID\n4123 BSc Econometrics 512345\n",  # F4
+    ],
+)
+def test_review_round3_values_not_taken_whole_stop_the_import(text: str, send: bool) -> None:
+    with pytest.raises(identifiers.UnresolvedIdentifier) as err:
+        identifiers.strip(text, CFG.courses, marker_fills_slot=send)
+    assert "512345" not in str(err.value)  # the message never echoes a number
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["Student number\n[removed] 4123\n", "Date of birth\n[removed]/3 2001\n"],
+)
+def test_review_round3_at_send_a_marker_never_hides_what_follows(text: str) -> None:
+    with pytest.raises(identifiers.UnresolvedIdentifier):
+        identifiers.strip(text, CFG.courses, marker_fills_slot=True)
+
+
+def test_review_round3_a_bracket_with_digits_is_not_swallowed_by_the_label() -> None:
+    out = identifiers.strip("Student ID (512345): 598431\n", CFG.courses, strict=False)
+    assert "512345" not in out
+    with pytest.raises(identifiers.UnresolvedIdentifier):
+        identifiers.strip("Student ID (512345): 598431\n", CFG.courses)  # two values: fail closed
+    assert (
+        "(BSN)"
+        not in identifiers.strip("Burgerservicenummer (BSN): 123 456 782\n", CFG.courses).split("[removed]")[
+            1
+        ]
+    )  # a bracket without digits still belongs to the label
+
+
+@pytest.mark.parametrize(
+    ("text", "gone"),
+    [
+        ("Student͏number: 512345\n", "512345"),  # combining grapheme joiner
+        ("Student️number: 512345\n", "512345"),  # variation selector
+        ("Studentㅤnumber: 512345\n", "512345"),  # Hangul filler
+        ("Student number\n51 2345\n", "512345"),  # thin space inside the value
+        ("Student number: 512345\n", "512345"),  # figure space in the label
+    ],
+)
+def test_review_round3_default_ignorables_and_spaces(text: str, gone: str) -> None:
+    out = identifiers.strip(text, CFG.courses)
+    assert _alnum(gone) not in _alnum(out), repr(out)
+
+
+@pytest.mark.parametrize("send", [False, True])
+def test_review_round3_a_bracketed_number_is_the_value_and_the_next_line_stays(send: bool) -> None:
+    """F3: "(512345)" is no longer part of the label, so it is the label's value on its own line; the course
+    code on the next line stays (before, the code was removed and 512345 kept)."""
+    text = "Student number (512345)\nFEB11010 Microeconomics\n"
+    out = identifiers.strip(text, CFG.courses, marker_fills_slot=send)
+    assert "512345" not in out and "FEB11010 Microeconomics" in out

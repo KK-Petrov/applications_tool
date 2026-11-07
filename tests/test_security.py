@@ -172,6 +172,12 @@ NEW_WRITE_ROUTES = {
         "/programmes/princeton-mfin/research/apply",
         {"data": {"proposal": "{}", "domains": "princeton.edu", "accept": "letters_required"}},
     ),
+    # Phase 2c session 2: Accept all / Clear all without JS (#68) and Send to Claude after the review (#70)
+    "re-research select": (
+        "/programmes/princeton-mfin/research/select",
+        {"data": {"proposal": "{}", "domains": "princeton.edu", "select": "all"}},
+    ),
+    "course import send": ("/courses/import/send", {"data": {"text": "FEB1\tCourse one\t8,0\t6\n"}}),
 }
 
 

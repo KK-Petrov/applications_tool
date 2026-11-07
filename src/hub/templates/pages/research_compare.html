@@ -28,13 +28,21 @@
   <input type="hidden" name="domains" value="{{ domains_text.split() | join(' ') }}">
   <input type="hidden" name="digest" value="{{ digest }}">
   <h2 id="compare-title" tabindex="-1">Comparison with your stored data</h2>
+  {#- Accept all / Clear all (DECISIONS #68): with JS app.js ticks the boxes marked data-accept-all; without JS
+      these submit to /research/select, which re-renders this page with those rows ticked and writes nothing. -#}
+  <div class="selection-bar" data-selection>
+    <button class="button button-secondary" type="submit" formaction="/programmes/{{ p.id }}/research/select" name="select" value="all"{% if not accept_all %} disabled{% endif %}>Accept all changes</button>
+    <button class="button button-secondary" type="submit" formaction="/programmes/{{ p.id }}/research/select" name="select" value="none">Clear all</button>
+    <p id="selection-count" class="selection-count" data-total="{{ changes | selectattr('kind', 'in', ['new', 'changed']) | list | length }}" data-refused="{{ refused | length }}">{{ selection }}</p>
+  </div>
+  <p class="hint" id="selection-hint">Accept all changes ticks every change that can be accepted, but never the official domains or a refused row. Nothing is saved until you press <strong>Save accepted changes</strong>.</p>
   <div class="table-scroll" tabindex="0" role="region" aria-labelledby="compare-title">
   <table class="table research-table compare-table">
     <thead><tr><th scope="col">Accept</th><th scope="col">Field</th><th scope="col">Result</th><th scope="col">Stored</th><th scope="col">Research found</th><th scope="col">Source</th></tr></thead>
     <tbody>
     {% for c in changes %}
       <tr data-change="{{ c.id }}" data-kind="{{ c.kind }}"{% if c.refused %} class="refused"{% endif %}>
-        <td>{% if c.acceptable %}<span class="field-check"><input type="checkbox" name="accept" value="{{ c.id }}" id="accept-{{ loop.index }}"><label for="accept-{{ loop.index }}">Accept<span class="visually-hidden"> {{ c.label }}</span></label></span>
+        <td>{% if c.acceptable %}<span class="field-check"><input type="checkbox" name="accept" value="{{ c.id }}" id="accept-{{ loop.index }}"{% if c.id in accept_all %} data-accept-all{% endif %}{% if c.id in ticked %} checked{% endif %}><label for="accept-{{ loop.index }}">Accept<span class="visually-hidden"> {{ c.label }}</span></label></span>
             {%- elif c.refused %}<span class="muted">Can't accept</span>{% else %}<span class="muted">Nothing to accept</span>{% endif %}</td>
         <th scope="row">{{ c.label }}</th>
         <td><span class="chip kind-{{ c.kind }}">{{ kinds[c.kind] }}</span></td>

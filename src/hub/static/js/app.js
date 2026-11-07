@@ -492,6 +492,37 @@
   });
 
   // The page that ends a long call says how it ended and puts focus on its result (DECISIONS #63).
+  // WCAG 2.4.11: the import preview's sticky actions bar must never cover the focused field. The page's
+  // scroll-padding-bottom (app.css) follows the bar's real height (it wraps at some widths), measured here.
+  var observedBar = null;
+  function fitImportBar() {
+    var bar = document.getElementById("import-actions");
+    if (!bar || bar === observedBar || typeof ResizeObserver === "undefined") {
+      return;
+    }
+    observedBar = bar;
+    new ResizeObserver(function () {
+      document.documentElement.style.setProperty("--import-bar-space", (bar.offsetHeight + 8) + "px");
+    }).observe(bar);
+  }
+  document.addEventListener("DOMContentLoaded", fitImportBar);
+  document.addEventListener("htmx:afterSwap", fitImportBar);
+  // A textarea is scrolled only as far as its caret line, so its box can still reach under the bar: move
+  // the page up by the overlap (only while the bar is sticky, and never for the bar's own buttons).
+  document.addEventListener("focusin", function (event) {
+    var bar = document.getElementById("import-actions");
+    var el = event.target;
+    if (!bar || !el || !el.getBoundingClientRect || bar.contains(el)
+        || window.getComputedStyle(bar).position !== "sticky") {
+      return;
+    }
+    var r = el.getBoundingClientRect();
+    var b = bar.getBoundingClientRect();
+    if (r.bottom > b.top && r.top < b.bottom && r.height < b.top) {
+      window.scrollBy(0, r.bottom - b.top + 8);
+    }
+  });
+
   document.addEventListener("DOMContentLoaded", arrive);
   function arrive() {
     var main = document.querySelector(".main-inner[data-focus], .main-inner[data-announce]");
@@ -524,6 +555,48 @@
     var note = form.querySelector(".generating-note");
     if (note) {
       note.textContent = "";
+    }
+  });
+
+  // Re-research "Accept all changes" / "Clear all" (DECISIONS #68). Without JS they submit to /research/select,
+  // which re-renders the comparison ticked and writes nothing. With JS they tick (only the boxes the server
+  // marked data-accept-all: never refused, kept or official-domains rows) or untick in place; nothing is
+  // saved until "Save accepted changes", which re-checks everything on the server. The count follows every
+  // tick and is announced after the two buttons only.
+  function selectionText(form) {
+    var count = form.querySelector("#selection-count");
+    if (!count) {
+      return "";
+    }
+    var total = parseInt(count.dataset.total, 10);
+    var refused = parseInt(count.dataset.refused, 10);
+    var selected = form.querySelectorAll("input[name=accept]:checked").length;
+    var text = selected + " of " + total + " change" + (total === 1 ? "" : "s") + " selected";
+    count.textContent = text + (refused ? " · " + refused + " refused" : "");
+    return count.textContent;
+  }
+
+  document.addEventListener("click", function (event) {
+    var button = event.target.closest("[data-selection] button[name=select]");
+    if (!button || button.disabled) {
+      return;
+    }
+    var form = button.form;
+    event.preventDefault();
+    form.querySelectorAll("input[name=accept]").forEach(function (box) {
+      if (button.value === "none") {
+        box.checked = false;
+      } else if (box.hasAttribute("data-accept-all")) {
+        box.checked = true;
+      }
+    });
+    announce(selectionText(form));
+  });
+
+  document.addEventListener("change", function (event) {
+    var box = event.target;
+    if (box && box.name === "accept" && box.form && box.form.querySelector("#selection-count")) {
+      selectionText(box.form);
     }
   });
 

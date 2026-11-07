@@ -1,10 +1,12 @@
 {% extends "base.html" %}
-{#- Import courses (US-19; docs/03 §4.8, docs/04 §9). Upload or paste → preview (nothing written) → Accept per course
+{#- Import courses (US-19; docs/03 §4.8, docs/04 §9). Upload or paste → review of the stripped text (nothing sent,
+    DECISIONS #70) → Send to Claude → preview (nothing written) → Accept per course
     or Accept all. Identifiers are removed in Python before anything is sent or shown (docs/02 §10). One card per
     course, so every field stays readable at any width; a saved course is read-only (DECISIONS #65). -#}
 {% from "_working.html" import working_notice %}
 {% block main_attrs %}
 {%- if error %} data-focus="import-error" data-announce="{{ error }}"
+{%- elif review %} data-focus="review-title" data-announce="Text read. Check what will be sent below; nothing has been sent yet."
 {%- elif rows is not none and focus_row is not none %} data-focus="row-{{ focus_row }}" data-announce="{{ notice or '' }}"
 {%- elif rows is not none and notice %} data-focus="preview-title" data-announce="{{ notice }}"
 {%- elif rows is not none %} data-focus="preview-title" data-announce="Reading finished. Check every course below."
@@ -21,12 +23,28 @@
 {% block content %}
 {% set nl = "\n" %}
 {% if error %}<div class="form-error" role="alert" tabindex="-1" id="import-error"><p>{{ error }}</p></div>{% endif %}
-{% if rows is none %}
+{% if review %}
+<section class="card" aria-labelledby="review-title">
+  <h2 id="review-title" tabindex="-1">Check what will be sent</h2>
+  <p>This is exactly the text that <strong>Send to Claude</strong> sends to Claude Code; nothing has been sent yet. {{ removed_count }} value{{ "" if removed_count == 1 else "s" }} the app recognised as a student number, date of birth or national ID number {{ "is" if removed_count == 1 else "are" }} replaced by the highlighted <mark class="removed removed-sample">{{ marker }}</mark>. If a personal number is still there, press <strong>Cancel</strong> and remove it from the document first.</p>
+  <div class="review-text" tabindex="0" role="region" aria-label="Text to be sent">
+<pre>{% for part in text.split(marker) %}{{ part }}{% if not loop.last %}<mark class="removed">{{ marker }}</mark>{% endif %}{% endfor %}</pre>
+  </div>
+  <form method="post" action="/courses/import/send" id="courses-send"
+        hx-post="/courses/import/send" hx-sync="this:drop" data-working data-notice="courses-notice">
+    <input type="hidden" name="text" value="{{ text }}">
+    <input type="hidden" name="original_name" value="{{ original_name }}">
+    <input type="hidden" name="original_sha256" value="{{ original_sha256 }}">
+    <div class="research-actions"><button class="button button-primary" type="submit" data-busy-text="Sending…">Send to Claude</button>
+      <a class="button button-secondary" href="/courses/import" data-writes>Cancel</a></div>
+  </form>
+  {{ working_notice("courses-notice", "Nothing is saved until you accept courses.", title="Reading the courses.", action="the import", minutes=import_limit_minutes) }}
+</section>
+{% elif rows is none %}
 <section class="card" aria-labelledby="upload-title">
   <h2 id="upload-title">Your transcript</h2>
-  <p>Choose a Word file (.docx) or a PDF with a text layer, or paste the text. Student numbers, dates of birth and national ID numbers are removed in the app before anything is sent to Claude Code; the original file is never stored. Nothing is saved until you accept courses.</p>
-  <form method="post" action="/courses/import" enctype="multipart/form-data" id="courses-upload" class="courses-upload"
-        hx-post="/courses/import" hx-encoding="multipart/form-data" hx-sync="this:drop" data-working data-notice="courses-notice">
+  <p>Choose a Word file (.docx) or a PDF with a text layer, or paste the text. Student numbers, dates of birth and national ID numbers are removed in the app; you then see exactly the text that would be sent to Claude Code, and nothing is sent until you press <strong>Send to Claude</strong>. The original file is never stored. Nothing is saved until you accept courses.</p>
+  <form method="post" action="/courses/import" enctype="multipart/form-data" id="courses-upload" class="courses-upload">
     <div class="field">
       <label for="import-file">Transcript file</label>
       <input id="import-file" name="file" type="file" accept=".docx,.pdf" aria-describedby="import-file-hint">
@@ -36,9 +54,8 @@
       <label for="import-paste">Or paste the text</label>
       <textarea id="import-paste" name="pasted" rows="8"></textarea>
     </div>
-    <div class="research-actions"><button class="button button-primary" type="submit" data-busy-text="Reading…">Read courses</button></div>
+    <div class="research-actions"><button class="button button-primary" type="submit">Read courses</button></div>
   </form>
-  {{ working_notice("courses-notice", "Nothing is saved until you accept courses.", title="Reading the courses.", action="the import", minutes=import_limit_minutes) }}
 </section>
 {% else %}
 {% if notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}

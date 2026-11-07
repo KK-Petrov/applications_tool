@@ -41,6 +41,7 @@ def _preview(page: Page, live_server: str) -> None:
     page.goto(live_server + "/courses/import", wait_until="domcontentloaded")
     page.get_by_label("Transcript file").set_input_files(str(EVAL / "transcript.docx"))
     page.get_by_role("button", name="Read courses").click()
+    page.get_by_role("button", name="Send to Claude").click()  # after the review step (#70)
     page.locator("#courses-preview").wait_for(timeout=20000)
 
 
@@ -95,8 +96,9 @@ def test_a_disabled_button_looks_disabled(page: Page, live_server: str, rows) ->
 def _start_import_with(page: Page, live_server: str, handler) -> None:  # noqa: ANN001
     page.goto(live_server + "/courses/import", wait_until="domcontentloaded")
     page.get_by_label("Or paste the text").fill("FEB1\tCourse one\t8,0\t6\n")
-    page.route("**/courses/import", handler)
     page.get_by_role("button", name="Read courses").click()
+    page.route("**/courses/import/send", handler)  # the call happens at Send (#70)
+    page.get_by_role("button", name="Send to Claude").click()
 
 
 def _assert_failed_visibly(page: Page) -> None:
@@ -104,7 +106,7 @@ def _assert_failed_visibly(page: Page) -> None:
     expect(notice).to_contain_text("Nothing was saved")
     expect(notice.locator(".spinner")).to_be_hidden()
     expect(page.locator("main h1")).to_be_visible()  # the page is still there
-    expect(page.get_by_role("button", name="Read courses")).not_to_have_attribute("aria-disabled", "true")
+    expect(page.get_by_role("button", name="Send to Claude")).not_to_have_attribute("aria-disabled", "true")
     expect(page.locator("[data-locked]")).to_have_count(0)
 
 
@@ -132,15 +134,19 @@ def test_creating_professors_is_confirmed_on_the_sheet(
     page.goto(live_server + "/courses/import", wait_until="domcontentloaded")
     page.get_by_label("Transcript file").set_input_files(str(EVAL / "transcript.pdf"))
     page.get_by_role("button", name="Read courses").click()
+    page.get_by_role("button", name="Send to Claude").click()  # after the review step (#70)
     page.get_by_role("button", name="Accept all").click()
     page.get_by_role("button", name="Create professors from this document").click()
     page.locator("[data-lecturer='odegaard-l']").get_by_role("checkbox").check()
     page.locator("[data-lecturer='bakker-e']").get_by_role("checkbox").check()
     page.get_by_role("button", name="Create ticked professors").click()
     page.wait_for_url("**/recommenders?created=*", wait_until="domcontentloaded")
-    # 15 s: under 8 parallel workers the redirect and the sheet can take longer than the default 5 s
-    expect(page.get_by_role("status").filter(has_text="Created 2 professors")).to_be_visible(timeout=15000)
-    expect(page.locator("#live-status")).to_contain_text("Created 2 professors", timeout=15000)
+    # Scoped to main: the page has two role=status elements, the visible notice and the global #live-status
+    # (outside main), and app.js copies the notice into #live-status 50 ms after load. Unscoped, the locator
+    # matched both once those 50 ms had passed (a strict-mode violation, never retried): the 1-in-20 failure
+    # under parallel load, reproduced every time with a 300 ms pause (DECISIONS #71).
+    expect(page.locator("main").get_by_role("status").filter(has_text="Created 2 professors")).to_be_visible()
+    expect(page.locator("#live-status")).to_contain_text("Created 2 professors")
 
 
 # ---- round 2 (ui review): retry after a failure, focus on the error, Check again, pasted text -------------
@@ -166,7 +172,7 @@ def test_a_retry_after_a_failure_starts_clean(
     expect(error).to_be_visible()
     expect(error).to_be_focused()  # focus goes to the error (docs/03 §5)
     expect(page.locator("#courses-notice .working-meta")).to_be_hidden()  # no stale timer or limit line
-    page.get_by_role("button", name="Read courses").click()
+    page.get_by_role("button", name="Send to Claude").click()
     notice = page.locator("#courses-notice")
     expect(notice.locator(".working-title")).to_contain_text("Reading the courses.")
     expect(notice.locator(".spinner")).to_be_visible()
@@ -184,11 +190,77 @@ def test_check_again_keeps_the_user_at_the_course_with_a_problem(page: Page, liv
 
 
 def test_text_pasted_into_a_locked_field_is_refused(page: Page, live_server: str, monkeypatch) -> None:
+    """Moved to the research form (disclosed, DECISIONS #70): since the review step the course import's
+    long call starts from a page without text fields; the lock is the same shared app.js code."""
     monkeypatch.setenv("FAKE_CLAUDE_DELAY", "4")
-    page.goto(live_server + "/courses/import", wait_until="domcontentloaded")
-    page.get_by_label("Or paste the text").fill("FEB1\tCourse one\t8,0\t6\n")
-    page.get_by_role("button", name="Read courses").click()
-    page.locator('#courses-upload[data-busy="true"]').wait_for()
-    page.locator("#import-paste").focus()
+    page.goto(live_server + "/programmes/new", wait_until="domcontentloaded")
+    page.get_by_label("Programme to research").fill("Example MSQF")
+    page.get_by_role("button", name="Research a programme").click()
+    page.locator('#research-run[data-busy="true"]').wait_for()
+    page.locator("#research-url").focus()
     page.keyboard.insert_text("INSERTED")
-    assert "INSERTED" not in page.locator("#import-paste").input_value()
+    assert "INSERTED" not in page.locator("#research-url").input_value()
+
+
+# ---- WCAG 2.4.11 Focus not obscured: the actions bar never covers the focused element (session 2) ---------
+
+VIEWPORTS = {1280: 800, 760: 1024, 390: 844}
+UNDER_BAR = """() => {
+    const bar = document.querySelector('#import-actions').getBoundingClientRect();
+    const el = document.activeElement;
+    if (!el || el === document.body || el.closest('#import-actions')) return null;
+    const r = el.getBoundingClientRect();
+    const overlap = r.bottom > bar.top + 0.5 && r.top < bar.bottom - 0.5
+        && r.right > bar.left && r.left < bar.right;
+    return overlap
+        ? `${el.id || el.tagName}: ${Math.round(r.top)}-${Math.round(r.bottom)} under the bar at `
+          + `${Math.round(bar.top)}-${Math.round(bar.bottom)}`
+        : null;
+}"""
+
+
+def _at(page: Page, live_server: str, width: int) -> None:
+    page.set_viewport_size({"width": width, "height": VIEWPORTS[width]})
+    _preview(page, live_server)
+
+
+@pytest.mark.parametrize("width", list(VIEWPORTS))
+def test_the_actions_bar_never_covers_the_course_focused_after_check_again(
+    page: Page, live_server: str, rows, width: int
+) -> None:
+    _at(page, live_server, width)
+    page.locator("#row-0-grade").fill("8,0")  # the planted bad grade, corrected
+    page.locator("#row-20-grade").fill("1,0")  # a new problem low on the page
+    page.get_by_role("button", name="Check again").click()
+    expect(page.locator("#row-20")).to_be_focused()
+    assert page.evaluate(UNDER_BAR) is None, page.evaluate(UNDER_BAR)
+
+
+@pytest.mark.parametrize("width", list(VIEWPORTS))
+def test_the_actions_bar_never_covers_the_course_focused_after_accept(
+    page: Page, live_server: str, rows, width: int
+) -> None:
+    _at(page, live_server, width)
+    page.locator("[data-row='22']").get_by_role("button", name="Accept").click()
+    expect(page.locator("[data-row='22']")).to_contain_text("Saved")
+    expect(page.locator("#row-22")).to_be_focused()
+    assert page.evaluate(UNDER_BAR) is None, page.evaluate(UNDER_BAR)
+
+
+@pytest.mark.parametrize("width", list(VIEWPORTS))
+def test_the_actions_bar_never_covers_a_field_while_tabbing(
+    page: Page, live_server: str, rows, width: int
+) -> None:
+    _at(page, live_server, width)
+    page.locator("#row-0-name").focus()
+    covered, stops = [], 0
+    while stops < 400:
+        problem = page.evaluate(UNDER_BAR)
+        if problem:
+            covered.append(problem)
+        if page.evaluate("!!document.activeElement.closest('#import-actions')"):
+            break  # reached the bar itself: every field before it was checked
+        page.keyboard.press("Tab")
+        stops += 1
+    assert stops > 28 * 7, stops  # every card's fields were visited
+    assert covered == [], covered[:5]

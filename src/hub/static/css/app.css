@@ -428,6 +428,13 @@ table.usage td:nth-child(3) { min-width: 220px; }  /* "For" keeps room on phones
 .research-start { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 12px 16px; align-items: start; }
 .research-start .research-actions { grid-column: 1 / -1; }
 .research-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 12px; }
+/* Course import: the text to be sent, reviewed before Send to Claude (DECISIONS #70) */
+.review-text { max-height: 60vh; overflow: auto; margin: 12px 0; padding: 12px; border: 1px solid var(--color-border); border-radius: var(--radius-button); background: var(--color-surface); }
+.review-text pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: var(--font-size-small); }
+mark.removed { background: var(--color-urgent-bg); color: var(--color-urgent-text); font-weight: var(--weight-medium); outline: 1px solid var(--color-urgent); border-radius: 2px; }
+/* Re-research Accept all changes / Clear all and the count (DECISIONS #68) */
+.selection-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 8px 0 4px; }
+.selection-count { margin: 0; font-weight: var(--weight-medium); }
 .working-note { color: var(--color-text-secondary); }
 .form-heading { margin: 24px 0 8px; }
 .research-domains textarea { font-family: var(--font-mono); }
@@ -497,6 +504,14 @@ fieldset.research-deadline legend { font-weight: var(--weight-semibold); padding
 .import-actions {  /* always in reach on a long preview (ui review round 2) */
   position: sticky; bottom: 0; z-index: 2; background: var(--color-surface);
   border-top: 1px solid var(--color-border); padding: 12px 0; margin: 0;
+}
+/* WCAG 2.4.11 (session 2): focus scrolling keeps the focused field above the sticky bar. app.js sets
+   --import-bar-space to the bar's measured height + 8 px; 96 px is the no-JS fallback (one row is 69 px).
+   Below 760 px a course card can be taller than the space above the bar, so the bar is not sticky there. */
+html:has(#import-actions) { scroll-padding-bottom: var(--import-bar-space, 96px); }
+@media (max-width: 759px) {
+  .import-actions { position: static; }
+  html:has(#import-actions) { scroll-padding-bottom: 0; }
 }
 .course-row { border: 1px solid var(--color-border); border-radius: var(--radius-card); padding: 12px 16px; margin: 0 0 12px; min-width: 0; }
 .course-row legend { font-weight: var(--weight-semibold); padding: 0 4px; overflow-wrap: anywhere; }

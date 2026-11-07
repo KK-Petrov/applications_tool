@@ -205,9 +205,14 @@ def build_router(web: Web) -> APIRouter:
         status: int = 200,
         error: str | None = None,
         notice: str | None = None,
+        ticked: set[str] | None = None,
+        digest: str | None = None,
     ) -> HTMLResponse:
+        """The comparison; ``ticked`` rows are rendered ticked (only rows that can be accepted), ``digest``
+        carries the comparison's file digest through Accept all / Clear all (the file's own otherwise)."""
         snapshot = store.load_all()
         changes = research.compare(p, output, domains, shared)
+        ticked = {c.id for c in changes if c.acceptable and c.id in (ticked or set())}
         return web.render(
             request,
             "pages/research_compare.html",
@@ -220,8 +225,11 @@ def build_router(web: Web) -> APIRouter:
             refused=[c.refused for c in changes if c.refused],
             proposal_json=json.dumps(output),
             domains_text="\n".join(domains),
-            digest=store.programme_digest(p.id),
+            digest=digest if digest is not None else store.programme_digest(p.id),
             warnings=output.get("warnings", []),
+            ticked=ticked,
+            accept_all=set(research.accept_all_ids(changes)),
+            selection=research.selection_text(changes, ticked),
             error=error,
             notice=notice,
         )
@@ -337,6 +345,27 @@ def build_router(web: Web) -> APIRouter:
         if not p.official_domains:
             return render_domains(request, output, research.prefill_domains(p), [], p)
         return render_compare(request, p, output, list(p.official_domains))
+
+    @router.post("/programmes/{pid}/research/select", response_class=HTMLResponse)
+    async def reresearch_select(request: Request, pid: str) -> Response:
+        """Accept all changes / Clear all without JS (DECISIONS #68): the comparison again with those rows
+        ticked. Never calls Claude and never writes; the comparison's digest is carried through, so Save
+        still refuses a file changed since the comparison."""
+        form = await request.form()
+        snapshot = store.load_all()
+        p = find(snapshot, pid)
+        try:
+            output = parse(form)
+        except ValueError as err:
+            return render_programme_error(request, pid, str(err))
+        domains, problems = research.check_domains(research.split_domains(str(form.get("domains", ""))))
+        if problems:
+            return render_domains(request, output, domains, problems, p, status=409)
+        ticked: set[str] = set()
+        if form.get("select") == "all":
+            changes = research.compare(p, output, domains, shared)
+            ticked = {str(a) for a in form.getlist("accept")} | set(research.accept_all_ids(changes))
+        return render_compare(request, p, output, domains, ticked=ticked, digest=str(form.get("digest", "")))
 
     @router.post("/programmes/{pid}/research/apply", response_class=HTMLResponse)
     async def reresearch_apply(request: Request, pid: str) -> Response:
