@@ -39,6 +39,7 @@ State at hand-off: `uv run python tasks.py test-fast` 997 passed (36.0 s); full 
 - **Open questions:**
   - Requirement notes (#67): re-research now compares requirement labels only and never changes the owner's notes (follows from #66, chosen as the option that can't lose data). Keep, or show note changes as their own rows?
   - Known gaps accepted for now (#67): a label split across lines or with a zero-width space isn't recognised; a "Course ID Number" heading is read as a label (over-removal, the safe side); two-column PDF lines keep the documented grade limit.
+- **Lead from the stopped round-3 ui review** (stopped by the user before its report): its last note was a "clear 2.4.11 signal": the sticky actions row at the bottom of the import preview (`.import-actions`, #67) may cover the focused field or the refusal text after Check again at 390 px (WCAG 2.4.11 Focus not obscured). Check it first; a likely fix is `scroll-padding-bottom` on the page equal to the bar's height, or a non-sticky bar, with an e2e guard.
 - **Next first step:** `/resume 2c`, then run `uv run python tasks.py test` and the criteria guard, then launch ui-reviewer and data-integrity-reviewer (round 3, scope DECISIONS #67 and regressions) and ai-output-reviewer (round 2, scope #64–#67) in parallel; fix any FAIL with a test first, then the acceptance table and the You check.
 
 ### Phase 2c hand-off (2026-11-06, end of session 1, at the planned Part A / Part B boundary)
