@@ -113,7 +113,9 @@ emails:                           # generated drafts, newest last
   - {generated_at: 2026-10-31T10:12:00-04:00, programmes: [princeton-mfin], subject: "...", body: "...",
      warnings: ["Princeton MFin's deadline is unverified — check it before sending"], marked_sent_on: null}
      # warnings: shown with the draft, unverified deadlines first (DECISIONS #48); marked_sent_on: stamped by
-     # Mark as requested when its programmes include this draft's (US-10)
+     # Mark as requested (on the draft the panel shows) when ANY programme it moves to Requested is one of
+     # this draft's programmes; it need not cover them all (US-10; DECISIONS #56). A stamped draft keeps its
+     # first date.
 notes: null
 ```
 Letter `status` ∈ `not_asked | draft_ready | requested | confirmed | submitted | declined`.

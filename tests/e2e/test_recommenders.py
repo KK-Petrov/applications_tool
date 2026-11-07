@@ -384,3 +384,26 @@ def test_us10_live_region_is_in_the_page_before_any_action(page: Page, live_serv
     expect(region).to_have_count(1)
     expect(region).to_have_attribute("aria-live", "polite")
     expect(region).to_have_text("")
+
+
+def test_us10_busy_generate_keeps_focus_announces_and_drops_a_second_submit(
+    page: Page, live_server: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """ui review round 4: guards #53(1). The button stays focusable but aria-disabled, the start is
+    announced, and repeated Enter or a forced click while busy make no second Claude call."""
+    calls = tmp_path / "calls.jsonl"
+    monkeypatch.setenv("FAKE_CLAUDE_MODE", "timeout")
+    monkeypatch.setenv("FAKE_CLAUDE_SLEEP", "4")
+    monkeypatch.setenv("FAKE_CLAUDE_LOG", str(calls))
+    page.goto(live_server + "/recommenders?selected=jansen", wait_until="domcontentloaded")
+    button = page.locator("#panel form.generate-form button[type=submit]")
+    button.focus()
+    page.keyboard.press("Enter")
+    expect(button).to_have_attribute("aria-disabled", "true")
+    expect(button).to_have_text("Generating…")
+    expect(button).to_be_focused()
+    expect(page.locator("#live-status")).to_contain_text("Generating with Claude Code")
+    page.keyboard.press("Enter")
+    button.click(force=True)  # a plain click would wait until the button is enabled again
+    page.locator("#panel .email-area .form-error").wait_for(timeout=20000)
+    assert len(calls.read_text(encoding="utf-8").splitlines()) == 1

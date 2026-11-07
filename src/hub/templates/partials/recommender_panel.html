@@ -1,4 +1,5 @@
 {% from "_time.html" import deadline with context %}
+{% from "_badge.html" import data_badge with context %}
 {#- Detail panel for the selected professor (docs/03 §4.3). The only place the email is shown. -#}
 <section class="card panel" id="panel" data-professor="{{ prof.id }}" aria-labelledby="panel-title" tabindex="-1"{% if oob_panel %} hx-swap-oob="true"{% endif %}>
   <div class="panel-head">
@@ -44,7 +45,7 @@
         <div class="field-check">
           <input type="checkbox" id="gen-{{ prof.id }}-{{ c.programme.id }}" name="programmes" value="{{ c.programme.id }}" checked aria-describedby="gen-{{ prof.id }}-{{ c.programme.id }}-dl">
           <label for="gen-{{ prof.id }}-{{ c.programme.id }}">{{ c.programme.short_name }}</label>
-          <span class="sub" id="gen-{{ prof.id }}-{{ c.programme.id }}-dl">deadline {{ deadline(c.summary.deadline) }}</span>
+          <span class="sub" id="gen-{{ prof.id }}-{{ c.programme.id }}-dl">deadline {{ deadline(c.summary.deadline) }}{% if c.summary.badge.unverified %} {{ data_badge(c.summary.badge) }}{% endif %}</span>
         </div>
         {% endfor %}
       </fieldset>

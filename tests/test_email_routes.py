@@ -160,6 +160,38 @@ def test_mark_as_requested_stamps_the_email(client: FormClient, data_dir: Path) 
     assert stored["emails"][-1]["marked_sent_on"] == date(2026, 10, 30)
 
 
+def _mark_requested(client: FormClient, programmes: list[str]) -> None:
+    """Submit the panel's Mark as requested form with exactly ``programmes`` ticked."""
+    fields = form_fields(client.get("/recommenders/jansen/panel").text, "mark-requested-jansen")
+    fields = [(k, v) for k, v in fields if k != "programmes"] + [("programmes", p) for p in programmes]
+    assert client.post("/recommenders/jansen/mark-requested", data=fields).status_code == 303
+
+
+def test_mark_as_requested_stamps_the_draft_when_any_of_its_programmes_is_ticked(
+    client: FormClient, data_dir: Path, jansen_with_mit: None
+) -> None:
+    """User decision at 2b acceptance (DECISIONS #56): one overlapping programme is enough, not all."""
+    client.post(
+        "/recommenders/jansen/email",
+        data=[("programmes", "princeton-mfin"), ("programmes", "mit-sloan-mfin")],
+        headers=HX,
+    )
+    _mark_requested(client, ["princeton-mfin"])
+    stored = _load(data_dir, "jansen")
+    assert stored["emails"][-1]["marked_sent_on"] == date(2026, 10, 30)
+    assert stored["letters"]["mit-sloan-mfin"]["status"] == "draft_ready"  # only the ticked letter moves
+
+
+def test_mark_as_requested_leaves_a_draft_for_other_programmes_unstamped(
+    client: FormClient, data_dir: Path, jansen_with_mit: None
+) -> None:
+    client.post("/recommenders/jansen/email", data=[("programmes", "princeton-mfin")], headers=HX)
+    _mark_requested(client, ["mit-sloan-mfin"])
+    stored = _load(data_dir, "jansen")
+    assert stored["letters"]["mit-sloan-mfin"]["status"] == "requested"
+    assert stored["emails"][-1]["marked_sent_on"] is None  # the draft did not ask for MIT
+
+
 # ---- models and the Title field (DECISIONS, 2b: title moves forward from 2c) ----------------------
 
 
@@ -267,3 +299,20 @@ def test_a_model_warning_cannot_pose_as_an_unverified_alert(
     client.post("/recommenders/jansen/email", data=[("programmes", "princeton-mfin")], headers=HX)
     warnings = _load(data_dir, "jansen")["emails"][-1]["warnings"]
     assert not any(w.startswith("MIT Sloan MFin") for w in warnings)
+
+
+def test_generate_checklist_marks_unverified_deadlines(client: FormClient, jansen_with_mit: None) -> None:
+    """ui review round 4 (C-1-01, rule 11): each deadline offered for the email shows its Unverified badge."""
+    html = client.get("/recommenders/jansen/panel").text
+    reasons = {"princeton-mfin": "Last cycle's date", "mit-sloan-mfin": "Researched, not checked"}
+    for pid, reason in reasons.items():
+        start = html.index(f'id="gen-jansen-{pid}-dl"')
+        line = html[start : html.index("</div>", start)]
+        assert "badge-unverified" in line, pid
+        assert str(escape(reason)) in line, pid
+
+
+def test_mark_as_requested_comes_after_the_email(client: FormClient) -> None:
+    """ui review round 4: guards #53(3); the owner reads the draft before marking it sent."""
+    html = client.get("/recommenders/whitfield/panel").text
+    assert html.index('id="email-result"') < html.index('class="mark-requested"')

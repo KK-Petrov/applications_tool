@@ -13,7 +13,6 @@
       "Bash(uv run python tasks.py:*)",
       "Bash(uv run pytest:*)",
       "Bash(uv run ruff:*)",
-      "Bash(uv run hub:*)",
       "Bash(python tasks.py:*)",
       "Bash(python .claude/hooks/criteria_guard.py)"
     ],

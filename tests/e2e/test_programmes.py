@@ -31,7 +31,9 @@ def _set_zone(page: Page, base: str, label: str) -> None:
 
 
 def _pages(base: str) -> list[str]:
-    return [base + "/", base + "/programmes"] + [f"{base}/programmes/{pid}" for pid in PROGRAMMES]
+    """Pages that print deadlines or times (recommender panels added at the 2b ui review, round 4)."""
+    panels = [base + "/recommenders?selected=jansen", base + "/recommenders?selected=whitfield"]
+    return [base + "/", base + "/programmes"] + [f"{base}/programmes/{pid}" for pid in PROGRAMMES] + panels
 
 
 def _source_urls(data_dir: Path) -> dict[str, str]:

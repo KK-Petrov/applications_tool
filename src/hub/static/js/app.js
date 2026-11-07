@@ -221,6 +221,23 @@
     }
   });
 
+  // Back to the Add/Edit page from the browser's back-forward cache: the page comes back as it was left,
+  // still busy, which would silently block every later submit. Reset the busy state.
+  window.addEventListener("pageshow", function (event) {
+    var form = document.getElementById("professor-form");
+    if (!event.persisted || !form) {
+      return;
+    }
+    delete form.dataset.busy;
+    form.querySelectorAll("[aria-disabled=true]").forEach(function (button) {
+      button.removeAttribute("aria-disabled");
+    });
+    var note = form.querySelector(".generating-note");
+    if (note) {
+      note.textContent = "";
+    }
+  });
+
   // Copy buttons on the request email (US-10): data-copy-target names the element whose text is copied
   // (subject, body); data-copy-text is copied as is ("Refine in Claude Code" command). The result is
   // announced in the nearest .copy-status live region. Nothing is sent anywhere: the clipboard only.
