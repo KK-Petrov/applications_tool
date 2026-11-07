@@ -31,6 +31,7 @@ App binds to `127.0.0.1:8765` only.
 | `GET /essays`, `GET /essays/{programme_id}/{essay_id}`, `POST …/versions`, `POST …/evaluate` | Essays (4a/4b) |
 | `GET /cv`, `GET /cv/{base or programme_id}`, `POST …/versions`, `POST …/evaluate` | CVs (4a/4b) |
 | `GET /biography`, `POST /biography/entries`, `POST /biography/entries/{id}` | Biography bank (4a) |
+| `GET /usage` | AI usage (read-only; query `month=YYYY-MM\|all`, `source=app\|eval\|live\|unknown\|all`; DECISIONS #60) |
 | `GET /settings`, `POST /settings` | Owner details, display zone, Google connection, Sync now (3) |
 | `POST /display-tz` | Header zone selector |
 
@@ -62,7 +63,7 @@ App binds to `127.0.0.1:8765` only.
 
 ## 3. Layout and navigation
 - Left sidebar (dark, 220 px min, stacks on top below 760 px): brand "Application Hub"; links Dashboard,
-  Programmes, Recommenders, Essays and CV, Biography bank, Settings; footer: "Reminders sync to Google
+  Programmes, Recommenders, Essays and CV, Biography bank, AI usage, Settings; footer: "Reminders sync to Google
   Calendar “Applications” · Daily digest at first login" plus last sync time.
 - Main column: max width 1120 px (1240 px on the recommender sheet), padding 32 px 40 px.
 - Header row on every page: date ("Friday 30 October 2026"), zone selector ("Times in: Eastern Time
@@ -117,11 +118,53 @@ policy line, version history with "Compare".
 detail, tags, Anticipated chip, "used in n essays", Edit); Add entry form inline.
 ### 4.7 Settings — owner name and email, display and reminder zones, data folder path (read-only, from
 config), Google: Connect / Connected as …, Sync now (with dry-run checkbox), last sync summary, digest preview.
+Phase 5: this month's AI calls and estimated cost (app calls), linking to the AI usage page (§4.9).
 
 ### 4.8 Courses and course import (Phase 2c) — reached from Recommenders ("Import courses") and Add professor
 - Courses list: name, code, institution, grade, credits, term, lecturers; Import button.
 - Import: paste text or choose a .docx / PDF file. A scanned PDF is refused: "This PDF has no text layer; OCR is not supported. Export it as text or Word, or paste the text." Preview table with every field of every row; a grade not found verbatim in the document is flagged and blocks that row; Accept per row and Accept all; nothing is written before. Identifiers never appear in the preview.
 - Create professors from this document: one line per lecturer (name as written, their courses with the owner's grade, "listed first" marker), sorted by best grade, nothing ticked; a match with an existing professor offers "Link to {name}" instead of creating; Create ticked professors writes them in one batch.
+
+### 4.9 AI usage (DECISIONS #60) — main message: "what each AI call was for, what it cost, and whether it worked"
+- Read-only page at `GET /usage` ("AI usage" in the sidebar), from both usage logs (docs/01 §11). There is no
+  write route.
+- Note, verbatim: "Estimated API-equivalent cost. On your subscription this draws from your monthly Agent SDK
+  credit and isn't billed separately unless usage credits are enabled."
+- Totals card: "This month is <Month YYYY> in the display zone." Two tables, each with calls and cost this
+  month, calls and cost all time, and errors all time:
+  - **By source**: all four sources, with zeros for one without calls, plus an "All sources" row, whatever
+    the filter.
+  - **By action**: follows the source filter; its caption reads "By action · <source>". With no calls from
+    that source it shows one row: "No calls from this source yet."
+  - A note counts the calls that reported no cost (shown as $0 in the sums).
+  - Costs are shown with three decimals everywhere, so the rows add up to the total as shown.
+  - Totals don't follow the month filter.
+- Filters (a GET form, works without JS; each label stays next to its select): Month (All months by default,
+  then every month with calls in the display zone, plus the month asked for) and Source (App by default, Eval,
+  Live, Unknown (before the audit log), All sources), with an Apply button. A bad value falls back to the
+  default.
+- Calls table, newest first:
+  - Date and time: display zone, with its abbreviation.
+  - Action label.
+  - For: the professor's name and the programmes' short names, linked to the sheet panel and the programme
+    page. An item no longer in data_dir shows its ID with "(no longer in your data)". Eval and live rows show
+    their invented IDs, never resolved or linked. Calls without a subject show "A new programme",
+    "A course document", "Skill and lockdown checks" or "Not recorded".
+  - Duration ("20.0 s").
+  - Estimated cost ("$0.042", or "not reported").
+  - Result chip: "Done", or "Error: timed out / Claude Code not found / Claude Code failed / unusable output".
+- States:
+  - Empty: "No AI calls logged yet. …"; when every line is unreadable: "No readable AI calls."
+  - No app calls with the default filters: "No app calls yet. Choose Eval, Live or All sources under Source to
+    see the others."
+  - Filtered empty: "No calls match these filters."
+  - Error banner (role alert): "N lines (or parts) of the AI usage log could not be read", each by file and line
+    number (or the whole file) and the field at fault, never its value; "These lines are left out of the list
+    and the totals." (plus "The rest of the log loaded normally." only when some lines loaded).
+  - Essay subjects show "essay <id>" until Phase 4a can resolve essay titles; a CV for a deleted programme
+    shows the ID with "(no longer in your data)".
+  - Hint while the old run log's lines aren't imported: "N earlier calls in the old run log (…) aren't in
+    this log yet. Run `uv run hub import-usage` to add them."
 
 ## 5. States
 Every page has: loading (HTMX indicator on the triggering element), empty ("No professors yet — add one or

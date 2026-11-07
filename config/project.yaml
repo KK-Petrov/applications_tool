@@ -73,7 +73,8 @@ claude:
   path: null                      # null → shutil.which("claude"); env HUB_CLAUDE_PATH overrides (tests: tests/fakes/fake_claude.py)
   timeout_s: 120
   research_timeout_s: 300
-  usage_log: reports/ai_usage.jsonl
+  usage_log: logs/ai_usage.jsonl          # the app's AI usage log, relative to data_dir (backed up with the data); docs/01 §11 (DECISIONS #60)
+  run_usage_log: reports/ai_usage.jsonl  # eval and live calls, relative to the repository (gitignored); source: user (DECISIONS #60)
   max_turns: 3                    # headless lockdown: turn cap per call (DECISIONS, Phase 2b); source: user
   eval_concurrency: 3             # parallel live calls in tasks.py eval-email; source: recommended (rate limits)
 

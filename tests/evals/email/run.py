@@ -32,12 +32,23 @@ def _sha(skill: str) -> str:
     return hashlib.sha256(skill_file(skill).read_bytes()).hexdigest()
 
 
+def _subject(case: Case) -> dict[str, Any]:
+    """What an eval call is for, as IDs (invented eval data) for the run log (DECISIONS #60)."""
+    return {"professor_id": case.professor.id, "programme_ids": list(case.programme_ids)}
+
+
 def _claims(
-    text: str, facts: dict[str, Any], config: Config
+    text: str, facts: dict[str, Any], config: Config, case: Case
 ) -> tuple[list[dict[str, str]], str | None, float]:
     try:
         result = run_skill(
-            "grade-claims", {"text": text, "facts": facts}, load_schema("grade_claims"), config=config
+            "grade-claims",
+            {"text": text, "facts": facts},
+            load_schema("grade_claims"),
+            config=config,
+            action="grade_claims",
+            subject=_subject(case),
+            source="eval",
         )
     except SkillError as err:
         return [], err.kind, 0.0
@@ -51,7 +62,15 @@ def _run_case(case: Case, config: Config) -> dict[str, Any]:
     cost = 0.0
     duration = None
     try:
-        result = run_skill("rec-email", built.payload, load_schema("rec_email"), config=config)
+        result = run_skill(
+            "rec-email",
+            built.payload,
+            load_schema("rec_email"),
+            config=config,
+            action="generate_email",
+            subject=_subject(case),
+            source="eval",
+        )
         output, cost, duration = result.data, result.cost_usd or 0.0, result.duration_s
     except SkillError as err:
         error = f"{err.kind}: {err.message}"
@@ -66,7 +85,7 @@ def _run_case(case: Case, config: Config) -> dict[str, Any]:
         load_schema("rec_email"),
     )
     if grade.schema_ok and output is not None:
-        claims, claims_error, claims_cost = _claims(output["body"], built.payload, config)
+        claims, claims_error, claims_cost = _claims(output["body"], built.payload, config, case)
         grade.unsupported, grade.claims_error = claims, claims_error
         cost += claims_cost
     return {
@@ -81,7 +100,7 @@ def _run_case(case: Case, config: Config) -> dict[str, Any]:
 
 def _run_calibration(item: CalibrationItem, config: Config) -> dict[str, Any]:
     built = build_payload(item.case, config)
-    claims, error, cost = _claims(item.body, built.payload, config)
+    claims, error, cost = _claims(item.body, built.payload, config, item.case)
     return {
         "item": item,
         "claims": claims,

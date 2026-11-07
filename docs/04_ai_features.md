@@ -37,8 +37,12 @@ flags can (`uv run python tasks.py live -k "skill_expansion or lockdown"`).
 - Parse stdout JSON; the result is `structured_output`. Missing, `is_error: true`, or failing local
   jsonschema validation → `SkillError("invalid_output")`. Non-zero exit → `failed` with stderr's first line.
   Timeout (`claude.timeout_s`, 120; research 300) → kill the process tree, `timeout`.
-- Log one line per call to `reports/ai_usage.jsonl`: skill, duration, `total_cost_usd`, ok/error. Never log payloads.
-- Nothing is written to `data_dir` unless `run_skill` returns successfully (C-2b-05).
+- Log one line per call (§8; docs/01 §11): skill, action, subject (IDs only), source, duration,
+  `total_cost_usd`, ok/error. Never payloads or outputs. App calls go to `<data_dir>/logs/ai_usage.jsonl`, eval
+  and live calls to `reports/ai_usage.jsonl`.
+- On any failure path the only changes in data_dir are exactly one appended line in logs/ai_usage.jsonl and,
+  when the same request saved a data file first, that file and exactly one appended hub.log line naming it;
+  nothing else changes (C-2b-05; the check was made stricter by DECISIONS #60, wording and threshold unchanged).
 - Tests replace the binary with `tests/fakes/fake_claude.py` (via `claude.path`), which replays recorded
   outputs from `tests/fakes/recordings/` and can simulate each failure. Live calls only under the `live`
   marker and in `tasks.py eval-*`.
@@ -57,7 +61,8 @@ the schema as the structured-output format; tools only from `SKILL_TOOLS` (WebSe
 tools for research-programme, nothing for the others); a timeout mapped to `timed_out`; API errors mapped to
 `failed`; a missing key or package to `not_installed`. It must pass `tests/test_ai_backend_contract.py`
 (payload + schema → validated dict; only the four error kinds, each ending "Nothing was saved."; a usage line
-without the payload; nothing written to data_dir on failure) after adding a harness there.
+with action, subject IDs and source but without the payload; on failure nothing in data_dir changes but that
+one appended line) after adding a harness there.
 
 ## 2. Skill: `/rec-email`
 ### 2.1 Input payload (built in Python by `src/hub/ai/payloads.py`)
@@ -265,10 +270,36 @@ sets `verified`. A programme without `official_domains` gets them prefilled from
 source URLs, and the user confirms them before the comparison runs. Saving keeps the file's shape and
 comments (DECISIONS #29b).
 
-## 8. Usage and cost
-Calls happen only on explicit clicks or eval runs. The Settings page shows the month's call count and
-summed `total_cost_usd` from `reports/ai_usage.jsonl` (an estimate; subscription usage draws on the
-Agent SDK credit).
+## 8. Usage and cost (DECISIONS #60)
+Calls happen only on explicit clicks or eval runs. Every `run_skill` call states what it is for with three
+required keyword arguments, written to the usage log (docs/01 §11):
+- `action`: what the call is for.
+
+  | Action | Feature | Subject |
+  |---|---|---|
+  | `generate_email` | Generate email (app) | `professor_id`, `programme_ids` |
+  | `research_programme` | Research a new programme (2c) | `{}` (the query is never logged) |
+  | `reresearch_programme` | Re-research (2c) | `programme_id` |
+  | `import_courses` | Course import (2c) | `{}` (the document is never logged) |
+  | `evaluate_essay` | Evaluate an essay (4b) | `programme_id`, `essay_id` |
+  | `evaluate_cv` | Evaluate a CV (4b) | `cv_id` (`base` or a programme ID) |
+  | `grade_claims` | Eval claim grader | `professor_id`, `programme_ids` of the eval case |
+  | `live_check` | Live probes | `{}` |
+
+  Eval runs of `/rec-email` use `generate_email` with source `eval`. `unlabelled` is only for imported old lines.
+- `subject`: IDs only (`professor_id`, `programme_ids`, `programme_id`, `essay_id`, `cv_id`, each an ID
+  slug). Anything else is a `ValueError` before the call runs, so no name, text or query can reach the log.
+- `source`: `app` for clicks in the app (→ `<data_dir>/logs/ai_usage.jsonl`, backed up with the data);
+  `eval` for `tasks.py eval-*`; `live` for live tests and `tests/fakes/record.py` (both → the run log
+  `reports/ai_usage.jsonl`, gitignored).
+
+The **AI usage page** (`GET /usage`, docs/03 §4.9) reads both logs. It shows each call with what it was for
+(names resolved and linked; a deleted item shows its ID), duration, estimated cost and result, and totals for
+this month and all time by action and by source, with month and source filters. It states: "Estimated
+API-equivalent cost. On your subscription this draws from your monthly Agent SDK credit and isn't billed
+separately unless usage credits are enabled." Phase 5 adds this month's total on Settings, linking to the page.
+`hub import-usage` copies the lines of the old single log once, as `unlabelled` from source `unknown`. Old
+lines mix eval runs, live checks and app clicks and can't be told apart, so no source is guessed.
 
 ## 9. Skill: `/extract-courses` (Phase 2c, DECISIONS #44)
 Input: `{"text": "(identifier-stripped document text)", "institution_hint": null}` (docs/02 §10). No tools.

@@ -74,6 +74,32 @@ State at hand-off: `uv run python tasks.py test-fast` 551 passed, 27 failed (15.
 - **User decisions at acceptance (#56):** `Bash(uv run hub:*)` removed (every `hub` command asks); Mark as requested stamps the draft on *any* overlapping programme (docs/01 §4 updated, 2 route tests); wording sameness accepted until the Phase 4a upgrade; the scoped 2a locator approved. The 21:32 UTC real call came from a Generate email click in a `tasks.py dev` server running since 16:56 UTC (not from a test); the user confirmed it was theirs. **C-2b-06 You check confirmed by the user.**
 - **Known, accepted for now:** a no-JS refresh of a failed generation posts again (Phase 5 PRG item, #45); each eval case is judged on one email (n = 1).
 - **Run:** `uv run python tasks.py dev` → http://127.0.0.1:8765/recommenders → select a professor → Generate email.
+- **Follow-up 2026-11-06: AI usage audit (DECISIONS #60; not a phase, no criterion changed).**
+  - **Built:**
+    - `ai/usage.py`: every `run_skill` call now logs `action`, `subject` (IDs only, refused otherwise) and `source`.
+    - Log locations: app lines go to `<data_dir>/logs/ai_usage.jsonl`; eval/live lines go to `reports/ai_usage.jsonl`.
+    - A read-only `GET /usage` page ("AI usage" in the sidebar).
+    - `hub import-usage`: a one-time copy of the old lines as Unlabelled / Unknown.
+    - Guards: an autouse fixture plus the e2e server check. Both were shown failing once on an unredirected run log, then passing.
+  - **C-2b-05 check made stricter** (wording and threshold unchanged, guard OK, 39 criteria match the lock):
+    - The only changes allowed on a failure path are one appended usage line and, after a save in the same request, that file plus one pinned `hub.log` save line.
+  - **Results:**
+    - test-fast: 726 passed in 21.4 s (after the review fixes).
+    - Full suite (`tasks.py test`): 821 passed, plus 1 serial-marked test.
+    - Lint clean; criteria guard OK.
+  - **Tests changed, disclosed (assertions only added or tightened):**
+    - Every `run_skill` call in the tests passes `action`/`subject`/`source`.
+    - Log reads use `usage.app_log_path`.
+    - AI failure paths use `assert_only_usage_line` instead of the logs-excluding `tree_digest`.
+    - Save-and-generate and Edit-and-generate failure tests: now parametrized over htmx/no-JS; `hub.log` may gain exactly one store save line per saved file, nothing else (user-approved).
+    - `test_app_shell` and `test_a11y` include `/usage`.
+    - `test_privacy` checks that `reports/ai_usage.jsonl` is gitignored.
+    - The eval runner test checks the run log.
+    - The e2e busy-state test now also checks its one usage line. Its error kind is `invalid_output`, because the fake sleeps 4 s and exits without output inside the 120 s timeout (my first expectation, `timeout`, was wrong).
+    - `_isolate_data_dir` now uses the test's tmp_path.
+  - **You run, after committing:** `uv run hub import-usage` (copies the 139 old lines into your data folder's log).
+  - **Reviewers:** data-integrity READY (7 WARN) and ui READY (6 WARN), 0 FAIL. All WARNs were fixed with tests except the three left as known in #60 (essay titles, fold position, the guard depending on code calling through the module). By source now always lists all four sources; reverse that if you meant "only sources with calls".
+  - **More tests changed after the review (disclosed):** costs are expected with 3 decimals; the helper now requires action/subject/source and checks the line's fields, its ID-only subject, new folders and the run log, so the e2e busy test passes subject and source. Tests added: strict-reader bad lines, values not echoed, the unexpected exception logged, every-source totals, the all-unreadable state, essay/CV subjects, a newline in the month.
 
 ### Phase 2a: Recommender sheet (2026-11-06, session 1)
 - **Task 0 (tests):** pytest-xdist, 8 workers (fastest of auto/4/8, median of 3: 11.7/11.7/10.2 s); `serial` marker for timing gates (second, non-parallel pass); warning above `performance.test_fast_warn_seconds` (45 s). test-fast 26.6 s → 11.1 s at the time (348 tests); full `test` 78 s → ~21 s. Isolation: audit clean; e2e server now receives its bound socket (port race fixed); security tests share one app per module whose teardown proves no write (DECISIONS #38).

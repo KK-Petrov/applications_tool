@@ -38,12 +38,24 @@ def main() -> int:
     out.mkdir(exist_ok=True)
     case = next(c for c in load_cases() if c.number == 2)
     email = run_skill(
-        "rec-email", build_payload(case, config).payload, load_schema("rec_email"), config=config
+        "rec-email",
+        build_payload(case, config).payload,
+        load_schema("rec_email"),
+        config=config,
+        action="generate_email",
+        subject={"professor_id": case.professor.id, "programme_ids": list(case.programme_ids)},
+        source="live",
     )
     item = load_calibration()[0]
     facts = build_payload(item.case, config).payload
     claims = run_skill(
-        "grade-claims", {"text": item.body, "facts": facts}, load_schema("grade_claims"), config=config
+        "grade-claims",
+        {"text": item.body, "facts": facts},
+        load_schema("grade_claims"),
+        config=config,
+        action="grade_claims",
+        subject={"professor_id": item.case.professor.id, "programme_ids": list(item.case.programme_ids)},
+        source="live",
     )
     for skill, result in (("rec-email", email), ("grade-claims", claims)):
         (out / f"{skill}.json").write_text(

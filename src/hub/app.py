@@ -21,6 +21,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from hub.config import Config, load_config
 from hub.routes.programmes import build_router as programmes_router
 from hub.routes.recommenders import build_router as recommenders_router
+from hub.routes.usage import USAGE_PAGE
+from hub.routes.usage import build_router as usage_router
 from hub.security import LocalOriginMiddleware
 from hub.store import DataError, Store
 from hub.views import dashboard
@@ -37,6 +39,7 @@ PAGES: tuple[Page, ...] = (
          "No essays or CVs yet. Drafts, versions and exact checks arrive in Phase 4a."),
     Page("biography", "/biography", "Biography bank", "Biography bank",
          "No biography entries yet. The biography bank arrives in Phase 4a."),
+    USAGE_PAGE,  # AI usage audit (DECISIONS #60)
     Page("settings", "/settings", "Settings", "Settings",
          "Owner details, display zone and the Google connection arrive in later phases."),
 )  # fmt: skip
@@ -73,6 +76,7 @@ def create_app(config: Config | None = None, clock: Callable[[], datetime] | Non
     _configure_logging(config)
 
     app = FastAPI(title="Application Hub", docs_url=None, redoc_url=None, openapi_url=None)
+    app.state.config = config  # what this app was built with (the e2e guard checks its usage-log paths)
     app.add_middleware(LocalOriginMiddleware)
     app.mount("/static", StaticFiles(directory=PACKAGE_DIR / "static"), name="static")
     store = Store.from_config(config)
@@ -86,6 +90,7 @@ def create_app(config: Config | None = None, clock: Callable[[], datetime] | Non
 
     app.include_router(programmes_router(web))
     app.include_router(recommenders_router(web))
+    app.include_router(usage_router(web))
 
     def add_placeholder(page: Page) -> None:
         async def view(request: Request) -> HTMLResponse:

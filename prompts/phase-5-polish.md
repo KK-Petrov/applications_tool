@@ -11,7 +11,8 @@ docs/04_ai_features.md §8; docs/03_ui_spec.md §2, §4.7, §5; docs/05_integrat
 docs/PROGRESS.md (accepted known issues of earlier phases); docs/DECISIONS.md #26, #33–#36, #41, #42, #45.
 
 ## Tasks
-1. **Usage panel.** Settings shows call count and estimated cost this month (docs/04 §8).
+1. **Usage total on Settings.** Settings shows this month's AI calls and estimated cost (app calls), with a link to
+   the AI usage page `/usage` (docs/04 §8, docs/03 §4.7, §4.9; the page itself was added before Phase 2c, DECISIONS #60).
 2. **README.md.** Prerequisites, setup on Windows, setting `data_dir` to OneDrive, `init-data`, Google setup
    (docs/05 §1), iPhone setup (docs/05 §3), Task Scheduler, daily use, troubleshooting (Claude Code not found,
    token expired, calendar missing on iPhone, a file locked by OneDrive).

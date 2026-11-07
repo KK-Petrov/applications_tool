@@ -3,24 +3,61 @@
 Safety first: every test runs with ``HUB_DATA_DIR`` pointing at a temporary folder, so no test can
 ever read or write the owner's real data folder (CLAUDE.md rule 12). Every test also runs with
 ``HUB_CLAUDE_PATH`` pointing at the fake Claude Code (tests/fakes/fake_claude.py), so no test can reach the
-real CLI; live tests (marker ``live``) remove it on purpose.
+real CLI; live tests (marker ``live``) remove it on purpose. And no non-live test may use an AI usage log
+outside its own ``tmp_path`` (``_usage_logs_stay_in_tmp``, DECISIONS #60).
 """
 
 from __future__ import annotations
 
 import shutil
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
-from helpers import BASE, FAKE_CLAUDE, FIXED_NOW, FormClient
+from helpers import BASE, FAKE_CLAUDE, FIXED_NOW, FormClient, UsageLogOutsideTmp, check_usage_log
 from paths import FIXTURE_DATA, REPO_ROOT
 
 
 @pytest.fixture(autouse=True)
-def _isolate_data_dir(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Point HUB_DATA_DIR at an empty temporary folder unless a test asks for fixture data."""
-    monkeypatch.setenv("HUB_DATA_DIR", str(tmp_path_factory.mktemp("guard-data")))
+def _isolate_data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Point HUB_DATA_DIR at an empty folder in the test's tmp_path unless a test asks for fixture data."""
+    guard = tmp_path / "guard-data"
+    guard.mkdir()
+    monkeypatch.setenv("HUB_DATA_DIR", str(guard))
+
+
+@pytest.fixture(autouse=True)
+def _usage_logs_stay_in_tmp(
+    request: pytest.FixtureRequest, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[list[str]]:
+    """Fail any non-live test that resolves the app or run usage log outside its tmp_path.
+
+    Every write and read of a usage log goes through ``hub.ai.usage.app_log_path`` / ``run_log_path``; both
+    are wrapped here, so a config that was not redirected (the test's own, or the e2e server's) fails the
+    test at once and again at teardown (in case the error was swallowed, e.g. inside the server thread).
+    """
+    violations: list[str] = []
+    if request.node.get_closest_marker("live"):
+        yield violations
+        return
+    from hub.ai import usage
+
+    def guarded(real):  # noqa: ANN001, ANN202
+        def resolve(config):  # noqa: ANN001, ANN202
+            try:
+                return check_usage_log(real(config), tmp_path)
+            except UsageLogOutsideTmp as err:
+                violations.append(str(err))
+                raise
+
+        return resolve
+
+    monkeypatch.setattr(usage, "app_log_path", guarded(usage.app_log_path))
+    monkeypatch.setattr(usage, "run_log_path", guarded(usage.run_log_path))
+    yield violations
+    if violations:
+        pytest.fail("\n".join(dict.fromkeys(violations)), pytrace=False)
 
 
 @pytest.fixture(autouse=True)
@@ -53,14 +90,15 @@ def data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 def config(data_dir: Path, tmp_path: Path):
     """The project config with data_dir pointing at the temporary fixture copy.
 
-    Claude Code is the fake, and its usage log goes to a temporary file (never the repository's reports/).
+    Claude Code is the fake. The app's usage log is ``<data_dir>/logs/ai_usage.jsonl`` (inside the temporary
+    copy); the eval/live run log goes to a temporary file, never the repository's reports/.
     """
     from hub.config import load_config
 
     cfg = load_config()
     assert cfg.storage.data_dir == data_dir
     claude = cfg.claude.model_copy(
-        update={"path": str(FAKE_CLAUDE), "usage_log": str(tmp_path / "ai_usage.jsonl")}
+        update={"path": str(FAKE_CLAUDE), "run_usage_log": str(tmp_path / "run_usage.jsonl")}
     )
     return cfg.model_copy(update={"claude": claude})
 

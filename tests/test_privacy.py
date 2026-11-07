@@ -100,7 +100,14 @@ def test_no_data_secret_or_token_paths() -> None:
 
 @pytest.mark.parametrize(
     "path",
-    ["data/settings.yaml", ".secrets/token.json", ".secrets/client_secret.json", "reports/eval.json", ".env"],
+    [
+        "data/settings.yaml",
+        ".secrets/token.json",
+        ".secrets/client_secret.json",
+        "reports/eval.json",
+        "reports/ai_usage.jsonl",  # the eval/live run log: eval case IDs and older app lines (DECISIONS #60)
+        ".env",
+    ],
 )
 def test_gitignore_covers(path: str) -> None:
     assert _git("check-ignore", "-q", "--no-index", path).returncode == 0, f"{path} is not ignored"

@@ -17,10 +17,10 @@ Read docs/04_ai_features.md (all), the relevant `.claude/skills/*/SKILL.md`, and
 6. **No invention**: SKILL.md forbids facts outside the payload; read 3 emails in `reports/eval_email.md` and list any statement not in the case's payload.
 7. **Anticipated honours**: case 6 (anticipated cum laude) is never stated as achieved.
 8. **Never rewrites**: evaluator comments ≤ 60 words, no replacement sentences. Criterion: C-4b-03.
-9. **Wrapper safety**: argv list (no shell), no `--bare`, timeout enforced, nothing written to data_dir on failure, payloads never logged. Criterion: C-2b-05.
+9. **Wrapper safety**: argv list (no shell), no `--bare`, timeout enforced, on failure the only data_dir changes are one appended `logs/ai_usage.jsonl` line (plus, after a save in the same request, that file and one `hub.log` save line; DECISIONS #60), payloads never logged. Criterion: C-2b-05.
 10. **Schemas**: `additionalProperties: false`, required fields present, local jsonschema validation after the CLI's own check.
 11. **Research output** (Phase 5): every filled field has a source URL; `verification` is `unverified`; third-party sources carry the note. Criterion: C-5-01.
-12. **Cost**: `reports/ai_usage.jsonl` shows one call per click (no retries in loops) and no payload content.
+12. **Cost**: the usage logs (`<data_dir>/logs/ai_usage.jsonl` for app calls, `reports/ai_usage.jsonl` for eval/live; docs/01 §11) show one call per click (no retries in loops), the right `action`/`source`, a `subject` of IDs only, and no payload content.
 
 ## Output
 A verdict (READY / NOT READY), a table of checks, then the top 3 issues with their likely causes and

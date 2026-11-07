@@ -2,8 +2,9 @@
 
 ``run_skill`` is the app's only AI entry point; whichever backend ``claude.backend`` names, a call must:
 turn a payload and a schema into a schema-valid dict; fail only with the four ``SkillError`` kinds, each
-with a message ending "Nothing was saved."; log one usage line without the payload; and write nothing to
-data_dir on failure. Each backend gets a harness that can make it succeed or fail in each way; only "cli"
+with a message ending "Nothing was saved."; log one usage line without the payload (its action, subject IDs
+and source, DECISIONS #60); and on failure change nothing in data_dir but that one appended line. Each backend
+gets a harness that can make it succeed or fail in each way; only "cli"
 exists (it uses the fake Claude Code). A new backend adds a harness here and must pass the same tests.
 """
 
@@ -16,14 +17,16 @@ from pathlib import Path
 
 import pytest
 
+from hub.ai import usage
 from hub.ai.skills import SkillError, load_schema, run_skill
 
-from helpers import tree_digest
+from helpers import assert_only_usage_line, data_snapshot
 
 SCHEMA = load_schema("rec_email")
 GOOD = {"subject": "S", "body": "Dear Professor Example,\n\nBody.", "used_biography_ids": [], "warnings": []}
 SECRET = "CONTRACT-PAYLOAD-91c2"
 KINDS = ("not_installed", "timeout", "failed", "invalid_output")
+TAG = {"action": "generate_email", "subject": {"professor_id": "example"}, "source": "app"}
 
 
 @dataclass
@@ -67,19 +70,21 @@ def _with(config, **claude: object):
 
 
 def _log_lines(config) -> list[dict]:
-    path = Path(config.claude.usage_log)
+    path = usage.app_log_path(config)
     return [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines()] if path.exists() else []
 
 
 def test_payload_and_schema_give_a_validated_dict(backend, monkeypatch, tmp_path: Path) -> None:
     name, harness, cfg = backend
     harness.succeed(monkeypatch, tmp_path)
-    result = run_skill("rec-email", {"x": SECRET}, SCHEMA, config=cfg)
+    result = run_skill("rec-email", {"x": SECRET}, SCHEMA, config=cfg, **TAG)
     assert result.data == GOOD
     assert result.duration_s > 0
     (line,) = _log_lines(cfg)
     assert line["ok"] is True and line["skill"] == "rec-email" and line["backend"] == name
-    assert SECRET not in Path(cfg.claude.usage_log).read_text(encoding="utf-8")
+    assert {k: line[k] for k in TAG} == TAG
+    text = usage.app_log_path(cfg).read_text(encoding="utf-8")
+    assert SECRET not in text and GOOD["body"] not in text
 
 
 @pytest.mark.parametrize("kind", KINDS)
@@ -88,15 +93,16 @@ def test_every_failure_is_one_of_four_kinds_logged_and_writes_nothing(
 ) -> None:
     _, harness, cfg = backend
     cfg = _with(cfg, **harness.fail[kind](monkeypatch, tmp_path))
-    before = tree_digest(data_dir)
+    before = data_snapshot(data_dir)
     with pytest.raises(SkillError) as info:
-        run_skill("rec-email", {"x": SECRET}, SCHEMA, config=cfg)
+        run_skill("rec-email", {"x": SECRET}, SCHEMA, config=cfg, **TAG)
     assert info.value.kind == kind
     assert info.value.message.endswith("Nothing was saved.")
-    assert tree_digest(data_dir) == before
+    # C-2b-05, stricter (DECISIONS #60): one usage line appended, nothing else changed (logs/ included)
+    assert_only_usage_line(data_dir, before, ok=False, error=kind, **TAG)
     (line,) = _log_lines(cfg)
     assert line["ok"] is False and line["error"] == kind
-    assert SECRET not in Path(cfg.claude.usage_log).read_text(encoding="utf-8")
+    assert SECRET not in usage.app_log_path(cfg).read_text(encoding="utf-8")
 
 
 def test_an_unknown_backend_is_refused(config) -> None:

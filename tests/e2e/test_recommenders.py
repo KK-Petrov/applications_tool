@@ -22,7 +22,15 @@ from hub.config import load_config
 from hub.models.professor import Letter, LetterStatus, Professor
 from hub.store import Store
 
-from helpers import BASE, FIXED_NOW, RECORDINGS, FormClient, long_description
+from helpers import (
+    BASE,
+    FIXED_NOW,
+    RECORDINGS,
+    FormClient,
+    assert_only_usage_line,
+    data_snapshot,
+    long_description,
+)
 from paths import FIXTURES, REPO_ROOT
 
 pytestmark = pytest.mark.e2e
@@ -232,11 +240,17 @@ def test_us10_generation_failure_is_shown_in_the_panel(
 ) -> None:
     monkeypatch.setenv("FAKE_CLAUDE_MODE", "exit")
     before = (data_dir / "professors" / "jansen.yaml").read_bytes()
+    snapshot = data_snapshot(data_dir)
     page.goto(live_server + "/recommenders?selected=jansen", wait_until="domcontentloaded")
     page.locator("#panel").get_by_role("button", name="Generate email").click()
     expect(page.locator("#panel")).to_contain_text("Claude Code stopped with an error")
     expect(page.locator("#panel")).to_contain_text("Nothing was saved.")
     assert (data_dir / "professors" / "jansen.yaml").read_bytes() == before
+    # C-2b-05, stricter (DECISIONS #60): the server appended one usage line and changed nothing else
+    assert_only_usage_line(
+        data_dir, snapshot, ok=False, error="failed", action="generate_email", source="app",
+        subject={"professor_id": "jansen", "programme_ids": ["princeton-mfin"]},
+    )  # fmt: skip
 
 
 # ---- C-2a-03: performance ------------------------------------------------------------------------
@@ -387,7 +401,7 @@ def test_us10_live_region_is_in_the_page_before_any_action(page: Page, live_serv
 
 
 def test_us10_busy_generate_keeps_focus_announces_and_drops_a_second_submit(
-    page: Page, live_server: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    page: Page, live_server: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, data_dir: Path
 ) -> None:
     """ui review round 4: guards #53(1). The button stays focusable but aria-disabled, the start is
     announced, and repeated Enter or a forced click while busy make no second Claude call."""
@@ -395,6 +409,7 @@ def test_us10_busy_generate_keeps_focus_announces_and_drops_a_second_submit(
     monkeypatch.setenv("FAKE_CLAUDE_MODE", "timeout")
     monkeypatch.setenv("FAKE_CLAUDE_SLEEP", "4")
     monkeypatch.setenv("FAKE_CLAUDE_LOG", str(calls))
+    snapshot = data_snapshot(data_dir)
     page.goto(live_server + "/recommenders?selected=jansen", wait_until="domcontentloaded")
     button = page.locator("#panel form.generate-form button[type=submit]")
     button.focus()
@@ -407,3 +422,8 @@ def test_us10_busy_generate_keeps_focus_announces_and_drops_a_second_submit(
     button.click(force=True)  # a plain click would wait until the button is enabled again
     page.locator("#panel .email-area .form-error").wait_for(timeout=20000)
     assert len(calls.read_text(encoding="utf-8").splitlines()) == 1
+    # #60: the fake sleeps 4 s, then exits 0 with no output (inside the 120 s timeout): invalid_output
+    assert_only_usage_line(
+        data_dir, snapshot, ok=False, error="invalid_output", action="generate_email", source="app",
+        subject={"professor_id": "jansen", "programme_ids": ["princeton-mfin"]},
+    )  # fmt: skip

@@ -61,7 +61,8 @@ def _check_email(value: str) -> str:
     return value
 
 
-Slug = Annotated[str, StringConstraints(pattern=r"^[a-z0-9-]{2,60}$")]
+SLUG_PATTERN = r"^[a-z0-9-]{2,60}$"  # every ID (docs/01 §1); also checks usage-log subjects (#60)
+Slug = Annotated[str, StringConstraints(pattern=SLUG_PATTERN)]
 LocalDateTime = Annotated[
     datetime,
     BeforeValidator(_parse_local_datetime),

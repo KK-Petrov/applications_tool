@@ -36,6 +36,7 @@ pytestmark = pytest.mark.live
 
 SKILLS = REPO_ROOT / ".claude" / "skills"
 REPORTS = REPO_ROOT / "reports"
+LIVE_CHECK = {"action": "live_check", "subject": {}, "source": "live"}  # run log only (DECISIONS #60)
 PROBE_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
@@ -88,7 +89,7 @@ def test_skill_expansion() -> None:
     )
     assert token, "probe-skill/SKILL.md has no token"
     config = load_config()
-    result = run_skill("probe-skill", {"note": "ignore me"}, PROBE_SCHEMA, config=config)
+    result = run_skill("probe-skill", {"note": "ignore me"}, PROBE_SCHEMA, config=config, **LIVE_CHECK)
     _save(
         "live_probe.json",
         {
@@ -111,7 +112,7 @@ def test_lockdown(tmp_path: Path) -> None:
     repo_target = REPO_ROOT / f"lockdown-probe-{uuid.uuid4().hex}.txt"
     payload = _probe_payload(shell_marker, repo_target)
     try:
-        result = run_skill("probe-lockdown", payload, LOCKDOWN_SCHEMA, config=config)
+        result = run_skill("probe-lockdown", payload, LOCKDOWN_SCHEMA, config=config, **LIVE_CHECK)
         evidence["locked"] = {
             "argv": build_argv("probe-lockdown", LOCKDOWN_SCHEMA, config, executable=exe),
             "data": result.data,

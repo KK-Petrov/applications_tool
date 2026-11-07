@@ -17,11 +17,22 @@ from pathlib import Path
 
 import pytest
 
+from hub.ai import usage
 from hub.ai.claude_cli import LOCKED_OUT_TOOLS, build_argv
 from hub.ai.skills import SKILL_TOOLS, SkillError, run_skill
 from hub.app import create_app
 
-from helpers import BASE, FAKE_CLAUDE, FIXED_NOW, FormClient, form_fields, set_field, tree_digest
+from helpers import (
+    BASE,
+    FAKE_CLAUDE,
+    FIXED_NOW,
+    FormClient,
+    assert_only_usage_line,
+    data_snapshot,
+    form_fields,
+    set_field,
+    tree_digest,
+)
 from paths import REPO_ROOT
 
 SCHEMA = {
@@ -38,6 +49,12 @@ SCHEMA = {
 GOOD = {"subject": "S", "body": "Dear Professor Jansen,\n\nBody.", "used_biography_ids": [], "warnings": []}
 SECRET = "PAYLOAD-MARKER-7f3a"  # must never reach the usage log
 HX = {"HX-Request": "true"}
+# What every direct call here is for (docs/04 §8): IDs only. Added with DECISIONS #60.
+TAG = {
+    "action": "generate_email",
+    "subject": {"professor_id": "jansen", "programme_ids": ["princeton-mfin"]},
+    "source": "app",
+}
 
 
 def _with(config, **claude: object):
@@ -100,7 +117,7 @@ def _alive(pid: int) -> bool:
 
 
 def test_call_uses_an_argv_list_with_the_documented_flags(config, log: Path, good_recording: Path) -> None:
-    run_skill("rec-email", {"x": SECRET}, SCHEMA, config=config)
+    run_skill("rec-email", {"x": SECRET}, SCHEMA, config=config, **TAG)
     (call,) = _calls(log)
     argv = call["argv"]
     assert _flag(argv, "-p") == "The input is the JSON document on stdin."
@@ -160,16 +177,16 @@ def test_only_research_gets_web_tools_and_no_skill_gets_a_shell_or_file_tool() -
 
 def test_unknown_skill_and_extra_tools_are_refused(config) -> None:
     with pytest.raises(ValueError):
-        run_skill("not-a-skill", {}, SCHEMA, config=config)
+        run_skill("not-a-skill", {}, SCHEMA, config=config, **TAG)
     with pytest.raises(ValueError):
-        run_skill("rec-email", {}, SCHEMA, config=config, tools=["Bash"])
+        run_skill("rec-email", {}, SCHEMA, config=config, tools=["Bash"], **TAG)
 
 
 # ---- success -------------------------------------------------------------------------------------
 
 
 def test_success_returns_the_structured_output(config, good_recording: Path) -> None:
-    result = run_skill("rec-email", {"x": 1}, SCHEMA, config=config)
+    result = run_skill("rec-email", {"x": 1}, SCHEMA, config=config, **TAG)
     assert result.data == GOOD
     assert result.cost_usd == pytest.approx(0.042)
     assert result.session_id == "11111111-2222-4333-8444-555555555555"
@@ -179,49 +196,64 @@ def test_success_returns_the_structured_output(config, good_recording: Path) -> 
 def test_usage_log_has_one_line_per_call_and_never_the_payload(
     config, good_recording: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    run_skill("rec-email", {"x": SECRET}, SCHEMA, config=config)
+    run_skill("rec-email", {"x": SECRET}, SCHEMA, config=config, **TAG)
     monkeypatch.setenv("FAKE_CLAUDE_MODE", "invalid_json")
     with pytest.raises(SkillError):
-        run_skill("rec-email", {"x": SECRET}, SCHEMA, config=config)
-    text = Path(config.claude.usage_log).read_text(encoding="utf-8")
-    assert SECRET not in text
+        run_skill("rec-email", {"x": SECRET}, SCHEMA, config=config, **TAG)
+    text = usage.app_log_path(config).read_text(encoding="utf-8")
+    assert SECRET not in text and GOOD["body"] not in text
     ok, bad = (json.loads(line) for line in text.splitlines())
     assert ok["skill"] == "rec-email" and ok["ok"] is True and ok["total_cost_usd"] == pytest.approx(0.042)
     assert ok["duration_s"] >= 0
     assert bad["ok"] is False and bad["error"] == "invalid_output"
+    # DECISIONS #60: what the call was for, IDs only, and where it came from
+    fields = ["at", "skill", "backend", "action", "subject", "source", "duration_s", "total_cost_usd"]
+    fields += ["ok", "error"]
+    for line in (ok, bad):
+        assert list(line) == fields
+        assert line["action"] == "generate_email" and line["source"] == "app"
+        assert line["subject"] == {"professor_id": "jansen", "programme_ids": ["princeton-mfin"]}
 
 
 # ---- failures ------------------------------------------------------------------------------------
 
 
-def test_missing_binary_is_not_installed(config, tmp_path: Path) -> None:
+def test_missing_binary_is_not_installed(config, data_dir: Path, tmp_path: Path) -> None:
     cfg = _with(config, path=str(tmp_path / "no-such-claude.exe"))
+    before = data_snapshot(data_dir)
     with pytest.raises(SkillError) as info:
-        run_skill("rec-email", {}, SCHEMA, config=cfg)
+        run_skill("rec-email", {}, SCHEMA, config=cfg, **TAG)
     assert info.value.kind == "not_installed"
     assert "Claude Code was not found" in info.value.message
+    assert_only_usage_line(data_dir, before, error="not_installed", ok=False, **TAG)
 
 
-def test_no_path_and_nothing_on_path_is_not_installed(config, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_no_path_and_nothing_on_path_is_not_installed(
+    config, data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.delenv("HUB_CLAUDE_PATH", raising=False)
     monkeypatch.setattr("hub.ai.claude_cli.shutil.which", lambda name: None)
+    before = data_snapshot(data_dir)
     with pytest.raises(SkillError) as info:
-        run_skill("rec-email", {}, SCHEMA, config=_with(config, path=None))
+        run_skill("rec-email", {}, SCHEMA, config=_with(config, path=None), **TAG)
     assert info.value.kind == "not_installed"
+    assert_only_usage_line(data_dir, before, error="not_installed", ok=False, **TAG)
 
 
 def test_timeout_kills_the_whole_process_tree(
-    config, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    config, data_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     pidfile = tmp_path / "pids.txt"
     monkeypatch.setenv("FAKE_CLAUDE_MODE", "timeout")
     monkeypatch.setenv("FAKE_CLAUDE_PIDFILE", str(pidfile))
+    before = data_snapshot(data_dir)
     start = time.monotonic()
     with pytest.raises(SkillError) as info:
-        run_skill("rec-email", {}, SCHEMA, config=config, timeout_s=2)
+        run_skill("rec-email", {}, SCHEMA, config=config, timeout_s=2, **TAG)
     assert time.monotonic() - start < 20
     assert info.value.kind == "timeout"
     assert info.value.message == "Claude Code did not respond within 2 s. Nothing was saved."
+    assert_only_usage_line(data_dir, before, error="timeout", ok=False, **TAG)
     pids = [int(x) for x in pidfile.read_text(encoding="utf-8").split()]
     assert len(pids) == 2
     deadline = time.monotonic() + 10
@@ -230,24 +262,32 @@ def test_timeout_kills_the_whole_process_tree(
     assert not any(_alive(p) for p in pids), "the fake or its child survived the timeout"
 
 
-def test_non_zero_exit_reports_the_first_stderr_line(config, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_non_zero_exit_reports_the_first_stderr_line(
+    config, data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("FAKE_CLAUDE_MODE", "exit")
+    before = data_snapshot(data_dir)
     with pytest.raises(SkillError) as info:
-        run_skill("rec-email", {}, SCHEMA, config=config)
+        run_skill("rec-email", {}, SCHEMA, config=config, **TAG)
     assert info.value.kind == "failed"
     assert "fake failure: boom" in info.value.message
     assert "second line" not in info.value.message
     assert info.value.message.endswith("Nothing was saved.")
+    assert_only_usage_line(data_dir, before, error="failed", ok=False, **TAG)
 
 
 @pytest.mark.parametrize("mode", ["invalid_json", "is_error", "no_structured", "schema_mismatch"])
-def test_unusable_output_is_invalid_output(config, monkeypatch: pytest.MonkeyPatch, mode: str) -> None:
+def test_unusable_output_is_invalid_output(
+    config, data_dir: Path, monkeypatch: pytest.MonkeyPatch, mode: str
+) -> None:
     monkeypatch.setenv("FAKE_CLAUDE_MODE", mode)
+    before = data_snapshot(data_dir)
     with pytest.raises(SkillError) as info:
-        run_skill("rec-email", {}, SCHEMA, config=config)
+        run_skill("rec-email", {}, SCHEMA, config=config, **TAG)
     assert info.value.kind == "invalid_output"
     assert "Claude Code returned output the app could not use" in info.value.message
     assert info.value.message.endswith("Nothing was saved.")
+    assert_only_usage_line(data_dir, before, error="invalid_output", ok=False, **TAG)
 
 
 # ---- the app: every failure shows its message and writes nothing --------------------------------
@@ -273,11 +313,22 @@ FAILURES = {
         {"FAKE_CLAUDE_MODE": "schema_mismatch"},
     ),
 }
+KIND = {  # the SkillError kind each simulated failure ends in (logged as the line's ``error``)
+    "not_installed": "not_installed",
+    "timeout": "timeout",
+    "exit": "failed",
+    "invalid_json": "invalid_output",
+    "is_error": "invalid_output",
+    "no_structured": "invalid_output",
+    "schema_mismatch": "invalid_output",
+}
 
 
 @pytest.fixture
 def failing_app(config, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest):
-    """The app with a 1 s timeout and the fake set to fail as the test's ``failure`` parameter says."""
+    """The app with a 1 s timeout and the fake set to fail as the test's ``failure`` parameter says.
+
+    Returns (client, message shown, SkillError kind)."""
     message, env = FAILURES[request.param]
     for key, value in env.items():
         monkeypatch.setenv(key, value)
@@ -290,16 +341,16 @@ def failing_app(config, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request
         headers={"Origin": BASE},
         follow_redirects=False,
     )
-    return client, message
+    return client, message, KIND[request.param]
 
 
 @pytest.mark.parametrize("failing_app", sorted(FAILURES), indirect=True)
 @pytest.mark.parametrize("htmx", [True, False], ids=["htmx", "no-js"])
 def test_failed_generation_shows_a_clear_message_and_writes_nothing(
-    failing_app, data_dir: Path, htmx: bool
+    failing_app, data_dir: Path, config, htmx: bool
 ) -> None:
-    client, message = failing_app
-    before = tree_digest(data_dir)
+    client, message, kind = failing_app
+    before = data_snapshot(data_dir)
     res = client.post(
         "/recommenders/jansen/email", data=[("programmes", "princeton-mfin")], headers=HX if htmx else None
     )
@@ -308,13 +359,18 @@ def test_failed_generation_shows_a_clear_message_and_writes_nothing(
     if not htmx:
         assert res.status_code == 409
     assert "Traceback" not in res.text
-    assert tree_digest(data_dir) == before
+    # C-2b-05, stricter (DECISIONS #60): one usage line appended, nothing else changed (logs/ included)
+    assert_only_usage_line(data_dir, before, ok=False, error=kind, run_log=usage.run_log_path(config), **TAG)
 
 
 @pytest.mark.parametrize("failing_app", sorted(FAILURES), indirect=True)  # review: every kind, not 2
-def test_save_and_generate_keeps_the_professor_but_writes_no_email(failing_app, data_dir: Path) -> None:
-    client, message = failing_app
+@pytest.mark.parametrize("htmx", [True, False], ids=["htmx", "no-js"])  # DECISIONS #60 (same 303 either way)
+def test_save_and_generate_keeps_the_professor_but_writes_no_email(
+    failing_app, data_dir: Path, config, htmx: bool
+) -> None:
+    client, message, kind = failing_app
     before = tree_digest(data_dir)
+    snapshot = data_snapshot(data_dir)
     fields = form_fields(client.get("/recommenders/new").text, "professor-form")
     for name, value in {
         "name": "Prof. Rosa Lindqvist",
@@ -325,7 +381,7 @@ def test_save_and_generate_keeps_the_professor_but_writes_no_email(failing_app, 
     }.items():
         fields = set_field(fields, name, value)
     fields = [*fields, ("programmes", "princeton-mfin"), ("then", "generate")]
-    res = client.post("/recommenders", data=fields)
+    res = client.post("/recommenders", data=fields, headers=HX if htmx else None)
     assert res.status_code == 303
     location = res.headers["location"]
     assert location.startswith("/recommenders?") and "selected=lindqvist" in location
@@ -339,6 +395,17 @@ def test_save_and_generate_keeps_the_professor_but_writes_no_email(failing_app, 
     assert {k: v for k, v in after.items() if k in before} == before
     stored = (data_dir / "professors" / "lindqvist.yaml").read_text(encoding="utf-8")
     assert "draft_ready" not in stored and "generated_at" not in stored
+    assert_only_usage_line(
+        data_dir,
+        snapshot,
+        saved=("professors/lindqvist.yaml",),
+        run_log=usage.run_log_path(config),
+        ok=False,
+        error=kind,
+        action="generate_email",
+        subject={"professor_id": "lindqvist", "programme_ids": ["princeton-mfin"]},
+        source="app",
+    )
 
 
 def _alert(page: str) -> str:
@@ -353,12 +420,16 @@ def test_fake_is_the_binary_under_test() -> None:
 
 
 @pytest.mark.parametrize("failing_app", sorted(FAILURES), indirect=True)
-def test_edit_and_generate_failure_keeps_the_edit_but_writes_no_email(failing_app, data_dir: Path) -> None:
+@pytest.mark.parametrize("htmx", [True, False], ids=["htmx", "no-js"])  # DECISIONS #60 (same 303 either way)
+def test_edit_and_generate_failure_keeps_the_edit_but_writes_no_email(
+    failing_app, data_dir: Path, config, htmx: bool
+) -> None:
     """Save and generate on Edit: the edit is saved; the failed generation adds nothing (review)."""
-    client, message = failing_app
+    client, message, kind = failing_app
+    snapshot = data_snapshot(data_dir)
     fields = form_fields(client.get("/recommenders/jansen/edit").text, "professor-form")
     fields = [*set_field(fields, "term", "Spring 2026"), ("then", "generate")]
-    res = client.post("/recommenders/jansen", data=fields)
+    res = client.post("/recommenders/jansen", data=fields, headers=HX if htmx else None)
     assert res.status_code == 303
     page = client.get(res.headers["location"]).text
     assert "The professor was saved, but no email was generated:" in page
@@ -369,3 +440,12 @@ def test_edit_and_generate_failure_keeps_the_edit_but_writes_no_email(failing_ap
     assert "princeton-mfin:\n    status: draft_ready" in stored.replace(
         "\r\n", "\n"
     )  # unchanged from the fixture
+    assert_only_usage_line(
+        data_dir,
+        snapshot,
+        saved=("professors/jansen.yaml",),
+        ok=False,
+        error=kind,
+        run_log=usage.run_log_path(config),
+        **TAG,
+    )

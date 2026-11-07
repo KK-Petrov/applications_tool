@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{#- AI usage (docs/03 §4.9; DECISIONS #60). Read-only: filters are a GET form; nothing here writes. -#}
+{% macro parts(items) -%}
+  {%- for p in items -%}
+    {%- if not loop.first %}, {% endif -%}
+    {{ p.prefix }}
+    {%- if p.href %}<a href="{{ p.href }}">{{ p.text }}</a>
+    {%- elif p.missing %}<span class="mono">{{ p.text }}</span> <span class="note">(no longer in your data)</span>
+    {%- elif p.is_id %}<span class="mono">{{ p.text }}</span>
+    {%- else %}{{ p.text }}{% endif -%}
+  {%- endfor -%}
+{%- endmacro %}
+{% macro totals_table(table_id, caption, first_header, items, empty_text) -%}
+<div class="table-scroll" tabindex="0" role="region" aria-label="{{ caption }}">
+  <table class="usage-totals" id="{{ table_id }}">
+    <caption>{{ caption }}</caption>
+    <thead>
+      <tr>
+        <th scope="col">{{ first_header }}</th>
+        <th scope="col">Calls this month</th>
+        <th scope="col">Cost this month</th>
+        <th scope="col">Calls, all time</th>
+        <th scope="col">Cost, all time</th>
+        <th scope="col">Errors, all time</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in items %}
+      <tr{% if t.label == "All sources" %} class="total-row"{% endif %}>
+        <th scope="row">{{ t.label }}</th>
+        <td class="mono">{{ t.month_calls }}</td>
+        <td class="mono">{{ t.month_cost }}</td>
+        <td class="mono">{{ t.all_calls }}</td>
+        <td class="mono">{{ t.all_cost }}</td>
+        <td>{{ t.errors }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="note">{{ empty_text }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{%- endmacro %}
+{% block content %}
+{% if problems %}
+{% set n = problems | length %}
+<div class="banner" role="alert">
+  <h2>{{ n }} {{ ("part" if whole_file_problem else "line") ~ ("s" if n != 1 else "") }} of the AI usage log could not be read</h2>
+  <ul>
+    {% for p in problems %}
+    <li><code>{{ p.file }}</code>{% if p.line %}, line {{ p.line }}{% endif %}: {{ p.message }}</li>
+    {% endfor %}
+  </ul>
+  <p>These lines are left out of the list and the totals.{% if has_lines %} The rest of the log loaded normally.{% endif %}</p>
+</div>
+{% endif %}
+{% if legacy_pending %}
+<p class="usage-hint">{{ legacy_pending }} earlier call{{ "s" if legacy_pending != 1 }} in the old run log (<code>{{ run_log_label }}</code>) {{ "aren't" if legacy_pending != 1 else "isn't" }} in this log yet. Run <code>uv run hub import-usage</code> to add {{ "them" if legacy_pending != 1 else "it" }}.</p>
+{% endif %}
+{% if not has_lines %}
+<section class="card" aria-label="AI calls">
+  {% if problems %}
+  <p class="empty">No readable AI calls.</p>
+  {% else %}
+  <p class="empty">No AI calls logged yet. A line is added each time a feature calls Claude Code, starting with Generate email.</p>
+  {% endif %}
+</section>
+{% else %}
+<p class="usage-note">{{ cost_note }}</p>
+<section class="card" aria-labelledby="usage-totals-title">
+  <h2 id="usage-totals-title">Totals</h2>
+  <p class="note">This month is {{ current_month_label }} in the display zone.{% if no_cost %} {{ no_cost }} call{{ "s" if no_cost != 1 }} reported no cost and {{ "count" if no_cost != 1 else "counts" }} as $0.{% endif %}</p>
+  {{ totals_table("usage-by-source", "By source", "Source", by_source, "No calls yet.") }}
+  {{ totals_table("usage-by-action", "By action · " ~ source_label, "Action", by_action, "No calls from this source yet.") }}
+</section>
+<section class="card" aria-labelledby="usage-calls-title">
+  <h2 id="usage-calls-title">Calls</h2>
+  <form class="usage-filters" method="get" action="/usage" id="usage-filters">
+    <span class="filter-field">
+      <label for="usage-month">Month</label>
+      <select id="usage-month" name="month">
+        <option value="all"{% if month == "all" %} selected{% endif %}>All months</option>
+        {% for key, label in month_options %}
+        <option value="{{ key }}"{% if key == month %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </span>
+    <span class="filter-field">
+      <label for="usage-source">Source</label>
+      <select id="usage-source" name="source">
+        {% for key, label in source_options %}
+        <option value="{{ key }}"{% if key == source %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </span>
+    <button class="button button-secondary button-small" type="submit">Apply</button>
+  </form>
+  {% if rows %}
+  <div class="table-scroll" tabindex="0" role="region" aria-label="AI calls table">
+    <table class="usage">
+      <caption class="visually-hidden">AI calls, newest first</caption>
+      <thead>
+        <tr>
+          <th scope="col">Date and time</th>
+          <th scope="col">Action</th>
+          <th scope="col">For</th>
+          <th scope="col">Duration</th>
+          <th scope="col">Estimated cost</th>
+          <th scope="col">Result</th>
+        </tr>
+      </thead>
+      <tbody id="usage-calls">
+        {% for r in rows %}
+        <tr>
+          <td class="mono">{{ r.line.at | when }}</td>
+          <td>{{ r.action }}</td>
+          <td>{{ parts(r.target) }}{% if r.target and r.others %} · {% endif %}{{ parts(r.others) }}</td>
+          <td class="mono">{{ r.duration }}</td>
+          <td class="mono">{{ r.cost }}</td>
+          <td><span class="chip {{ 'chip-success' if r.ok else 'chip-red' }}">{{ r.result }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% elif default_filters %}
+  <p class="empty">No app calls yet. Choose Eval, Live or All sources under Source to see the others.</p>
+  {% else %}
+  <p class="empty">No calls match these filters.</p>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

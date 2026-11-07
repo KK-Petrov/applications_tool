@@ -15,10 +15,11 @@ import pytest
 from markupsafe import escape
 from ruamel.yaml import YAML
 
+from hub.ai import usage
 from hub.models.professor import GeneratedEmail, Letter, LetterStatus, Professor
 from hub.store import Store
 
-from helpers import RECORDINGS, FormClient, form_fields, set_field, tree_digest
+from helpers import RECORDINGS, USAGE_LOG, FormClient, data_snapshot, form_fields, set_field, tree_digest
 
 HX = {"HX-Request": "true"}
 RECORDED = json.loads((RECORDINGS / "rec-email.json").read_text(encoding="utf-8"))["structured_output"]
@@ -85,6 +86,21 @@ def test_generate_saves_the_draft_and_moves_to_ask_letters_to_draft_ready(
     )
 
 
+def test_generate_logs_one_app_line_with_the_professor_and_programme_ids(
+    client: FormClient, data_dir: Path, config, jansen_with_mit: None
+) -> None:
+    """DECISIONS #60: the app's line goes to <data_dir>/logs/ai_usage.jsonl, IDs only, in deadline order."""
+    data = [("programmes", "mit-sloan-mfin"), ("programmes", "princeton-mfin")]
+    client.post("/recommenders/jansen/email", data=data, headers=HX)
+    (line,) = [json.loads(x) for x in (data_dir / USAGE_LOG).read_text(encoding="utf-8").splitlines()]
+    assert line["action"] == "generate_email" and line["source"] == "app" and line["ok"] is True
+    ids = ["princeton-mfin", "mit-sloan-mfin"]
+    assert line["subject"] == {"professor_id": "jansen", "programme_ids": ids}
+    text = (data_dir / USAGE_LOG).read_text(encoding="utf-8")
+    assert RECORDED["body"].splitlines()[0] not in text and "Jansen" not in text
+    assert not usage.run_log_path(config).exists()  # nothing in the eval/live run log
+
+
 def test_result_shows_subject_body_warnings_and_actions(
     client: FormClient, data_dir: Path, jansen_with_mit: None
 ) -> None:
@@ -106,23 +122,23 @@ def test_result_shows_subject_body_warnings_and_actions(
 def test_nothing_ticked_writes_nothing_and_calls_nothing(
     client: FormClient, data_dir: Path, calls: Path
 ) -> None:
-    before = tree_digest(data_dir)
+    before = data_snapshot(data_dir)
     res = client.post("/recommenders/jansen/email", data=[], headers=HX)
     assert "Tick at least one programme" in res.text
-    assert tree_digest(data_dir) == before
+    assert data_snapshot(data_dir) == before  # logs/ included: no call, so no usage line (DECISIONS #60)
     assert _payloads(calls) == []
 
 
 def test_programmes_not_to_ask_are_ignored(client: FormClient, data_dir: Path, calls: Path) -> None:
     """Booth is Requested and Columbia has no letter: neither can be generated for, so nothing is ticked."""
-    before = tree_digest(data_dir)
+    before = data_snapshot(data_dir)
     res = client.post(
         "/recommenders/jansen/email",
         data=[("programmes", "booth-mif"), ("programmes", "columbia-msfe")],
         headers=HX,
     )
     assert "Tick at least one programme" in res.text
-    assert tree_digest(data_dir) == before and _payloads(calls) == []
+    assert data_snapshot(data_dir) == before and _payloads(calls) == []  # logs/ included (DECISIONS #60)
 
 
 def test_no_js_generate_redirects_to_the_panel(client: FormClient, data_dir: Path) -> None:

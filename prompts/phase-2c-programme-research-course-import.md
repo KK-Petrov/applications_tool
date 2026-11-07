@@ -111,5 +111,5 @@ Run **ai-output-reviewer**, **ui-reviewer** and **data-integrity-reviewer** at t
 - Create professors from it; check names, titles, particles and the linked courses.
 
 ## Out of scope
-Usage panel, README and the final end-to-end pass (Phase 5); reminders (3); the full course view on the biography
+The Settings usage total, README and the final end-to-end pass (Phase 5); reminders (3); the full course view on the biography
 bank page (4a); OCR of scanned documents.

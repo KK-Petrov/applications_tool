@@ -122,7 +122,7 @@ h2 { font-size: var(--font-size-h2); font-weight: var(--weight-semibold); }
 }
 .banner h2 { margin: 0 0 4px; font-size: var(--font-size-body); }
 .banner ul { margin: 0; padding-left: 20px; }
-.banner code { font-family: var(--font-mono); }
+.banner code { font-family: var(--font-mono); overflow-wrap: anywhere; }
 
 /* ---- Phase 1 components (docs/03 §4.1–4.2, §6). Colours only from tokens.css. ---- */
 a { color: var(--color-accent); }
@@ -155,7 +155,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .button-secondary:hover { background: var(--color-neutral-bg); color: var(--color-ink); }
 .button-small { padding: 0 12px; }
 .inline-form { display: inline-flex; align-items: center; gap: 8px; margin: 0; }
-.inline-form select {
+.inline-form select, .usage-filters select {  /* one form-control rule (ui review) */
   min-height: var(--button-min-height); padding: 0 12px; font: inherit; color: var(--color-ink);
   border: 1px solid var(--color-text-muted); border-radius: var(--radius-button); background: var(--color-surface);
 }
@@ -401,3 +401,22 @@ fieldset.tone legend { font-weight: var(--weight-medium); padding: 0; }
 /* Generate email shows its busy state with data-busy, the button label and the text; the global
    .htmx-request dimming would drop that text below 4.5:1 for up to 120 s (DECISIONS #55). */
 .generate-form.htmx-request, .generate-form .htmx-request { opacity: 1; }
+
+/* AI usage page (docs/03 §4.9; DECISIONS #60) */
+.usage-note { color: var(--color-text-secondary); margin: 0 0 16px; }
+.usage-hint {
+  background: var(--color-info-bg);
+  color: var(--color-info);
+  border-radius: var(--radius-card);
+  padding: 12px 16px;
+  margin: 0 0 16px;
+}
+.usage-hint code { font-family: var(--font-mono); overflow-wrap: anywhere; }
+.usage-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 0 0 12px; }
+.filter-field { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }  /* label stays with its select */
+.usage-totals { margin-bottom: 16px; }
+.usage-totals caption { text-align: left; font-weight: var(--weight-semibold); padding: 0 0 6px; }
+.usage-totals th[scope="row"] { text-align: left; font-weight: var(--weight-medium); }
+.usage-totals .total-row th, .usage-totals .total-row td { font-weight: var(--weight-semibold); }
+table.usage td:first-child, table.usage td:nth-child(4), table.usage td:nth-child(5) { white-space: nowrap; }
+table.usage td:nth-child(3) { min-width: 220px; }  /* "For" keeps room on phones; the table scrolls in its region */

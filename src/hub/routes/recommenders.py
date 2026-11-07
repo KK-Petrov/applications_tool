@@ -271,7 +271,8 @@ def build_router(web: Web) -> APIRouter:
     def generate(pid: str, ticked: list[str]) -> str | None:
         """Generate a request email for the ticked To ask / Draft ready programmes and save it.
 
-        Returns ``None`` on success, else the message to show; on any failure nothing is written (C-2b-05).
+        Returns ``None`` on success, else the message to show; on any failure no data file is written, only
+        the call's usage line (C-2b-05, DECISIONS #60).
         The professor is loaded again after the (slow) call, so edits made meanwhile are kept. Ticked To ask
         letters become Draft ready; no other status changes and no date is stamped.
         """
@@ -295,7 +296,15 @@ def build_router(web: Web) -> APIRouter:
         owner = snapshot.settings.owner_name
         payload = rec_email_payload(professor, chosen, snapshot.biography, owner, now, config)
         try:
-            result = run_skill("rec-email", payload, load_schema("rec_email"), config=config)
+            result = run_skill(
+                "rec-email",
+                payload,
+                load_schema("rec_email"),
+                config=config,
+                action="generate_email",
+                subject={"professor_id": professor.id, "programme_ids": [p.id for p in chosen]},
+                source="app",
+            )
         except SkillError as err:
             return err.message
         subject, body = result.data["subject"], result.data["body"]

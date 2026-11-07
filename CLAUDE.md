@@ -35,7 +35,8 @@ If code and spec disagree, stop and ask.
 `dev` (app at http://127.0.0.1:8765) · `init-data` · `test-fast` (< 60 s, no e2e, no live; parallel, warns above 45 s) · `test` (all but live; parallel, then `serial`-marked tests alone) ·
 `e2e` · `live` (real Google/Claude; pass `-k`) · `eval-email` · `eval-essay` · `lint` (ruff) · `validate` (lint + test + criteria guard)
 App CLI (installed by uv as `hub`): `hub serve` · `hub sync [--dry-run]` · `hub digest [--dry-run]` · `hub connect-google` ·
-`hub email-payload <professor_id> [--programme <id>]` (prints the /rec-email input; used by "Refine in Claude Code").
+`hub email-payload <professor_id> [--programme <id>]` (prints the /rec-email input; used by "Refine in Claude Code") ·
+`hub import-usage` (one-time copy of the old reports/ai_usage.jsonl lines into the data folder's AI usage log).
 Add new targets to tasks.py and keep this list up to date.
 
 ## Glossary
@@ -44,6 +45,7 @@ Add new targets to tasks.py and keep this list up to date.
 - **Display zone**: the time zone the UI shows times in (`America/New_York` or `Europe/Amsterdam`, chosen in the header).
 - **Letter**: one professor × one programme, with a status (`not_asked` … `submitted`, `declined`). **Coverage**: confirmed or submitted letters ÷ letters required.
 - **Next action**: the single most urgent thing to do for a professor, derived by the rules in docs/02 §4.
+- **Usage log**: one line per AI call: action, subject (IDs only), source (`app` → `<data_dir>/logs/ai_usage.jsonl`; `eval`/`live` → `reports/ai_usage.jsonl`), cost, result. Shown on the AI usage page (`/usage`).
 - **Reminder**: a computed calendar entry (rule × programme × subject); **sync map**: reminder ID → Google event ID.
 - **Biography bank**: the owner's background entries; the only source of facts for emails and evaluations. **Anticipated**: an entry not yet achieved (e.g. cum laude).
 - **Rubric**: Structure, Content fit, Programme fit, Accuracy; ratings strong / adequate / weak.

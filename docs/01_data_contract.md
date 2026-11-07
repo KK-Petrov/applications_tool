@@ -22,6 +22,7 @@ All user data lives in one folder, `data_dir`, set in `config/project.yaml` → 
   sync/calendar_map.json                # §8
   sync/digest_state.json                # §8
   logs/hub.log                          # rotating, no payloads
+  logs/ai_usage.jsonl                   # §11, AI usage log of the app's calls (DECISIONS #60)
 ```
 - IDs are lowercase slugs `[a-z0-9-]{2,60}`, unique within their folder, never reused after deletion.
 - All YAML is read and written with ruamel.yaml round-trip mode so the user's comments and key order survive.
@@ -187,3 +188,45 @@ courses:
   header comment giving the original file name and its sha256. The original file (.docx, .pdf) is never stored,
   and no file under data_dir contains a student number, date of birth or national ID number.
 - Professors link to courses through `course_ids` (§4); a course can be linked to several professors.
+
+## 11. logs/ai_usage.jsonl: AI usage log (DECISIONS #60)
+One JSON object per line, appended by `run_skill` for every AI call, whether it succeeds or fails. Lines
+are never rewritten and the file doesn't rotate (about 250 bytes per call). The app's calls
+(`source: app`) go here, at `claude.usage_log` relative to data_dir, so they are backed up with the data.
+Eval and live calls go to the run log `claude.run_usage_log` = `reports/ai_usage.jsonl` (relative to the
+repository, gitignored), with the same fields.
+
+| Field | Type | Notes |
+|---|---|---|
+| `at` | str | ISO 8601 with UTC offset, when the call ended |
+| `skill` | str | e.g. `rec-email` |
+| `backend` | str \| null | `cli`; null on old lines imported without one |
+| `action` | enum | `generate_email`, `research_programme`, `reresearch_programme`, `import_courses`, `evaluate_essay`, `evaluate_cv`, `grade_claims`, `live_check`; `unlabelled` only on imported lines |
+| `subject` | object | **IDs only**: `professor_id`, `programme_ids` (list), `programme_id`, `essay_id`, `cv_id`; every value matches the ID slug pattern; `{}` when there is no stored item (researching a new programme, a course import, live checks) |
+| `source` | enum | `app` (this file), `eval` / `live` (run log); `unknown` only on imported lines |
+| `duration_s` | float \| null | wall time of the call; null only on imported lines that had none |
+| `total_cost_usd` | float \| null | the CLI's estimate; null when it reported none (failed calls) |
+| `ok` | bool | |
+| `error` | enum \| null | `not_installed`, `timeout`, `failed`, `invalid_output` |
+| `imported` | bool | only on lines copied by `hub import-usage`, always `true` |
+
+- No other field exists. A line never holds payload content, email text, essay text, biography text or a
+  research query. Professor IDs are slugs of the name (`jansen`), the same IDs as the file names in data_dir;
+  no name is written as text. `run_skill` refuses a subject that isn't IDs only before anything runs
+  (whole-string match: a trailing newline is refused too).
+- The reader is strict: JSON types without coercion, no extra field, `skill` an ID slug, `backend` `cli` or
+  null, finite non-negative numbers, `ok` true exactly when `error` is null, and `unlabelled` / `unknown` /
+  `imported` only together. Any other line is unreadable: the page names its file, line number and the field,
+  never the field's value.
+- A call that fails with anything other than the four `SkillError` kinds (a bug, a broken pipe) is still logged,
+  as `failed`, and the error is raised again.
+- App lines are written only if data_dir exists; the data folder is never created by logging. A line that
+  can't be written is skipped, with a warning in `hub.log`.
+- `hub import-usage` copies the lines of the old single log (`reports/ai_usage.jsonl` lines without
+  `source`, from before #60) into this file once, as `action: unlabelled`, `subject: {}`, `source: unknown`,
+  `imported: true`. The old file is left as it is; the reader ignores its old lines from then on. Running the
+  command again does nothing.
+- On any failure path the only changes in data_dir are exactly one appended line here and, when the same
+  request saved a data file first, that file and exactly one appended `hub.log` line naming it (C-2b-05;
+  docs/04 §1.1). Two edge cases outside the tests: if this line can't be written, a `hub.log` warning appears
+  instead, and a `hub.log` that rotates on the save line gains `hub.log.1`.

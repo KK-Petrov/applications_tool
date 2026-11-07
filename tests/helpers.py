@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import re
 from datetime import UTC, datetime
 from html.parser import HTMLParser
 from pathlib import Path
@@ -130,12 +132,101 @@ def long_description(length: int = 3000) -> str:
 
 
 def tree_digest(folder: Path) -> dict[str, str]:
-    """sha256 of every file under ``folder`` (relative path → digest), to prove nothing was written."""
+    """sha256 of every file under ``folder`` (relative path → digest), to prove nothing was written.
+
+    It leaves out ``logs/``. AI failure paths use ``data_snapshot`` and ``assert_only_usage_line``
+    instead, which include it (C-2b-05 made stricter, DECISIONS #60).
+    """
     return {
         p.relative_to(folder).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
         for p in sorted(folder.rglob("*"))
         if p.is_file() and "logs" not in p.relative_to(folder).parts
     }
+
+
+USAGE_LOG = "logs/ai_usage.jsonl"  # the app's usage log, relative to data_dir (docs/01 §11)
+
+
+DIR = b"<folder>"  # data_snapshot's value for a folder, so a new (even empty) folder shows as a change
+
+
+def data_snapshot(folder: Path) -> dict[str, bytes]:
+    """Every file and folder under ``folder``, ``logs/`` included (relative path → content; folders end
+    in "/" and map to ``DIR``)."""
+    return {
+        (rel + "/" if p.is_dir() else rel): (DIR if p.is_dir() else p.read_bytes())
+        for p in sorted(folder.rglob("*"))
+        for rel in [p.relative_to(folder).as_posix()]
+    }
+
+
+HUB_LOG = "logs/hub.log"
+# The store's save message as the app's logger writes it (app._configure_logging: "%(asctime)s %(levelname)s
+# %(name)s: %(message)s"), e.g. "2026-11-06 21:26:12,779 INFO hub.store: saved professors/jansen.yaml".
+_SAVE_LINE = r"\d{{4}}-\d{{2}}-\d{{2}} \d{{2}}:\d{{2}}:\d{{2}},\d{{3}} INFO hub\.store: saved {file}"
+
+
+USAGE_FIELDS = ["at", "skill", "backend", "action", "subject", "source", "duration_s", "total_cost_usd"]
+USAGE_FIELDS += ["ok", "error"]
+
+
+def assert_only_usage_line(
+    folder: Path,
+    before: dict[str, bytes],
+    *,
+    saved: tuple[str, ...] = (),
+    run_log: Path | None = None,
+    **expected: Any,
+) -> dict[str, Any]:
+    """C-2b-05 (stricter, DECISIONS #60). On a failure path the only changes in data_dir are exactly one
+    appended line in ``logs/ai_usage.jsonl`` (with the ``expected`` fields) and, when the same request
+    saved a data file first, that file and exactly one appended ``hub.log`` line naming it; nothing else.
+
+    ``saved`` lists the data files the request saved before the failed call (e.g. Save and generate email).
+    With none, ``hub.log`` must not change at all. With some, ``hub.log`` keeps its previous bytes and gains
+    exactly one store save line per file, in order; any other line (one naming the skill, the call or the
+    error, say) fails. The line must have exactly the documented fields, a subject of IDs only, and the
+    ``expected`` values, which must include ``ok``, ``error``, ``action``, ``subject`` and ``source``.
+    ``run_log``, if given, must not exist afterwards (an app failure writes no eval/live line).
+    Returns the appended usage line.
+    """
+    from hub.ai.usage import validate_subject
+
+    missing = {"ok", "error", "action", "subject", "source"} - set(expected)
+    assert not missing, f"the check needs expected {sorted(missing)}"
+    after = data_snapshot(folder)
+    changed = {k for k in set(before) | set(after) if before.get(k) != after.get(k)}
+    allowed = {USAGE_LOG, "logs/", *saved, *([HUB_LOG] if saved else [])}  # logs/ may be created for it
+    unexpected = sorted(changed - allowed)
+    assert not unexpected, f"files changed besides one usage line: {unexpected}"
+    for file in saved:
+        assert file in changed, f"{file} was not saved"
+    if saved:
+        old_log, new_log = before.get(HUB_LOG, b""), after.get(HUB_LOG, b"")
+        assert new_log.startswith(old_log), "hub.log was rewritten, not appended to"
+        appended = new_log[len(old_log) :].decode("utf-8")
+        assert appended.endswith("\n"), f"hub.log gained a partial line: {appended!r}"
+        lines = appended.splitlines()
+        assert len(lines) == len(saved), f"expected {len(saved)} hub.log line(s), got {lines}"
+        for line, file in zip(lines, saved, strict=True):
+            assert re.fullmatch(_SAVE_LINE.format(file=re.escape(file)), line), (
+                f"unexpected hub.log line {line!r}"
+            )
+            for word in ("rec-email", "claude", "skill", "error", "timeout", "invalid"):
+                assert word not in line.lower(), f"hub.log line mentions {word!r}: {line!r}"
+    assert USAGE_LOG in changed, "no usage line was written"
+    old, new = before.get(USAGE_LOG, b""), after[USAGE_LOG]
+    assert new.startswith(old), "the usage log was rewritten, not appended to"
+    added = new[len(old) :].decode("utf-8")
+    assert added.endswith("\n") and added.count("\n") == 1, f"expected exactly one new line, got {added!r}"
+    line = json.loads(added)
+    assert list(line) == USAGE_FIELDS, f"unexpected fields: {list(line)}"
+    assert validate_subject(line["subject"]) == line["subject"], "the subject is not IDs only"
+    for key, value in expected.items():
+        assert line[key] == value, f"{key}: {line[key]!r} != {value!r}"
+    if run_log is not None:
+        assert not run_log.exists(), "an app failure wrote to the eval/live run log"
+    return line
 
 
 class FormClient(TestClient):
@@ -149,3 +240,15 @@ class FormClient(TestClient):
             headers = {**(headers or {}), "Content-Type": "application/x-www-form-urlencoded"}
             return super().post(url, content=urlencode(data), headers=headers, **kwargs)
         return super().post(url, data=data, headers=headers, **kwargs)
+
+
+class UsageLogOutsideTmp(AssertionError):
+    """A non-live test resolved an AI usage log outside its tmp_path (it would write to the real log)."""
+
+
+def check_usage_log(path: Path, root: Path) -> Path:
+    """``path`` if it lies inside ``root``; otherwise raise ``UsageLogOutsideTmp``."""
+    resolved, base = path.resolve(), root.resolve()
+    if resolved != base and base not in resolved.parents:
+        raise UsageLogOutsideTmp(f"AI usage log {resolved} is outside the test's tmp_path {base}")
+    return path

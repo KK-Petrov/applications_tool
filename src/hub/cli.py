@@ -1,4 +1,5 @@
-"""The ``hub`` command line (installed by uv): serve, init-data, and later sync, digest, connect-google."""
+"""The ``hub`` command line (installed by uv): serve, init-data, email-payload, import-usage, and later sync,
+digest, connect-google."""
 
 from __future__ import annotations
 
@@ -75,6 +76,30 @@ def email_payload(
         professor, chosen, snapshot.biography, snapshot.settings.owner_name, datetime.now(UTC), cfg
     )
     typer.echo(json.dumps(payload, indent=2, ensure_ascii=False))
+
+
+@app.command("import-usage")
+def import_usage() -> None:
+    """Copy the old reports/ai_usage.jsonl lines into the data folder's AI usage log, once (DECISIONS #60).
+
+    They become "Unlabelled" calls from an unknown source: the old lines can't be told apart. The old file
+    is left as it is; running this again does nothing.
+    """
+    from hub.ai.usage import ImportRefused, app_log_path, import_legacy
+
+    cfg = load_config()
+    try:
+        result = import_legacy(cfg)
+    except ImportRefused as err:
+        typer.echo(f"Nothing was imported: {err}", err=True)
+        raise typer.Exit(1) from None
+    if result.already_done:
+        typer.echo("Already imported; nothing to do.")
+        return
+    noun = "call" if result.imported == 1 else "calls"
+    typer.echo(f"Imported {result.imported} earlier {noun} into {app_log_path(cfg)}.")
+    if result.unreadable:
+        typer.echo(f"{result.unreadable} unreadable line(s) in the old log were skipped.")
 
 
 def _not_yet(phase: str) -> None:

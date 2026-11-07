@@ -21,6 +21,7 @@ PAGES = {
     "/recommenders": "Recommenders",
     "/essays": "Essays and CV",
     "/biography": "Biography bank",
+    "/usage": "AI usage",  # DECISIONS #60
     "/settings": "Settings",
 }
 TEMPLATES = REPO_ROOT / "src" / "hub" / "templates"

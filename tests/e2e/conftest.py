@@ -10,13 +10,15 @@ import socket
 import threading
 import time
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 import uvicorn
 
+from hub.ai import usage
 from hub.app import create_app
 
-from helpers import FIXED_NOW
+from helpers import FIXED_NOW, check_usage_log
 
 
 def _bound_socket() -> socket.socket:
@@ -31,15 +33,20 @@ def _bound_socket() -> socket.socket:
 
 
 @pytest.fixture
-def live_server(config) -> Iterator[str]:
-    """Start the app in a background thread against the fixture data_dir; yield its base URL."""
+def live_server(config, tmp_path: Path) -> Iterator[str]:
+    """Start the app in a background thread against the fixture data_dir; yield its base URL.
+
+    Guard (DECISIONS #60): the usage logs of the config the server app was actually built with must both
+    lie inside the test's tmp_path. Generate email in the browser tests runs in this server, so this is where
+    an unredirected app or run log would be written.
+    """
+    app = create_app(config, clock=lambda: FIXED_NOW)
+    server_config = app.state.config
+    check_usage_log(usage.app_log_path(server_config), tmp_path)
+    check_usage_log(usage.run_log_path(server_config), tmp_path)
     sock = _bound_socket()
     port = int(sock.getsockname()[1])
-    server = uvicorn.Server(
-        uvicorn.Config(
-            create_app(config, clock=lambda: FIXED_NOW), host="127.0.0.1", port=port, log_level="warning"
-        )
-    )
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
     thread = threading.Thread(target=server.run, kwargs={"sockets": [sock]}, daemon=True)
     thread.start()
     deadline = time.monotonic() + 10

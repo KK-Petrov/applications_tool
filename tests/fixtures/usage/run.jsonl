@@ -1,0 +1,4 @@
+{"at": "2026-07-01T09:00:00+00:00", "skill": "rec-email", "duration_s": 3.1, "total_cost_usd": 0.5, "ok": true, "error": null}
+{"at": "2026-10-10T12:00:00+00:00", "skill": "rec-email", "backend": "cli", "action": "generate_email", "subject": {"professor_id": "smit", "programme_ids": ["princeton-mfin"]}, "source": "eval", "duration_s": 21.0, "total_cost_usd": 0.026, "ok": true, "error": null}
+{"at": "2026-10-10T12:01:00+00:00", "skill": "grade-claims", "backend": "cli", "action": "grade_claims", "subject": {"professor_id": "smit", "programme_ids": ["princeton-mfin"]}, "source": "eval", "duration_s": 8.5, "total_cost_usd": 0.014, "ok": true, "error": null}
+{"at": "2026-10-12T09:00:00+00:00", "skill": "probe-skill", "backend": "cli", "action": "live_check", "subject": {}, "source": "live", "duration_s": 3.3, "total_cost_usd": 0.064, "ok": true, "error": null}

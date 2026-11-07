@@ -6,9 +6,15 @@ threshold is 0. Each failure message lists the rule, impact and the offending el
 
 from __future__ import annotations
 
+import shutil
+
 import pytest
 from axe_playwright_python.sync_playwright import Axe
 from playwright.sync_api import Page
+
+from hub.ai import usage
+
+from paths import FIXTURES
 
 pytestmark = pytest.mark.e2e
 
@@ -29,6 +35,7 @@ PAGES = [
     "/recommenders/import",
     "/essays",
     "/biography",
+    "/usage",  # empty state (DECISIONS #60)
     "/settings",
     "/no-such-page",
 ]
@@ -108,3 +115,22 @@ def test_no_serious_violations_while_generating(
     violations = _serious(page)
     assert not violations, "panel while generating:\n" + "\n".join(violations)
     page.locator("#panel .email-area .form-error").wait_for(timeout=20000)  # let the request finish
+
+
+def test_no_serious_violations_on_the_usage_page_with_calls_and_a_bad_line(
+    page: Page, live_server: str, config
+) -> None:
+    """DECISIONS #60: the AI usage page with rows from every source, totals, filters and the error banner."""
+    app_log = usage.app_log_path(config)
+    app_log.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(FIXTURES / "usage" / "app.jsonl", app_log)
+    shutil.copyfile(FIXTURES / "usage" / "run.jsonl", usage.run_log_path(config))
+    for path in ("/usage", "/usage?source=all", "/usage?month=2026-01"):
+        page.goto(live_server + path, wait_until="domcontentloaded")
+        violations = _serious(page)
+        assert not violations, f"{path}:\n" + "\n".join(violations)
+    app_log.write_text(app_log.read_text(encoding="utf-8") + "not json\n", encoding="utf-8")
+    page.goto(live_server + "/usage", wait_until="domcontentloaded")
+    page.get_by_role("alert").first.wait_for()
+    violations = _serious(page)
+    assert not violations, "usage page with the error banner:\n" + "\n".join(violations)
