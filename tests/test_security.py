@@ -178,6 +178,13 @@ NEW_WRITE_ROUTES = {
         {"data": {"proposal": "{}", "domains": "princeton.edu", "select": "all"}},
     ),
     "course import send": ("/courses/import/send", {"data": {"text": "FEB1\tCourse one\t8,0\t6\n"}}),
+    # follow-up before Phase 3: edit, delete and restore courses (#94)
+    "course edit": ("/courses/x-1/edit", {"data": {"name": "Evil"}}),
+    "course delete": ("/courses/x-1/delete", {"data": {"unlink": "1"}}),
+    "course restore": ("/courses/restore", {"data": {"restore": "x-1"}}),
+    "course merge": ("/courses/merge", {"data": {"ids": "x-1", "include": "x-1", "keep": "x-1"}}),
+    "courses selected": ("/courses/selected", {"data": {"select": "x-1", "action": "delete", "unlink": "1"}}),
+    "courses merge all": ("/courses/merge-all", {"data": {}}),
 }
 
 

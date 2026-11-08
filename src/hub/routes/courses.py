@@ -1,6 +1,9 @@
 """Courses and course import (US-19 to US-21; docs/03 §1, §4.8; docs/04 §9; DECISIONS #44, #64).
 
-- ``GET /courses``: the minimal list (the biography bank shows courses in full in Phase 4a).
+- ``GET /courses``: the minimal list (the biography bank shows courses in full in Phase 4a), each with Edit.
+- ``GET/POST /courses/{id}/edit``, ``POST /courses/{id}/delete``, ``GET /courses/deleted``,
+  ``POST /courses/restore``: the owner corrects, deletes (refused while a professor links the course, or
+  "unlink and delete") and restores courses; no AI call (DECISIONS #94).
 - ``GET/POST /courses/import``: a .docx, a text PDF or pasted text → text → identifiers stripped in Python
   (a label whose value can't be found stops here) → the **review** of exactly the text that would be sent,
   each removed value highlighted (DECISIONS #70). No AI call, nothing written.
@@ -20,13 +23,13 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
 from hub.ai.skills import SkillError, load_schema, run_skill
-from hub.courses import extract, identifiers, importer, lecturers
+from hub.courses import editing, extract, identifiers, importer, lecturers, merging
 from hub.models.professor import Professor
 from hub.rules import names
 from hub.store import DataError, Snapshot
@@ -34,8 +37,10 @@ from hub.web import Page, Web, see_other
 
 COURSES_PAGE = Page("recommenders", "/courses", "Recommenders", "Courses")
 IMPORT_PAGE = Page("recommenders", "/courses/import", "Recommenders", "Import courses")
+DELETED_PAGE = Page("recommenders", "/courses/deleted", "Recommenders", "Deleted courses")
+MERGE_PAGE = Page("recommenders", "/courses/merge", "Recommenders", "Merge duplicate courses")
 PROFESSORS_PAGE = Page("recommenders", "/courses/import/professors", "Recommenders", "Create professors")
-ROW_TEXT = ("name", "code", "institution", "grade", "credits", "term", "lecturers", "description")
+ROW_TEXT = ("name", "code", "institution", "grade", "credits", "term", "lecturers", "description", "merged")
 NOTHING_GIVEN = "Choose a file or paste the text of your transcript. Nothing was read."
 # the Save step found the hidden text no longer strips: it was changed after Send (DECISIONS #82, #83)
 SAVE_TEXT_CHANGED = "Nothing was saved: the text changed after it was checked. Read the document again."
@@ -62,10 +67,365 @@ def build_router(web: Web) -> APIRouter:
 
     # ---- the list --------------------------------------------------------------------------------
 
+    def merge_all_notice(done: int, waiting: int) -> str:
+        text = f"Merged {done} group{'' if done == 1 else 's'} of duplicates."
+        if waiting:
+            text += (
+                f" {waiting} group{' needs' if waiting == 1 else 's need'} your choice on Merge duplicates."
+            )
+        return text
+
     @router.get("/courses", response_class=HTMLResponse)
     async def courses_list(request: Request) -> HTMLResponse:
         snapshot = store.load_all()
-        return web.render(request, "pages/courses.html", COURSES_PAGE, snapshot, courses=snapshot.courses)
+        q = request.query_params
+        by_id = {c.id: c for c in snapshot.courses}
+        notice = None
+        if q.get("saved") in by_id:
+            transcript = [f for f in q.get("transcript", "").split(",") if f in editing.FROM_TRANSCRIPT]
+            notice = f"Saved {by_id[q['saved']].name}." + editing.transcript_warning(transcript)
+        elif q.get("unchanged") in by_id:
+            notice = f"Nothing changed in {by_id[q['unchanged']].name}; nothing was written."
+        elif q.get("deleted"):
+            notice = "Course deleted. You can bring it back from Deleted courses."
+        elif q.get("merged") in by_id and q.get("count", "").isdigit():
+            n = int(q["count"])
+            notice = (
+                f"Merged {n + 1} copies into {by_id[q['merged']].name}; "
+                f"the other cop{'y is' if n == 1 else 'ies are'} in Deleted courses."
+            )
+        elif q.get("merged_all", "").isdigit() and q.get("waiting", "").isdigit():
+            notice = merge_all_notice(int(q["merged_all"]), int(q["waiting"]))
+        elif q.get("deleted_count", "").isdigit():
+            n = int(q["deleted_count"])
+            notice = (
+                f"{n} course{'' if n == 1 else 's'} deleted. You can bring them back from Deleted courses."
+            )
+        elif q.get("restored", "").isdigit():
+            notice = f"Restored {q['restored']} course{'' if q['restored'] == '1' else 's'}."
+        return web.render(
+            request,
+            "pages/courses.html",
+            COURSES_PAGE,
+            snapshot,
+            courses=snapshot.courses,
+            notice=notice,
+            error=None,
+        )
+
+    # ---- edit, delete, restore (DECISIONS #94) -------------------------------------------------------------
+
+    def active(snapshot: Snapshot, course_id: str) -> Any:
+        course = next((c for c in snapshot.courses if c.id == course_id), None)
+        if course is None:
+            raise HTTPException(status_code=404)
+        return course
+
+    def render_edit(
+        request: Request,
+        snapshot: Snapshot,
+        course: Any,
+        values: dict[str, str],
+        errors: list,
+        status: int = 200,
+    ) -> HTMLResponse:
+        page = Page("recommenders", f"/courses/{course.id}/edit", "Recommenders", f"Edit {course.name}")
+        return web.render(
+            request,
+            "pages/course_edit.html",
+            page,
+            snapshot,
+            status_code=status,
+            course=course,
+            values=values,
+            errors=errors,
+            labels=editing.LABELS,
+        )
+
+    @router.get("/courses/deleted", response_class=HTMLResponse)
+    async def courses_deleted(request: Request) -> HTMLResponse:
+        snapshot = store.load_all()
+        every = store.load_courses().courses
+        names = {c.id: c.name for c in every}
+        deleted = [c for c in every if c.deleted]
+        return web.render(
+            request,
+            "pages/courses_deleted.html",
+            DELETED_PAGE,
+            snapshot,
+            deleted=deleted,
+            error=None,
+            names=names,
+        )
+
+    @router.post("/courses/restore", response_class=HTMLResponse)
+    async def courses_restore(request: Request) -> Response:
+        form = await request.form()
+        wanted = {str(v) for v in form.getlist("restore")}
+        snapshot = store.load_all()
+        current = store.load_courses()
+        deleted = [c for c in current.courses if c.deleted]
+        chosen = [c for c in deleted if c.id in wanted]
+
+        def refuse(message: str) -> HTMLResponse:
+            return web.render(
+                request,
+                "pages/courses_deleted.html",
+                DELETED_PAGE,
+                snapshot,
+                status_code=409,
+                deleted=deleted,
+                error=message,
+                names={c.id: c.name for c in current.courses},
+            )
+
+        if not chosen:
+            return refuse("Tick at least one course to bring back. Nothing was restored.")
+        for course in chosen:  # the course was imported again after the delete: restoring would duplicate it
+            row = course.model_dump()
+            twin = next((c for c in snapshot.courses if importer.same_course(c.model_dump(), row)), None)
+            if twin is not None:
+                return refuse(
+                    f"{course.name} is already among your courses (imported again). Nothing was restored."
+                )
+        current.courses = [
+            c.model_copy(update={"deleted": False}) if c.id in {x.id for x in chosen} else c
+            for c in current.courses
+        ]
+        store.save_courses(current)
+        return see_other(f"/courses?restored={len(chosen)}")
+
+    # ---- merge duplicates (DECISIONS #95) ---------------------------------------------------------
+
+    def link_counts(snapshot: Snapshot) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for professor in snapshot.professors:
+            for cid in set(professor.course_ids):
+                counts[cid] = counts.get(cid, 0) + 1
+        return counts
+
+    def source_of(course: Any) -> str:
+        return store.source_text(course.source_document)
+
+    def render_merge(
+        request: Request,
+        snapshot: Snapshot,
+        status: int = 200,
+        error: str | None = None,
+        selected: list[Any] | None = None,
+    ) -> HTMLResponse:
+        """Every group of duplicates, or (``selected``, from "Merge selected") one group of the ticked
+        courses."""
+        counts = link_counts(snapshot)
+        found = [selected] if selected else merging.groups(snapshot.courses)
+        plans = [merging.plan(g, counts, source_of) for g in found]
+        return web.render(
+            request,
+            "pages/courses_merge.html",
+            MERGE_PAGE,
+            snapshot,
+            status_code=status,
+            plans=plans,
+            counts=counts,
+            labels=editing.LABELS,
+            error=error,
+        )
+
+    def apply_merges(snapshot: Snapshot, merges: list[tuple[Any, set[str]]]) -> None:
+        """Write merges: each (kept course, ids merged away). Every professor linking a merged-away copy is
+        repointed to its kept course (no duplicates in the list), professors first, so a failure later leaves
+        the copies in place; the copies get ``deleted: true`` and ``merged_into`` (ids never reused)."""
+        into = {cid: kept.id for kept, away in merges for cid in away}
+        for professor in snapshot.professors:
+            if into.keys() & set(professor.course_ids):
+                repointed: list[str] = []
+                for cid in professor.course_ids:
+                    target = into.get(cid, cid)
+                    if target not in repointed:
+                        repointed.append(target)
+                store.save_professor(professor.model_copy(update={"course_ids": repointed}))
+        kept_by_id = {kept.id: kept for kept, _ in merges}
+        current = store.load_courses()
+        current.courses = [
+            kept_by_id[c.id]
+            if c.id in kept_by_id
+            else c.model_copy(update={"deleted": True, "merged_into": into[c.id]})
+            if c.id in into
+            else c
+            for c in current.courses
+        ]
+        store.save_courses(current)
+
+    @router.post("/courses/merge-all", response_class=HTMLResponse)
+    async def merge_all(request: Request) -> Response:
+        """Merge every group that needs no choice (no real conflict; a case-only difference takes the
+        transcript's form; the default copy is kept). Groups with a real conflict are left for
+        /courses/merge."""
+        snapshot = store.load_all()
+        counts = link_counts(snapshot)
+        merges: list[tuple[Any, set[str]]] = []
+        waiting = 0
+        for found in merging.groups(snapshot.courses):
+            plan = merging.plan(found, counts, source_of)
+            if any(f.conflict and not f.preset for f in plan.fields):
+                waiting += 1
+                continue
+            picks = {f.name: f.preset for f in plan.fields if f.conflict and f.preset}
+            merges.append((merging.merged(plan, picks), {c.id for c in found if c.id != plan.keep}))
+        if merges:
+            apply_merges(snapshot, merges)
+        return see_other(f"/courses?merged_all={len(merges)}&waiting={waiting}")
+
+    @router.post("/courses/selected", response_class=HTMLResponse)
+    async def courses_selected(request: Request) -> Response:
+        """The list's selection: "Delete selected" (refused while professors link any, unless ``unlink=1``)
+        or "Merge selected" (the merge preview of exactly the ticked courses; nothing written)."""
+        form = await request.form()
+        snapshot = store.load_all()
+        wanted = [str(v) for v in form.getlist("select")]
+        chosen = [c for c in snapshot.courses if c.id in wanted]
+        action = str(form.get("action", ""))
+
+        def refuse(message: str) -> HTMLResponse:
+            return web.render(
+                request,
+                "pages/courses.html",
+                COURSES_PAGE,
+                snapshot,
+                status_code=409,
+                courses=snapshot.courses,
+                notice=None,
+                error=message,
+            )
+
+        if action == "merge":
+            if len(chosen) < 2:
+                return refuse("Select at least two courses to merge. Nothing was merged.")
+            return render_merge(request, snapshot, selected=chosen)
+        if action != "delete" or not chosen:
+            return refuse(
+                "Select at least one course, then Delete selected or Merge selected. Nothing was changed."
+            )
+        ids = {c.id for c in chosen}
+        linking = [p for p in snapshot.professors if ids & set(p.course_ids)]
+        if linking and form.get("unlink") != "1":
+            page = Page("recommenders", "/courses/selected", "Recommenders", "Delete selected courses")
+            return web.render(
+                request,
+                "pages/courses_delete_selected.html",
+                page,
+                snapshot,
+                status_code=409,
+                chosen=chosen,
+                linking=linking,
+            )
+        for professor in linking:  # professors first: a failure later leaves the courses in place, unlinked
+            store.save_professor(
+                professor.model_copy(update={"course_ids": [i for i in professor.course_ids if i not in ids]})
+            )
+        current = store.load_courses()
+        current.courses = [
+            c.model_copy(update={"deleted": True}) if c.id in ids else c for c in current.courses
+        ]
+        store.save_courses(current)
+        return see_other(f"/courses?deleted_count={len(ids)}")
+
+    @router.get("/courses/merge", response_class=HTMLResponse)
+    async def merge_form(request: Request) -> HTMLResponse:
+        """Every group of duplicate courses with what merging them gives; nothing is written."""
+        return render_merge(request, store.load_all())
+
+    @router.post("/courses/merge", response_class=HTMLResponse)
+    async def merge_save(request: Request) -> Response:
+        """Merge one group: the kept course takes the merged values, every professor linking a merged-away
+        copy is repointed to it (no duplicates), and the other copies go to Deleted courses with
+        ``merged_into`` (their ids are never reused)."""
+        form = await request.form()
+        snapshot = store.load_all()
+        by_id = {c.id: c for c in snapshot.courses}
+        ids = [str(v) for v in form.getlist("ids")]
+        if not ids or any(i not in by_id for i in ids):
+            return render_merge(
+                request, snapshot, 409, "These courses changed since the page was shown. Nothing was merged."
+            )
+        include = {str(v) for v in form.getlist("include")}
+        copies = [by_id[i] for i in ids if i in include]
+        if len(copies) < 2:
+            return render_merge(
+                request, snapshot, 409, "Tick at least two copies to merge. Nothing was merged."
+            )
+        keep = str(form.get("keep", ""))
+        if keep not in {c.id for c in copies}:
+            return render_merge(request, snapshot, 409, "Choose a ticked copy to keep. Nothing was merged.")
+        group = merging.plan(
+            copies, link_counts(snapshot), lambda c: store.source_text(c.source_document), keep
+        )
+        picks = {name: str(form.get(name)) for name in editing.FIELDS if form.get(name)}
+        try:
+            kept = merging.merged(group, picks)
+        except merging.MergeRefused as err:
+            return render_merge(request, snapshot, 409, str(err))
+        away = {c.id for c in copies if c.id != keep}
+        apply_merges(snapshot, [(kept, away)])
+        return see_other(f"/courses?merged={keep}&count={len(away)}")
+
+    @router.get("/courses/{course_id}/edit", response_class=HTMLResponse)
+    async def course_edit_form(request: Request, course_id: str) -> HTMLResponse:
+        snapshot = store.load_all()
+        course = active(snapshot, course_id)
+        return render_edit(request, snapshot, course, editing.form_values(course), [])
+
+    @router.post("/courses/{course_id}/edit", response_class=HTMLResponse)
+    async def course_edit(request: Request, course_id: str) -> Response:
+        """Save the owner's corrections: changed fields join ``edited``; an unchanged save writes nothing; no
+        AI call (DECISIONS #94)."""
+        form = await request.form()
+        snapshot = store.load_all()
+        course = active(snapshot, course_id)
+        outcome = editing.apply(course, form, cfg, owner())
+        if outcome.course is None:
+            return render_edit(request, snapshot, course, outcome.values, outcome.errors, status=409)
+        if not outcome.changed:
+            return see_other(f"/courses?unchanged={course.id}")
+        current = store.load_courses()
+        current.courses = [outcome.course if c.id == course.id else c for c in current.courses]
+        store.save_courses(current)
+        transcript = ",".join(f for f in outcome.changed if f in editing.FROM_TRANSCRIPT)
+        return see_other(f"/courses?saved={course.id}" + (f"&transcript={transcript}" if transcript else ""))
+
+    @router.post("/courses/{course_id}/delete", response_class=HTMLResponse)
+    async def course_delete(request: Request, course_id: str) -> Response:
+        """Delete (kept with ``deleted: true``, hidden everywhere, restorable). Refused while a professor
+        links the course; ``unlink=1`` ("Unlink from these professors and delete") unlinks them first."""
+        form = await request.form()
+        snapshot = store.load_all()
+        course = active(snapshot, course_id)
+        linking = [p for p in snapshot.professors if course.id in p.course_ids]
+        if linking and form.get("unlink") != "1":
+            page = Page(
+                "recommenders", f"/courses/{course.id}/delete", "Recommenders", f"Delete {course.name}"
+            )
+            return web.render(
+                request,
+                "pages/course_delete.html",
+                page,
+                snapshot,
+                status_code=409,
+                course=course,
+                linking=linking,
+            )
+        for professor in linking:  # professors first: a failure later leaves the course in place, unlinked
+            store.save_professor(
+                professor.model_copy(
+                    update={"course_ids": [i for i in professor.course_ids if i != course.id]}
+                )
+            )
+        current = store.load_courses()
+        current.courses = [
+            c.model_copy(update={"deleted": True}) if c.id == course.id else c for c in current.courses
+        ]
+        store.save_courses(current)
+        return see_other(f"/courses?deleted={course.id}")
 
     # ---- import ----------------------------------------------------------------------------------
 
@@ -182,23 +542,44 @@ def build_router(web: Web) -> APIRouter:
                     "term": row.get("term", "").strip() or None,
                     "lecturers": [n.strip() for n in _lf(row.get("lecturers", "")).split("\n") if n.strip()],
                     "description": _lf(row.get("description", "")),
+                    "merged": row.get("merged", "").strip() or None,  # merged into this stored course (#95)
                 }
             )
         return out
 
     def checked_rows(rows: list[dict[str, Any]], text: str, source: str, snapshot: Snapshot) -> list[dict]:
-        """Each row with its problems and whether it is already saved from this document."""
+        """Each row with its problems, whether it is already saved from this document, and the stored course
+        it matches (offered "Merge into", DECISIONS #95: no "Already imported")."""
         mine = [c for c in snapshot.courses if source and c.source_document == source]
         others = [c for c in snapshot.courses if not (source and c.source_document == source)]
+        by_id = {c.id: c for c in snapshot.courses}
         out: list[dict] = []
         for n, row in enumerate(rows):
-            saved = importer.is_duplicate(row, mine)
+            saved = importer.is_duplicate(row, mine) or row.get("merged") in by_id
+            target = None if saved else next((c for c in others if merging.same_course(row, c)), None)
             problems = [] if saved else importer.row_problems(row, text, others, cfg, rows)
+            merge: dict[str, Any] | None = None
+            if target is not None:
+                problems = [p for p in problems if p != importer.ALREADY_IMPORTED]
+                _, differs = merging.fill_empty(target, row)
+                merge = {
+                    "id": target.id,
+                    "name": target.name,
+                    "differs": [(editing.LABELS[f], getattr(target, f), row.get(f)) for f in differs],
+                }
+            if row.get("merged") in by_id:
+                merge = {"id": row["merged"], "name": by_id[row["merged"]].name, "differs": [], "done": True}
             twin = next((j for j in range(n) if importer.same_course(rows[j], row)), None)
             if twin is not None and not saved:
                 problems.append(f"Same course as row {twin + 1}")  # the document lists it twice
             out.append(
-                {**row, "saved": saved, "problems": problems, "problem_fields": problem_fields(problems)}
+                {
+                    **row,
+                    "saved": saved,
+                    "merge": merge,
+                    "problems": problems,
+                    "problem_fields": problem_fields(problems),
+                }
             )
         return out
 
@@ -243,7 +624,7 @@ def build_router(web: Web) -> APIRouter:
             error=error,
             notice=notice,
             any_saved=any(r["saved"] for r in checked),
-            acceptable=sum(1 for r in checked if not r["saved"] and not r["problems"]),
+            acceptable=sum(1 for r in checked if not r["saved"] and not r["problems"] and not r["merge"]),
             focus_row=focus_row,
             problem=problem,
             focus_notice=focus_notice,
@@ -270,6 +651,67 @@ def build_router(web: Web) -> APIRouter:
             "reason": reason,
             "text": f"{lead} {course}: {reason}.",
         }
+
+    def source_file(source: str, original: str, sha: str, text: str, snapshot: Snapshot) -> str:
+        """The document's sources/ file: the one named in the form, else one made earlier from the same
+        document (sha256), else a new one with the stripped text (written now)."""
+        if not source and sha != "not recorded":
+            source = store.source_with_sha(sha) or ""  # accepted before from an older copy of the page
+        if not source:
+            today = web.today(snapshot).isoformat()
+            source = importer.source_name(original if original != PASTED else "", today, store.source_names())
+            store.create_source_text(source, importer.source_header(original, sha) + text)
+        return source
+
+    def merge_row(
+        request: Request,
+        i: int,
+        checked: list[dict[str, Any]],
+        rows: list[dict[str, Any]],
+        text: str,
+        original: str,
+        sha: str,
+        source: str,
+        snapshot: Snapshot,
+        owner_institution: str,
+    ) -> HTMLResponse:
+        """ "Merge into <course>" (DECISIONS #95): the stored course gets only its empty fields filled from
+        this row (a transcript's values, so not owner-edited); where they differ the stored value is kept."""
+        row = checked[i]
+        merge = row["merge"]
+
+        def refuse(reason: str) -> HTMLResponse:
+            return render_preview(
+                request, text, original, sha, source, rows, [], owner_institution=owner_institution,
+                status=409, error=f"Nothing was saved: {reason}.",
+            )  # fmt: skip
+
+        if not merge or merge.get("done"):
+            return refuse("this course matches none of your courses")
+        if row["problems"]:
+            return refuse("; ".join(row["problems"]))
+        try:
+            current = store.load_courses()
+            target = next((c for c in current.courses if c.id == merge["id"] and not c.deleted), None)
+            if target is None:
+                return refuse("the course to merge into is gone")
+            updated, _ = merging.fill_empty(target, row)
+            filled = [f for f in editing.FIELDS if getattr(updated, f) != getattr(target, f)]
+            source = source_file(source, original, sha, text, snapshot)
+            current.courses = [updated if c.id == target.id else c for c in current.courses]
+            store.save_courses(current)
+        except DataError as err:
+            return refuse(f"{err.path} {err.message}")
+        rows = [dict(r, merged=target.id) if n == i else r for n, r in enumerate(rows)]
+        notice = f"Merged into {target.name}: " + (
+            f"filled {', '.join(editing.LABELS[f].lower() for f in filled)}."
+            if filled
+            else "nothing was empty to fill."
+        )
+        return render_preview(
+            request, text, original, sha, source, rows, [], notice=notice, focus_row=i,
+            owner_institution=owner_institution,
+        )  # fmt: skip
 
     @router.post("/courses/import/save", response_class=HTMLResponse)
     async def import_save(request: Request) -> HTMLResponse:
@@ -329,17 +771,36 @@ def build_router(web: Web) -> APIRouter:
                 focus_notice=flagged is None and notice.endswith("can be accepted."),
             )
         checked = checked_rows(rows, text, source, snapshot)
-        if accept == "all":
-            chosen = [i for i, r in enumerate(checked) if not r["saved"] and not r["problems"]]
+        if accept.startswith("merge-") and accept[6:].isdigit() and int(accept[6:]) < len(checked):
+            return merge_row(
+                request,
+                int(accept[6:]),
+                checked,
+                rows,
+                text,
+                original,
+                sha,
+                source,
+                snapshot,
+                owner_institution,
+            )
+        if accept == "all":  # rows matching a stored course are merged one by one, never by Accept all (#95)
+            chosen = [
+                i for i, r in enumerate(checked) if not r["saved"] and not r["problems"] and not r["merge"]
+            ]
         elif accept.isdigit() and int(accept) < len(checked):
             chosen = [int(accept)]
         else:
             chosen = []
-        blocked = [checked[i] for i in chosen if checked[i]["saved"] or checked[i]["problems"]]
+        blocked = [
+            checked[i] for i in chosen if checked[i]["saved"] or checked[i]["problems"] or checked[i]["merge"]
+        ]
         if not chosen or blocked:
             reason = (
                 "; ".join(blocked[0]["problems"])
                 if blocked and blocked[0]["problems"]
+                else f"it matches your course {blocked[0]['merge']['name']}; use Merge into"
+                if blocked and blocked[0]["merge"]
                 else "nothing to accept"
             )
             return render_preview(
@@ -356,15 +817,8 @@ def build_router(web: Web) -> APIRouter:
             )
         try:
             store.load_courses()  # an unreadable courses.yaml stops here, before the source file is written
-            if not source and sha != "not recorded":
-                source = store.source_with_sha(sha) or ""  # accepted before from an older copy of the page
-            if not source:
-                today = web.today(snapshot).isoformat()
-                source = importer.source_name(
-                    original if original != PASTED else "", today, store.source_names()
-                )
-                store.create_source_text(source, importer.source_header(original, sha) + text)
-            taken = {c.id for c in snapshot.courses}
+            source = source_file(source, original, sha, text, snapshot)
+            taken = set(snapshot.all_course_ids)  # deleted courses' ids too: never reused (#94)
             new = [
                 importer.to_course(checked[i], importer.course_id(checked[i], taken), source) for i in chosen
             ]

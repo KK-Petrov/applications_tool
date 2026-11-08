@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{#- Deleted courses (DECISIONS #94): a checklist to bring courses back. -#}
+{% block main_attrs %}{% if error %} data-focus="restore-error"{% endif %}{% endblock %}
+{% block before_title %}
+<nav class="breadcrumb" aria-label="Breadcrumb"><a href="/recommenders">Recommenders</a> <span aria-hidden="true">›</span> <a href="/courses">Courses</a> <span aria-hidden="true">›</span> <span aria-current="page">Deleted courses</span></nav>
+{% endblock %}
+{% block content %}
+{% if error %}<p class="form-error" role="alert" id="restore-error" tabindex="-1">{{ error }}</p>{% endif %}
+<section class="card" aria-labelledby="deleted-title">
+  <h2 id="deleted-title">Deleted courses</h2>
+  {% if deleted %}
+  <form method="post" action="/courses/restore" id="courses-restore">
+    <fieldset>
+      <legend>Tick the courses to bring back</legend>
+      <ul class="plain">
+      {% for c in deleted %}
+        <li><label><input type="checkbox" name="restore" value="{{ c.id }}"> {{ c.name }}{% if c.code %} ({{ c.code }}){% endif %}{% if c.term %} · {{ c.term }}{% endif %}{% if c.edited %} · edited by you{% endif %}{% if c.merged_into %} · merged into {{ names.get(c.merged_into, c.merged_into) }}{% endif %}</label></li>
+      {% endfor %}
+      </ul>
+    </fieldset>
+    <button class="button button-primary" type="submit">Bring back</button>
+  </form>
+  {% else %}
+  <p class="empty">No deleted courses.</p>
+  {% endif %}
+</section>
+{% endblock %}

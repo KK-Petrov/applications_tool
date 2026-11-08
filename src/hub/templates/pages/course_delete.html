@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{#- Delete refused while professors link the course (DECISIONS #94): names them and offers to unlink first. -#}
+{% block main_attrs %} data-focus="delete-refused"{% endblock %}
+{% block before_title %}
+<nav class="breadcrumb" aria-label="Breadcrumb"><a href="/recommenders">Recommenders</a> <span aria-hidden="true">›</span> <a href="/courses">Courses</a> <span aria-hidden="true">›</span> <span aria-current="page">Delete</span></nav>
+{% endblock %}
+{% block content %}
+<section class="card" aria-labelledby="delete-refused">
+  <h2 id="delete-refused" tabindex="-1">{{ course.name }} was not deleted</h2>
+  <p role="alert">It is linked to {{ linking | length }} professor{{ "" if linking | length == 1 else "s" }}. Nothing was changed.</p>
+  <ul>{% for p in linking %}<li><a href="/recommenders?selected={{ p.id }}">{{ p.name }}</a></li>{% endfor %}</ul>
+  <form method="post" action="/courses/{{ course.id }}/delete">
+    <input type="hidden" name="unlink" value="1">
+    <p class="hint">Unlinking removes this course from {{ "that professor" if linking | length == 1 else "those professors" }}; their emails then no longer mention it.</p>
+    <button class="button button-primary" type="submit">Unlink from these professors and delete</button>
+    <a class="button button-secondary" href="/courses/{{ course.id }}/edit">Keep the course</a>
+  </form>
+</section>
+{% endblock %}

@@ -7,11 +7,15 @@ on the transcript (a grade is text: "7,5", "A-", "Pass"); the identifier-strippe
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import Field, field_validator
 
 from hub.models.common import DataModel, Slug, unique_ids
 
 COURSE_DESCRIPTION_MAX_CHARS = 20_000  # docs/01 §10, as a professor's course description (§4)
+# the fields the owner can edit on /courses/{id}/edit, in form order (DECISIONS #94)
+EditableField = Literal["name", "code", "grade", "credits", "term", "institution", "lecturers", "description"]
 
 
 class TranscriptCourse(DataModel):
@@ -31,6 +35,13 @@ class TranscriptCourse(DataModel):
     description: str = Field(default="", max_length=COURSE_DESCRIPTION_MAX_CHARS)  # verbatim
     source_document: str | None = None  # a file in sources/, or null for a course added by hand
     confirmed: bool = False  # true when accepted in the import preview
+    # the fields the owner changed after the import, in form order; once listed, always listed (the value is
+    # then the owner's, not the transcript's; DECISIONS #94)
+    edited: list[EditableField] = Field(default_factory=list)
+    # true when the owner deleted the course: hidden everywhere, kept so its id is never reused and it can be
+    # restored from /courses/deleted (DECISIONS #94)
+    deleted: bool = False
+    merged_into: Slug | None = None  # the course a deleted copy was merged into (DECISIONS #95)
 
 
 class Courses(DataModel):

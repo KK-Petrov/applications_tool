@@ -530,6 +530,7 @@ html:has(#import-actions) { scroll-padding-bottom: var(--import-bar-space, 105px
 .row-status .refusal { margin: 0; }
 .row-problems { margin: 0 0 8px; }  /* under the legend: in view with the course's name (F1) */
 .row-problems .refusal { margin: 0; }
+.notice-warning { background: var(--color-urgent-bg); color: var(--color-urgent-text); }  /* course edit (#94) */
 .notice-problem { background: var(--color-danger-bg); color: var(--color-danger); }  /* Check again: what's left */
 .notice-problem a { color: inherit; }
 .course-row { scroll-margin-top: 16px; }

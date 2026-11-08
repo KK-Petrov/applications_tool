@@ -413,7 +413,9 @@ def test_importing_the_same_rows_again_is_refused_as_duplicates(
     _accept_all(client)
     before = (data_dir / "courses.yaml").read_bytes()
     html = _upload(client, "pdf").text
-    assert html.count("Already imported") == 28
+    # changed with the user's request (DECISIONS #95): a row matching a stored course is offered "Merge into
+    # <course>" instead of being blocked as "Already imported"; Accept all still writes nothing
+    assert html.count('name="accept" value="merge-') == 28 and "Already imported" not in html
     res = client.post("/courses/import/save", data=[*form_fields(html, "courses-preview"), ("accept", "all")])
     assert res.status_code == 409
     assert (data_dir / "courses.yaml").read_bytes() == before

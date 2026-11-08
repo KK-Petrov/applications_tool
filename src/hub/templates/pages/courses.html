@@ -1,20 +1,41 @@
 {% extends "base.html" %}
-{#- Courses list (docs/03 §4.8): minimal; the biography bank shows courses in full (Phase 4a). -#}
-{% block actions %}<a class="button button-primary" href="/courses/import">Import courses</a>{% endblock %}
+{#- Courses list (docs/03 §4.8): minimal; the biography bank shows courses in full (Phase 4a). Each course can be
+    edited; ticked courses can be deleted or merged together; "Merge all duplicates" merges every group that needs
+    no choice (DECISIONS #94, #95). A field the owner changed is marked "edited by you". -#}
+{% block main_attrs %}{% if error %} data-focus="courses-error"{% endif %}{% endblock %}
+{% block actions %}<a class="button button-secondary" href="/courses/merge">Merge duplicates</a> <a class="button button-secondary" href="/courses/deleted">Deleted courses</a> <a class="button button-primary" href="/courses/import">Import courses</a>{% endblock %}
 {% block content %}
+{% if error %}<p class="form-error" role="alert" id="courses-error" tabindex="-1">{{ error }}</p>{% endif %}
+{% if notice %}<p class="notice" role="status" id="courses-notice" tabindex="-1">{{ notice }}</p>{% endif %}
 <section class="card" aria-labelledby="courses-title">
   <h2 id="courses-title">Imported courses</h2>
   {% if courses %}
+  <form method="post" action="/courses/merge-all" id="courses-merge-all" class="form-actions">
+    <button class="button button-secondary" type="submit" aria-describedby="merge-all-hint">Merge all duplicates</button>
+    <span class="hint" id="merge-all-hint">Merges every group of duplicates that needs no choice from you; groups whose copies really differ are left for Merge duplicates.</span>
+  </form>
+  <form method="post" action="/courses/selected" id="courses-select">
   <div class="table-scroll" tabindex="0" role="region" aria-labelledby="courses-title">
   <table class="table">
-    <thead><tr><th scope="col">Course</th><th scope="col">Code</th><th scope="col">Institution</th><th scope="col">Grade</th><th scope="col">Credits</th><th scope="col">Term</th><th scope="col">Lecturers</th></tr></thead>
+    <thead><tr><th scope="col"><span class="visually-hidden">Select</span></th><th scope="col">Course</th><th scope="col">Code</th><th scope="col">Institution</th><th scope="col">Grade</th><th scope="col">Credits</th><th scope="col">Term</th><th scope="col">Lecturers</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
     <tbody>
     {% for c in courses %}
-      <tr><th scope="row">{{ c.name }}</th><td class="mono">{{ c.code or "" }}</td><td>{{ c.institution or "" }}</td><td class="mono">{{ c.grade or "" }}</td><td class="mono">{{ "%g" | format(c.credits) if c.credits is not none else "" }}</td><td>{{ c.term or "" }}</td><td>{{ c.lecturers | join("; ") }}</td></tr>
+      <tr>
+        <td><input type="checkbox" name="select" value="{{ c.id }}" id="select-{{ c.id }}" aria-label="Select {{ c.name }}{% if c.code %} ({{ c.code }}){% endif %}"></td>
+        <th scope="row">{{ c.name }}{% if c.edited %} <span class="chip chip-neutral">edited by you: {{ c.edited | join(", ") }}</span>{% endif %}</th>
+        <td class="mono">{{ c.code or "" }}</td><td>{{ c.institution or "" }}</td><td class="mono">{{ c.grade or "" }}</td>
+        <td class="mono">{{ "%g" | format(c.credits) if c.credits is not none else "" }}</td><td>{{ c.term or "" }}</td><td>{{ c.lecturers | join("; ") }}</td>
+        <td><a href="/courses/{{ c.id }}/edit" aria-label="Edit {{ c.name }}">Edit</a></td>
+      </tr>
     {% endfor %}
     </tbody>
   </table>
   </div>
+  <div class="form-actions">
+    <button class="button button-secondary" type="submit" name="action" value="delete">Delete selected</button>
+    <button class="button button-secondary" type="submit" name="action" value="merge">Merge selected</button>
+  </div>
+  </form>
   {% else %}
   <p class="empty">No courses yet. Import them from your transcript.</p>
   {% endif %}

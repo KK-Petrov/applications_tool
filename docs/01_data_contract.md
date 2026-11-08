@@ -184,12 +184,30 @@ courses:
     source_document: transcript-2026-11-06.txt   # file in sources/, or null for a course added by hand
     confirmed: true                     # true when accepted in the import preview; false for courses added
                                         # later without checking
+    edited: [description, grade]        # optional: fields the owner changed on /courses/{id}/edit, in form
+                                        # order; once listed, always listed (DECISIONS #94)
+    deleted: false                      # optional: true when the owner deleted the course; kept so its id is
+                                        # never reused and it can be brought back (DECISIONS #94)
+    merged_into: null                   # optional: the course a deleted copy was merged into (DECISIONS #95)
 ```
 - Courses are written only when the user accepts rows in the import preview (per row or all).
 - `sources/<name>.txt` (`<original file stem>-<YYYY-MM-DD>.txt`, or `pasted-text-…`; never overwritten) holds the **identifier-stripped** text of an imported document (docs/02 §10), with a
   header comment giving the original file name and its sha256. The original file (.docx, .pdf) is never stored,
   and no file under data_dir contains a student number, date of birth or national ID number.
 - Professors link to courses through `course_ids` (§4); a course can be linked to several professors.
+- **Edit, delete, restore (DECISIONS #94):** the owner may change name, code, grade, credits, term, institution,
+  lecturers and description; each changed field joins `edited` (values are then the owner's, not the
+  transcript's). A course linked by a professor can't be deleted until it is unlinked. A deleted course stays in
+  the file with `deleted: true`, is left out of every page, suggestion and email payload, and its id is never
+  given to a new course; restoring clears `deleted`. Saves go through the store (shape and comments kept; an
+  unchanged save writes nothing).
+- **Merge (DECISIONS #95):** courses are the same course when both have a code and the codes match (case, spaces
+  and punctuation ignored), or, when not both have one, their names match (case and punctuation ignored); the
+  institutions must be equal or one empty. A merge keeps one course (its id); a field filled in one copy only is
+  taken from it; where copies differ the owner picks, and a picked field joins `edited`; every professor's
+  `course_ids` pointing at a merged-away copy is repointed to the kept course (no duplicates); the other copies
+  get `deleted: true` and `merged_into`. At import, a row matching a stored course fills only that course's
+  empty fields (from a transcript, so not owner-edited).
 
 ## 11. logs/ai_usage.jsonl: AI usage log (DECISIONS #60)
 One JSON object per line, appended by `run_skill` for every AI call, whether it succeeds or fails. Lines

@@ -70,7 +70,8 @@ class Snapshot:
     professors: list[Professor]
     biography: Biography
     errors: list[DataError] = field(default_factory=list)
-    courses: list[TranscriptCourse] = field(default_factory=list)
+    courses: list[TranscriptCourse] = field(default_factory=list)  # active courses only (not deleted)
+    all_course_ids: set[str] = field(default_factory=set)  # deleted ones too: an id is never reused (#94)
 
 
 def format_loc(loc: tuple[int | str, ...]) -> str | None:
@@ -548,6 +549,11 @@ class Store:
         current.courses = [*current.courses, *new]
         self._save(self.data_dir / COURSES_FILE, current)
 
+    def save_courses(self, courses: Courses) -> bool:
+        """Write ``courses.yaml`` (shape and comments kept; an unchanged save writes nothing). Used by Edit,
+        Delete and Restore on /courses (DECISIONS #94)."""
+        return self._save(self.data_dir / COURSES_FILE, courses)
+
     def create_source_text(self, name: str, content: str) -> None:
         """Write ``sources/<name>`` (the identifier-stripped text of an imported document), never over an
         existing file. The original document is never stored (docs/01 §10)."""
@@ -557,6 +563,16 @@ class Store:
                 raise DataError(f"{SOURCES_DIR}/{name}", None, "already exists; nothing was written")
             self.write_bytes_atomic(folder / name, content.encode("utf-8"))
         log.info("saved %s/%s", SOURCES_DIR, name)
+
+    def source_text(self, name: str | None) -> str:
+        """The text of ``sources/<name>`` ("" when there is none or it can't be read): the merge preview looks
+        there for the transcript's own form of a value (DECISIONS #95)."""
+        if not name or "/" in name or "\\" in name or name.startswith("."):
+            return ""
+        try:
+            return (self.data_dir / SOURCES_DIR / name).read_text(encoding="utf-8")
+        except OSError:
+            return ""
 
     def source_with_sha(self, sha256: str) -> str | None:
         """The ``sources/`` file already made from the document with this sha256 (its header line), if any:
@@ -594,9 +610,11 @@ class Store:
         except DataError as err:
             biography, errors = Biography(), [*errors, err]
         try:
-            courses = self.load_courses().courses
+            every_course = self.load_courses().courses
         except DataError as err:
-            courses, errors = [], [*errors, err]
+            every_course, errors = [], [*errors, err]
+        courses = [c for c in every_course if not c.deleted]
+        all_course_ids = {c.id for c in every_course}
         return Snapshot(
             settings,
             programmes,
@@ -604,4 +622,5 @@ class Store:
             biography,
             [*errors, *programme_errors, *professor_errors],
             courses,
+            all_course_ids,
         )

@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{#- Edit an imported course (DECISIONS #94; docs/03 §4.8). No AI call. A changed field is marked "edited by you"
+    for good; grade and credits carry a warning because they came from the transcript. -#}
+{% block before_title %}
+<nav class="breadcrumb" aria-label="Breadcrumb"><a href="/recommenders">Recommenders</a> <span aria-hidden="true">›</span> <a href="/courses">Courses</a> <span aria-hidden="true">›</span> <span aria-current="page">Edit</span></nav>
+{% endblock %}
+{% macro input(name) -%}
+{%- set bad = errors | selectattr(0, "equalto", name) | list -%}
+<div class="field{% if name in ('name', 'institution') %} field-wide{% endif %}">
+  <label for="f-{{ name }}">{{ labels[name] }}</label>
+  <input id="f-{{ name }}" name="{{ name }}" type="text" value="{{ values[name] }}"{% if name == "name" %} required{% endif %}
+    {%- if bad %} aria-invalid="true" aria-describedby="f-{{ name }}-error"{% elif name in ('grade', 'credits') %} aria-describedby="transcript-note"{% endif %}>
+  {% if bad %}<span class="refusal" id="f-{{ name }}-error">{{ bad[0][1] }}</span>{% endif %}
+</div>
+{%- endmacro %}
+{% macro area(name, rows) -%}
+{%- set bad = errors | selectattr(0, "equalto", name) | list -%}
+<div class="field field-wide">
+  <label for="f-{{ name }}">{{ labels[name] }}</label>
+  <textarea id="f-{{ name }}" name="{{ name }}" rows="{{ rows }}"{% if bad %} aria-invalid="true" aria-describedby="f-{{ name }}-error"{% elif name == "lecturers" %} aria-describedby="f-lecturers-hint"{% endif %}>
+{{ values[name] }}</textarea>
+  {% if name == "lecturers" %}<span class="hint" id="f-lecturers-hint">One per line, as you want them written.</span>{% endif %}
+  {% if bad %}<span class="refusal" id="f-{{ name }}-error">{{ bad[0][1] }}</span>{% endif %}
+</div>
+{%- endmacro %}
+{% block content %}
+<form id="course-edit" class="programme-form" method="post" action="/courses/{{ course.id }}/edit">
+  {% if errors %}
+  <div class="form-error" role="alert" tabindex="-1" id="form-errors" autofocus>
+    <h2>Nothing was saved. Please fix:</h2>
+    <ul>{% for name, text in errors %}<li><a href="#f-{{ name }}">{{ text }}</a></li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+  <section class="card" aria-labelledby="course-title">
+    <h2 id="course-title">Course</h2>
+    {% if course.edited %}<p class="hint">Edited by you so far: {{ course.edited | join(", ") }}.</p>{% endif %}
+    <p class="notice notice-warning" id="transcript-note">Grade and credits came from your transcript. Change them only to correct a misreading; a changed value is then shown as edited by you, not as from the transcript.</p>
+    <div class="form-grid">
+      {{ input("name") }}
+      {{ input("code") }}
+      {{ input("grade") }}
+      {{ input("credits") }}
+      {{ input("term") }}
+      {{ input("institution") }}
+      {{ area("lecturers", [2, values.lecturers.count("\n") + 1] | max) }}
+      {{ area("description", [4, [12, (values.description | length) // 70 + values.description.count("\n") + 1] | min] | max) }}
+    </div>
+  </section>
+  <div class="form-actions">
+    <button class="button button-primary" type="submit">Save</button>
+    <a class="button button-secondary" href="/courses">Cancel</a>
+  </div>
+</form>
+<form method="post" action="/courses/{{ course.id }}/delete" class="card" id="course-delete">
+  <h2>Delete this course</h2>
+  <p class="hint">It disappears from your courses, the recommender sheet and Add professor. You can bring it back from <a href="/courses/deleted">Deleted courses</a>.</p>
+  <button class="button button-secondary" type="submit">Delete course</button>
+</form>
+{% endblock %}

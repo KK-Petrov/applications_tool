@@ -8,7 +8,7 @@
     <li><button class="button button-secondary" type="button" data-use-course
         data-course-id="{{ c.id }}" data-course-label="{{ c.name }}{% if c.code %} ({{ c.code }}){% endif %}"
         data-course-description="{{ c.description }}" data-course-grade="{{ c.grade or '' }}" data-course-term="{{ c.term or '' }}">Use {{ c.name }}</button>
-      <span class="sub">{{ c.code or "" }}{% if c.grade %} · grade {{ c.grade }}{% endif %}{% if c.term %} · {{ c.term }}{% endif %} · {{ written }}</span></li>
+      <span class="sub">{{ c.code or "" }}{% if c.grade %} · grade {{ c.grade }}{% endif %}{% if c.term %} · {{ c.term }}{% endif %} · {{ written }}{% if c.edited %} · edited by you{% endif %}</span></li>
   {% endfor %}
   </ul>
 {% endif %}

@@ -20,6 +20,10 @@
 {%- if name is none %}{% for m in r.problems %}row-{{ i }}-problem-{{ loop.index0 }}{% if not loop.last %} {% endif %}{% endfor %}
 {%- else %}{% for n in r.problem_fields.get(name, []) %}row-{{ i }}-problem-{{ n }}{% if not loop.last %} {% endif %}{% endfor %}{% endif -%}
 {%- endmacro %}
+{#- a stored or imported value as text: a list of lecturers joined, a number without trailing zeros (#95) -#}
+{% macro shown_value(v) -%}
+{%- if v is none %}(empty){% elif v is string %}{{ v }}{% elif v is number %}{{ "%g" | format(v) }}{% else %}{{ v | join("; ") }}{% endif -%}
+{%- endmacro %}
 {#- a field with a problem is marked invalid and described by that problem's text (ui review round 3, F1) -#}
 {% macro field(i, r, name, label, value, wide=false) -%}
 {%- set described = problem_ids(i, r, name) -%}
@@ -88,14 +92,19 @@
   <fieldset class="course-row{% if r.problems %} refused{% endif %}{% if r.saved %} saved{% endif %}" data-row="{{ i }}" id="row-{{ i }}" tabindex="-1">
     <legend>Course {{ loop.index }}{% if r.name %}: {{ r.name }}{% endif %}</legend>
     {#- the problems stand right under the course's name, so both are in view where Check again lands (F1) -#}
+    {% if r.merge and not r.saved %}<div class="row-merge" id="row-{{ i }}-merge">
+      <p>Matches your course <strong>{{ r.merge.name }}</strong>. Merging fills only its empty fields; nothing new is added.</p>
+      {% if r.merge.differs %}<ul>{% for label, stored, new in r.merge.differs %}<li>{{ label }} differ: yours {{ shown_value(stored) }} · this document {{ shown_value(new) }} (the stored value is kept)</li>{% endfor %}</ul>{% endif %}
+    </div>{% endif %}
     {% if r.problems and not r.saved %}<div class="row-problems">{% for m in r.problems %}<p class="refusal" id="row-{{ i }}-problem-{{ loop.index0 }}">{{ m }}</p>{% endfor %}</div>{% endif %}
     {% if r.saved %}
       {#- read-only: a saved course is not edited here (it would write a near-duplicate) -#}
       {% for name in ("name", "code", "institution", "grade", "term", "description") %}<input type="hidden" name="row-{{ i }}-{{ name }}" value="{{ r[name] or '' }}">{% endfor %}
       <input type="hidden" name="row-{{ i }}-credits" value="{{ credits }}">
       <input type="hidden" name="row-{{ i }}-lecturers" value="{{ r.lecturers | join('\n') }}">
+      {% if r.merged %}<input type="hidden" name="row-{{ i }}-merged" value="{{ r.merged }}">{% endif %}
       {% set parts = [r.code, ("grade " ~ r.grade) if r.grade else "no grade", (credits ~ " credits") if credits else "", r.term, r.institution, r.lecturers | join("; ")] | select | list %}
-      <p class="course-summary"><span class="chip chip-success">Saved</span> {{ parts | join(" · ") }}</p>
+      <p class="course-summary">{% if r.merge and r.merge.done %}<span class="chip chip-success">Merged into {{ r.merge.name }}</span>{% else %}<span class="chip chip-success">Saved</span>{% endif %} {{ parts | join(" · ") }}</p>
     {% else %}
     <div class="course-fields">
       {{ field(i, r, "name", "Course name", r.name, wide=true) }}
@@ -120,7 +129,11 @@
       </div>
     </div>
     <div class="row-status">
+      {% if r.merge %}
+      <button class="button button-secondary" type="submit" name="accept" value="merge-{{ i }}" aria-describedby="row-{{ i }}-merge{% if r.problems %} {{ problem_ids(i, r) }}{% endif %}"{% if r.problems %} disabled{% endif %}>Merge into {{ r.merge.name }}</button>
+      {% else %}
       <button class="button button-secondary" type="submit" name="accept" value="{{ i }}" aria-label="Accept {{ r.name or ('course ' ~ loop.index) }}"{% if r.problems %} disabled aria-describedby="{{ problem_ids(i, r) }}"{% endif %}>Accept</button>
+      {% endif %}
     </div>
     {% endif %}
   </fieldset>

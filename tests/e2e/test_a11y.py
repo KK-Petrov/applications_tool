@@ -35,6 +35,8 @@ PAGES = [
     "/recommenders/import",
     "/courses",  # empty state (2c)
     "/courses/import",  # upload form (2c; preview, professors and suggestions in tests/e2e/test_courses.py)
+    "/courses/merge",  # empty state (#95; groups, selection, Merge into: tests/e2e/test_course_merge_ui.py)
+    "/courses/deleted",  # empty state (#94; edit, delete, restore: tests/e2e/test_course_edit_ui.py)
     "/essays",
     "/biography",
     "/usage",  # empty state (DECISIONS #60)

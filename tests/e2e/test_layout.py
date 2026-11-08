@@ -35,6 +35,8 @@ NO_JS_PAGES = [
     "/",
     "/courses",
     "/courses/import",
+    "/courses/deleted",
+    "/courses/merge",
     "/recommenders",
     "/recommenders/new",
     "/programmes/new",
