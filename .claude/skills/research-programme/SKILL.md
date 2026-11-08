@@ -50,7 +50,10 @@ value; `note` only for "No official source found" or a short qualifier). List it
 - `curriculum_summary` (one or two sentences from the page) and `curriculum_courses` (course names exactly
   as listed, with a short description only if the page gives one).
 - `ai_policy`: the programme's stated policy on AI tools in applications, quoted in full and verbatim, or
-  null. Never shorten a quote or leave out part of it with "..."; if it is too long to quote in full, null.
+  null. Never shorten a quote or leave out part of it with "...". If an official page states a policy that
+  is too long to quote in full, set `value`, `source_url` and `note` all to null (the note is not "No
+  official source found": a policy exists) and add the warning "The AI policy on <that page's URL> is too
+  long to quote; read it there."
 - `fee`: `amount` (number), `currency`, `note`, `source_url`; amount null if not stated.
 - `sources`: every page you cite, with its title. `verification` is always `"unverified"`.
 - `warnings`: short sentences about anything the applicant should check (dates for a past cycle,

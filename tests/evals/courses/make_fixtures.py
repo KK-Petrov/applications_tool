@@ -152,14 +152,22 @@ def footer_lines() -> list[str]:
     return ["Ref. 111222333", "Issued on 30 June 2024. This record is invented for testing."]
 
 
+# the real-transcript finding (DECISIONS #93): every page ends with the student's initials, surname and
+# student number in brackets, with no label, and the page number. The text and Word forms carry it as two
+# pages (after the first school's table and at the end), the PDF as a real page footer on each page.
+PAGE_FOOTER = "N. Example (512345)   {page}/{pages}"
+
+
 def text_version() -> str:
     lines: list[str] = []
     for text, table in header_lines():
         lines += table if table else [text]
     lines += ["", f"Courses at {ESE}", *course_rows(ESE_COURSES), ""]
+    lines += [PAGE_FOOTER.format(page=1, pages=2), ""]
     for text, _ in nfu_lines():
         lines.append(text)
     lines += ["", f"Courses at {NFU}", *course_rows(NFU_COURSES), "", *footer_lines()]
+    lines += ["", PAGE_FOOTER.format(page=2, pages=2)]
     return "\n".join(lines) + "\n"
 
 
@@ -181,12 +189,14 @@ def write_docx(path: Path) -> None:
         table(rows) if rows else doc.add_paragraph(text)
     doc.add_paragraph(f"Courses at {ESE}")
     table(course_rows(ESE_COURSES))
+    doc.add_paragraph(PAGE_FOOTER.format(page=1, pages=2))
     for text, _ in nfu_lines():
         doc.add_paragraph(text)
     doc.add_paragraph(f"Courses at {NFU}")
     table(course_rows(NFU_COURSES))
     for line in footer_lines():
         doc.add_paragraph(line)
+    doc.add_paragraph(PAGE_FOOTER.format(page=2, pages=2))
     doc.core_properties.author = "Application Hub test fixture"
     doc.save(str(path))
 
@@ -194,10 +204,21 @@ def write_docx(path: Path) -> None:
 WIDTHS = [22, 62, 14, 14, 34, 128]  # mm, landscape A4 (277 mm usable)
 
 
-def write_pdf(path: Path) -> None:
+def _footed_pdf(orientation: str):  # noqa: ANN202 (fpdf is a dev dependency, imported late)
+    """An FPDF whose every page ends with ``PAGE_FOOTER`` inside the bottom margin (page breaks unchanged)."""
     from fpdf import FPDF
 
-    pdf = FPDF(orientation="L", format="A4")
+    class Footed(FPDF):
+        def footer(self) -> None:
+            self.set_y(-10)
+            self.set_font("Helvetica", size=8)
+            self.cell(0, 5, PAGE_FOOTER.format(page=self.page_no(), pages="{nb}"))
+
+    return Footed(orientation=orientation, format="A4")
+
+
+def write_pdf(path: Path) -> None:
+    pdf = _footed_pdf("L")
     pdf.set_auto_page_break(auto=True, margin=12)
     pdf.add_page()
     pdf.set_font("Helvetica", size=9)
@@ -221,6 +242,59 @@ def write_pdf(path: Path) -> None:
     table(course_rows(NFU_COURSES), WIDTHS)
     for text in footer_lines():
         line(text)
+    pdf.set_creator("Application Hub test fixture")
+    pdf.output(str(path))
+
+
+# A separate small fixture (DECISIONS #93; the 28-course set is fixed by C-2c-03): a course name wrapping onto
+# the next line in its column, on two pages with the owner footer.
+WRAPPED_COURSES = [
+    ("WRP1001", "Professional Development & Mentoring I", "7,5", "5", "Dr. J. Smit"),
+    ("WRP1002", "Statistics II", "8,0", "5", "Dr. J. Smit"),
+]
+
+
+def wrapped_text() -> str:
+    first, second = WRAPPED_COURSES
+    lines = [
+        ESE.upper(),
+        "Code Course Grade Credits Lecturer",
+        f"{first[0]} Professional Development & {first[2]} {first[3]} {first[4]}",
+        "Mentoring I",
+        PAGE_FOOTER.format(page=1, pages=2),
+        f"{second[0]} {second[1]} {second[2]} {second[3]} {second[4]}",
+        PAGE_FOOTER.format(page=2, pages=2),
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def write_wrapped_pdf(path: Path) -> None:
+    pdf = _footed_pdf("P")
+    pdf.set_auto_page_break(auto=True, margin=12)
+    pdf.set_font("Helvetica", size=9)
+    widths = [22, 44, 14, 14, 40]
+    for n, (code, name, grade, credits, lecturer) in enumerate(WRAPPED_COURSES):
+        pdf.add_page()
+        if n == 0:
+            pdf.cell(0, 6, ESE.upper(), new_x="LMARGIN", new_y="NEXT")
+        # enough text per page for the scanned-PDF check (courses.min_pdf_text_per_page)
+        for note in (
+            "Official transcript of records, page with invented courses for testing the course import.",
+            "Grades on a scale of 1 to 10; credits in ECTS. Nothing on this page refers to a real person.",
+        ):
+            pdf.cell(0, 6, note, new_x="LMARGIN", new_y="NEXT")
+        # the name's first line on the row, its rest on the next line in the same column (as the owner's
+        # transcript prints "Professional Development &" / "Mentoring I")
+        head, amp, tail = name.partition(" & ")
+        pdf.cell(widths[0], 6, code)
+        pdf.cell(widths[1], 6, head + (" &" if amp else ""))
+        for width, value in zip(widths[2:], (grade, credits, lecturer), strict=True):
+            pdf.cell(width, 6, value)
+        pdf.ln(6)
+        if tail:
+            pdf.cell(widths[0], 6, "")
+            pdf.cell(widths[1], 6, tail)
+            pdf.ln(6)
     pdf.set_creator("Application Hub test fixture")
     pdf.output(str(path))
 
@@ -283,10 +357,12 @@ def main() -> None:
     write_docx(HERE / "transcript.docx")
     write_pdf(HERE / "transcript.pdf")
     write_scanned_pdf(HERE / "scanned.pdf")
+    (HERE / "wrapped.txt").write_text(wrapped_text(), encoding="utf-8", newline="\n")
+    write_wrapped_pdf(HERE / "wrapped.pdf")
     (HERE / "expected.json").write_text(
         json.dumps(expected(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n"
     )
-    print("wrote transcript.txt, transcript.docx, transcript.pdf, scanned.pdf, expected.json")
+    print("wrote transcript.txt/.docx/.pdf, scanned.pdf, wrapped.txt/.pdf, expected.json")
 
 
 if __name__ == "__main__":

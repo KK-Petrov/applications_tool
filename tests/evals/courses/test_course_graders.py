@@ -11,7 +11,7 @@ import course_graders
 import pytest
 
 from hub.config import load_config
-from hub.courses import extract, identifiers
+from hub.courses import extract, identifiers, importer
 from hub.models.course import TranscriptCourse
 
 HERE = Path(__file__).resolve().parent
@@ -121,3 +121,18 @@ def test_the_grader_passes_the_rows_as_written() -> None:
         "lecturer_text_mismatches",
     ):
         assert report[key] == [], (key, report[key])
+
+
+def test_a_correct_row_flagged_for_any_problem_is_a_false_problem() -> None:
+    """ai-output r3 N5: `false_flags` counted grade flags only, so a correct row blocked for another reason
+    (here its lecturer, missing from the text) left the report "passed". Every problem on a correct row is
+    now a false problem, and it fails the grade."""
+    text = TEXT.replace("Prof. dr. K. Müller", "Prof. dr. K. Example")
+    report = course_graders.grade(_rows(), text, EXPECTED)
+    taught = [r["code"] for r in EXPECTED["courses"] if "Prof. dr. K. Müller" in r["lecturers"]]
+    assert len(taught) == 2
+    want = [
+        {"code": code, "problems": [importer.lecturer_not_found("Prof. dr. K. Müller")]} for code in taught
+    ]
+    assert sorted(report["false_problems"], key=lambda f: f["code"]) == sorted(want, key=lambda f: f["code"])
+    assert not course_graders.passed({**report, "lecturer_mismatches": [], "identifiers_in_data_dir": []})

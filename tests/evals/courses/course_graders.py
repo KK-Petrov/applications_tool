@@ -58,6 +58,7 @@ def grade(rows: list[dict[str, Any]], text: str, expected: dict[str, Any]) -> di
         "grade_mismatches": [],
         "credit_mismatches": [],
         "false_flags": [],
+        "false_problems": [],  # every problem the app raises on a row equal to the expected one (r3 N5)
         "unflagged_wrong_grades": [],
         "description_mismatches": [],
         "term_mismatches": [],
@@ -69,7 +70,8 @@ def grade(rows: list[dict[str, Any]], text: str, expected: dict[str, Any]) -> di
         want = by_code[code]
         if row.get("name") != want["name"]:
             report["name_mismatches"].append({"code": code, "got": row.get("name"), "want": want["name"]})
-        flagged = importer.GRADE_NOT_FOUND in importer.row_problems(row, text, [])  # the app's own check
+        problems = importer.row_problems(row, text, [], None, rows)  # the app's own check, as the preview
+        flagged = importer.GRADE_NOT_FOUND in problems
         if row.get("grade") != want["grade"]:
             report["grade_mismatches"].append({"code": code, "got": row.get("grade"), "want": want["grade"]})
             if not flagged:
@@ -85,6 +87,15 @@ def grade(rows: list[dict[str, Any]], text: str, expected: dict[str, Any]) -> di
         ):
             if got_value != want_value:
                 report[key].append({"code": code, "got": got_value, "want": want_value})
+        correct = (
+            all(row.get(k) == want[k] for k in ("name", "grade", "term", "institution"))
+            and (row.get("description") or "") == want.get("description", "")
+            and list(row.get("lecturers") or []) == want["lecturers"]
+            and row.get("credits") is not None
+            and abs(float(row["credits"]) - want["credits"]) <= 1e-9
+        )
+        if correct and problems:
+            report["false_problems"].append({"code": code, "problems": problems})
         if row.get("credits") is None or abs(float(row["credits"]) - want["credits"]) > 1e-9:
             report["credit_mismatches"].append(
                 {"code": code, "got": row.get("credits"), "want": want["credits"]}
@@ -92,7 +103,7 @@ def grade(rows: list[dict[str, Any]], text: str, expected: dict[str, Any]) -> di
     swap = expected["swap"]
     target = by_code[swap["code"]]
     report["swap_caught"] = importer.GRADE_NOT_FOUND in importer.row_problems(
-        dict(target, grade=swap["wrong_grade"]), text, []
+        dict(target, grade=swap["wrong_grade"]), text, [], None, rows
     )
     output_text = " ".join(
         str(v) for row in rows for v in [*row.values(), *(row.get("lecturers") or [])] if isinstance(v, str)
@@ -122,7 +133,7 @@ def lecturers_graded(
 
 def passed(report: dict[str, Any]) -> bool:
     gated = ("missing_courses", "extra_rows", "name_mismatches", "grade_mismatches", "credit_mismatches",
-             "false_flags", "unflagged_wrong_grades", "identifiers_in_output", "lecturer_mismatches",
-             "identifiers_in_data_dir", "description_mismatches", "term_mismatches", "institution_mismatches",
-             "lecturer_text_mismatches")  # fmt: skip
+             "false_flags", "false_problems", "unflagged_wrong_grades", "identifiers_in_output",
+             "lecturer_mismatches", "identifiers_in_data_dir", "description_mismatches", "term_mismatches",
+             "institution_mismatches", "lecturer_text_mismatches")  # fmt: skip
     return all(not report.get(k) for k in gated) and report.get("swap_caught") is True

@@ -171,6 +171,8 @@ courses:
     name: Corporate Finance             # exactly as on the transcript
     code: FIN-101                       # as written, or null
     institution: Example School of Economics
+    institution_entered: false          # true when the owner typed the institution in the import preview
+                                        # ("your own entry", DECISIONS #93): not from the document
     grade: "8.5"                        # text, exactly as written (e.g. "7,5", "A-", "Pass"), or null
     credits: 6.0                        # number as written (ECTS or US credits), or null
     term: "2024-2025 block 2"           # free text, or null

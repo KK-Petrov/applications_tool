@@ -99,14 +99,17 @@ def _docx(data: bytes, cfg: CoursesConfig) -> str:
         elif child.tag == f"{W}tbl":
             for row in child.iter(f"{W}tr"):
                 cells = [
-                    " ".join(_paragraph(p) for p in cell.iter(f"{W}p")).strip()
+                    " ".join(_paragraph(p, in_cell=True) for p in cell.iter(f"{W}p")).strip()
                     for cell in row.findall(f"{W}tc")
                 ]
                 lines.append("\t".join(cells))
     return text_from_paste("\n".join(lines) + "\n")
 
 
-def _paragraph(p: ElementTree.Element) -> str:
+def _paragraph(p: ElementTree.Element, *, in_cell: bool = False) -> str:
+    """A paragraph's text; a tab is a tab. A soft line break starts a new line, except inside a table cell,
+    where it reads as a space: a row is one line, and a label broken over two lines in a cell ("Student" /
+    "number") would not be seen as a label, so its value would be sent (data-integrity r8 F7, #88)."""
     out: list[str] = []
     for node in p.iter():
         if node.tag == f"{W}t":
@@ -114,5 +117,5 @@ def _paragraph(p: ElementTree.Element) -> str:
         elif node.tag == f"{W}tab":
             out.append("\t")
         elif node.tag in (f"{W}br", f"{W}cr"):
-            out.append("\n")
+            out.append(" " if in_cell else "\n")
     return "".join(out)

@@ -1577,10 +1577,17 @@ def test_save_keeps_a_programme_code_in_a_value_row(client: FormClient, data_dir
     text = _save_text(
         client,
         fake_rows,
-        "Studentnummer\tOpleiding\n598431\tBSc Economie (50952)\nFEB11010 Econometrics I 8,0 4\n",
+        "Studentnummer\tOpleiding\n598431\tBSc Economie, code 50952\nFEB11010 Econometrics I 8,0 4\n",
         _course("FEB11010", "Econometrics I", "8,0", 4.0),
     )
-    assert "(50952)" in text and "598431" not in text
+    # input changed with the user's approval (#93): "(50952)" alone in brackets is now removed (rule 2)
+    assert "code 50952" in text and "598431" not in text
+
+
+def test_a_programme_code_alone_in_brackets_is_removed_like_any_bracketed_number() -> None:
+    """Rule 2 (#93): five digits alone in brackets can't be told from a student number, so they go."""
+    out = identifiers.strip("Studentnummer\tOpleiding\n598431\tBSc Economie (50952)\n", CFG.courses)
+    assert "50952" not in out and "598431" not in out
 
 
 def test_save_refuses_an_edited_text_that_no_longer_strips(
@@ -1843,7 +1850,7 @@ def test_text_not_in_the_document_is_flagged(fmt: str, changes: dict, problem: s
     """Rule 15: description, institution and lecturers must stand in the document as written (only
     whitespace and line breaks normalised); a transcript without a description gives ""."""
     text = identifiers.strip(_text(fmt), CFG.courses)
-    assert problem in importer.row_problems(_fixture_row(**changes), text, [], CFG.courses)
+    assert problem in importer.kinds(importer.row_problems(_fixture_row(**changes), text, [], CFG.courses))
 
 
 @pytest.mark.parametrize("fmt", list(FORMATS))
@@ -2013,9 +2020,11 @@ def test_a_lecturer_on_the_courses_continuation_line_is_found(text: str) -> None
         "lecturers": ["Prof. dr. A. van den Berg"],
         "description": "",
     }
-    assert importer.LECTURER_NOT_FOUND not in importer.row_problems(row, text, [], CFG.courses)
+    assert importer.LECTURER_NOT_FOUND not in importer.kinds(
+        importer.row_problems(row, text, [], CFG.courses)
+    )
     other = dict(row, name="Statistics", code="FEB11020", grade="7,0")  # not this course's lecturer
-    assert importer.LECTURER_NOT_FOUND in importer.row_problems(other, text, [], CFG.courses)
+    assert importer.LECTURER_NOT_FOUND in importer.kinds(importer.row_problems(other, text, [], CFG.courses))
 
 
 @pytest.mark.parametrize(
@@ -2031,7 +2040,9 @@ def test_a_lecturer_on_the_courses_continuation_line_is_found(text: str) -> None
 def test_fragments_are_not_as_written(field: str, value: object, problem: str) -> None:
     """F5 LOW (#86): matches are word-bounded and a name must not be the tail of a longer name."""
     text = identifiers.strip(_text("txt"), CFG.courses)
-    assert problem in importer.row_problems(_fixture_row(**{field: value}), text, [], CFG.courses)
+    assert problem in importer.kinds(
+        importer.row_problems(_fixture_row(**{field: value}), text, [], CFG.courses)
+    )
 
 
 def test_a_glued_title_counts_as_a_title() -> None:
@@ -2046,4 +2057,818 @@ def test_a_glued_title_counts_as_a_title() -> None:
         "lecturers": ["A. van den Berg"],
         "description": "",
     }
-    assert importer.LECTURER_NOT_FOUND in importer.row_problems(row, text, [], CFG.courses)
+    assert importer.LECTURER_NOT_FOUND in importer.kinds(importer.row_problems(row, text, [], CFG.courses))
+
+
+# ---- session 4: the user's answers to the session-3 open questions ----------------------------------------
+
+
+def _docx_bytes(build) -> bytes:
+    from docx import Document
+
+    doc = Document()
+    build(doc)
+    buffer = __import__("io").BytesIO()
+    doc.save(buffer)
+    return buffer.getvalue()
+
+
+def test_a_soft_line_break_inside_a_table_cell_reads_as_a_space() -> None:
+    """Q1 (r8 F7): a .docx soft line break in a cell ("Student⏎number") split the label over two lines, so
+    the label was not seen and its value was sent. Inside a cell a soft break now reads as a space."""
+
+    def build(doc) -> None:
+        table = doc.add_table(rows=1, cols=2)
+        run = table.cell(0, 0).paragraphs[0].add_run("Student")
+        run.add_break()
+        table.cell(0, 0).paragraphs[0].add_run("number")
+        table.cell(0, 1).text = "598431"
+
+    text = extract.extract_text("t.docx", _docx_bytes(build), CFG.courses)
+    assert text.splitlines()[0] == "Student number\t598431", text
+    out = identifiers.strip(text, CFG.courses)
+    assert "598431" not in out and CFG.courses.removed_marker in out, out
+
+
+def test_a_soft_line_break_in_a_paragraph_still_starts_a_new_line() -> None:
+    """Control: outside a table a soft break stays a line break (layout 2 reads the next line)."""
+
+    def build(doc) -> None:
+        run = doc.add_paragraph().add_run("Student ID")
+        run.add_break()
+        doc.paragraphs[0].add_run("S2034567")
+
+    text = extract.extract_text("t.docx", _docx_bytes(build), CFG.courses)
+    assert text.splitlines()[:2] == ["Student ID", "S2034567"], text
+
+
+TABS_AFTER_COLON = [
+    ("Student number:\t\t598431\n", "598431"),
+    ("Date of birth:\t\t\t12-03-2001\n", "12-03-2001"),
+    ("Name:\tNoor Example\nStudent number:\t\t598431\n", "598431"),
+    ("Student number:\t\t598431\tProgramme:\t\tBSc Econometrics\n", "598431"),
+]
+
+
+@pytest.mark.parametrize("mode", list(MODES))
+@pytest.mark.parametrize(("text", "gone"), TABS_AFTER_COLON)
+def test_tabs_after_label_colon_are_the_label_value_layout(text: str, gone: str, mode: str) -> None:
+    """Q5 (user decision): Word tab alignment "Student number:<TAB><TAB>598431" is layout 1 and strips."""
+    first = identifiers.strip(text, CFG.courses)
+    out = first if mode == "read" else identifiers.strip(first, CFG.courses, marker_fills_slot=True)
+    assert gone not in out and CFG.courses.removed_marker in out, out
+    assert out == first
+
+
+def test_tabs_after_label_colon_strip_in_a_docx_paragraph() -> None:
+    def build(doc) -> None:
+        p = doc.add_paragraph()
+        p.add_run("Student number:")
+        p.add_run().add_tab()
+        p.add_run().add_tab()
+        p.add_run("598431")
+
+    text = extract.extract_text("t.docx", _docx_bytes(build), CFG.courses)
+    out = identifiers.strip(text, CFG.courses)
+    assert "598431" not in out, out
+
+
+def test_tabs_after_label_colon_in_returned_fields_strip() -> None:
+    out = identifiers.strip("Student number:\t\t598431\n", CFG.courses, strict=False)
+    assert "598431" not in out, out
+
+
+@pytest.mark.parametrize("mode", list(MODES))
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Student number\t\t598431\n",  # no colon: not "Label: value" (still outside)
+        "Student number:\t\t598431\t512345\n",  # a second ID-shaped cell beside it
+        "Student number:\t\t598\t431\n",  # a value split across cells
+        "Student number:\t\tProgramme 598431\n",  # words before the number
+    ],
+)
+def test_tabs_after_label_colon_still_stop_outside_the_layout(text: str, mode: str) -> None:
+    with pytest.raises(identifiers.UnresolvedIdentifier):
+        identifiers.strip(text, CFG.courses, **MODES[mode])
+
+
+@pytest.mark.parametrize("mode", list(MODES))
+@pytest.mark.parametrize(
+    ("text", "gone"),
+    [
+        ("Document nr. 512345\n", "512345"),
+        ("Document no. 512345\n", "512345"),
+        ("Document nummer: 512345\n", "512345"),
+        ("Passport no. NX1234567\n", "NX1234567"),
+        ("ID card number: IX9876543\n", "IX9876543"),
+        ("Matrikelnummer: 1234567\n", "1234567"),
+        ("Born: 12-03-2001\n", "12-03-2001"),
+        ("Born:\t12-03-2001\n", "12-03-2001"),
+        ("Born on 12 March 2001\n", "12 March 2001"),
+        ("Born in 2001\n", "2001"),
+        ("Born 12 March 2001\n", "12 March 2001"),  # directly before a date (user decision)
+        ("Geboren: 12-03-2001\n", "12-03-2001"),
+        ("Geboren op 12 maart 2001\n", "12 maart 2001"),
+        ("Geboren in 2001\n", "2001"),
+        ("geboren 12-03-2001\n", "12-03-2001"),
+        ("Born 2001-03-12\n", "2001-03-12"),
+    ],
+)
+def test_session_4_identifier_labels_strip(text: str, gone: str, mode: str) -> None:
+    """Q6 (user decision): document nr./no./nummer, passport no., ID card number, matrikelnummer; "born" and
+    "geboren" only as "born on/in", "geboren op/in", before a colon, or directly before a date."""
+    first = identifiers.strip(text, CFG.courses)
+    out = first if mode == "read" else identifiers.strip(first, CFG.courses, marker_fills_slot=True)
+    assert gone not in out and CFG.courses.removed_marker in out, out
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "PHY 2010\tBorn Rule Seminar\t8\t2\tProf. dr. M. Born\n",  # a lecturer named Born, a course name
+        "PHY 2010 Born Rule Seminar 8 2 Prof. dr. M. Born\n",
+        "Description: covers the 1926 Born rule and its uses.\n",
+        "PHY 2010\tQuantum Mechanics\t8\t2\tProf. M. Born\t12-01-2022\n",  # Born, then a cell with a date
+        "Lecturer: Dr. K. Geboren\n",
+    ],
+)
+def test_a_name_born_is_no_identifier_label(text: str) -> None:
+    """Q6 (r2 F8): the word "born" alone, as a surname or in a course name, no longer stops the import or
+    loses text."""
+    assert identifiers.strip(text, CFG.courses) == text
+
+
+# ---- ai-output review round 3 (session 4): lecturers and descriptions stay on the course's own lines ----
+
+N1_LAYOUTS = {
+    "code first, tabbed": ("FEB11001\tMathematics I\t8,0\t4", "FEB11002\tStatistics\t7,0\t4"),
+    "term first, tabbed": (
+        "2021-2022 block 1\tFEB11001\tMathematics I\t8,0\t4",
+        "2021-2022 block 1\tFEB11002\tStatistics\t7,0\t4",
+    ),
+    "name first, untabbed": ("Mathematics I FEB11001 8,0 4", "Statistics FEB11002 7,0 4"),
+    "numbered": ("1 FEB11001 Mathematics I 8,0 4", "2 FEB11002 Statistics 7,0 4"),
+    "MIT-style code": ("15.001 Mathematics I 8,0 4", "15.002 Statistics 7,0 4"),
+    "dashed code": ("FEB-11001 Mathematics I 8,0 4", "FEB-11002 Statistics 7,0 4"),
+    "no code": ("Mathematics I 8,0 4", "Statistics 7,0 4"),
+}
+N1_CODES = {
+    "MIT-style code": ("15.001", "15.002"),
+    "dashed code": ("FEB-11001", "FEB-11002"),
+    "no code": (None, None),
+}
+OWN, OTHER = "Prof. dr. A. van den Berg", "Dr. J. Smit"
+
+
+def _n1_rows(layout: str) -> tuple[dict, dict]:
+    first, second = N1_CODES.get(layout, ("FEB11001", "FEB11002"))
+    base = {"term": None, "institution": None, "description": ""}
+    maths = {
+        **base,
+        "name": "Mathematics I",
+        "code": first,
+        "grade": "8,0",
+        "credits": 4.0,
+        "lecturers": [OWN],
+    }
+    stats = {
+        **base,
+        "name": "Statistics",
+        "code": second,
+        "grade": "7,0",
+        "credits": 4.0,
+        "lecturers": [OTHER],
+    }
+    return maths, stats
+
+
+@pytest.mark.parametrize("on_row", [False, True], ids=["Lecturer line", "on the row"])
+@pytest.mark.parametrize("layout", list(N1_LAYOUTS))
+def test_a_lecturer_of_the_next_course_is_flagged_in_every_layout(layout: str, on_row: bool) -> None:
+    """N1 MEDIUM (my regression in #87 F4): a continuation ran to the next blank line unless a line started
+    with a code, so the next course's lecturer was accepted in 6 of 7 layouts. The course's own lecturer is
+    found; the next course's lecturer is flagged."""
+    first, second = N1_LAYOUTS[layout]
+    sep = "\t" if "\t" in first else " "
+    if on_row:
+        text = f"{first}{sep}{OWN}\n{second}{sep}{OTHER}\n"
+    else:
+        text = f"{first}\nLecturer: {OWN}\n{second}\nLecturer: {OTHER}\n"
+    maths, stats = _n1_rows(layout)
+    rows = [maths, stats]
+    assert importer.LECTURER_NOT_FOUND not in importer.kinds(
+        importer.row_problems(maths, text, [], CFG.courses, rows)
+    )
+    assert importer.LECTURER_NOT_FOUND not in importer.kinds(
+        importer.row_problems(stats, text, [], CFG.courses, rows)
+    )
+    wrong = dict(maths, lecturers=[OTHER])
+    assert importer.LECTURER_NOT_FOUND in importer.kinds(
+        importer.row_problems(wrong, text, [], CFG.courses, rows)
+    )
+
+
+DESCRIBED = {
+    "under each row": (
+        "FEB11001\tMathematics I\t8,0\t4\nDescription: Linear algebra and calculus.\n"
+        "FEB12003\tCorporate Finance\t7,5\t6\nDescription: Capital structure, payout policy and valuation.\n"
+    ),
+    "in an appendix": (
+        "FEB11001\tMathematics I\t8,0\t4\nFEB12003\tCorporate Finance\t7,5\t6\n\nCourse descriptions\n"
+        "FEB11001 Mathematics I\nLinear algebra and calculus.\n\n"
+        "FEB12003 Corporate Finance\nCapital structure, payout policy and valuation.\n"
+    ),
+}
+
+
+@pytest.mark.parametrize("layout", list(DESCRIBED))
+def test_another_courses_description_is_flagged(layout: str) -> None:
+    """N2 LOW: the description was checked against the whole document, so another course's description
+    passed. It must stand on the course's own lines or their continuations."""
+    text = DESCRIBED[layout]
+    base = {"term": None, "institution": None, "lecturers": []}
+    maths = {**base, "name": "Mathematics I", "code": "FEB11001", "grade": "8,0", "credits": 4.0}
+    finance = {**base, "name": "Corporate Finance", "code": "FEB12003", "grade": "7,5", "credits": 6.0}
+    rows = [maths, finance]
+    own = dict(maths, description="Linear algebra and calculus.")
+    other = dict(maths, description="Capital structure, payout policy and valuation.")
+    assert importer.DESCRIPTION_NOT_FOUND not in importer.row_problems(own, text, [], CFG.courses, rows)
+    assert importer.DESCRIPTION_NOT_FOUND in importer.row_problems(other, text, [], CFG.courses, rows)
+
+
+def test_the_preview_checks_each_lecturer_against_the_other_returned_rows(
+    client: FormClient, fake_rows
+) -> None:
+    """N1 at the route: the preview passes the other returned rows, so the next course's lecturer (rows
+    numbered "1", "2", which the code-shape rule alone doesn't catch) blocks the row."""
+    pasted = (
+        "1 15.001 Mathematics I 8,0 4\nLecturer: Prof. dr. A. van den Berg\n"
+        "2 15.002 Statistics 7,0 4\nLecturer: Dr. J. Smit\n"
+    )
+    maths = dict(_course("15.001", "Mathematics I", "8,0", 4.0), lecturers=["Dr. J. Smit"])
+    stats = dict(_course("15.002", "Statistics", "7,0", 4.0), lecturers=["Dr. J. Smit"])
+    fake_rows({"courses": [maths, stats], "warnings": []})
+    review = client.post("/courses/import", data={"pasted": pasted})
+    assert review.status_code == 200, review.text[-400:]
+    html = _send(client, review.text).text
+    assert re.search(r'<textarea id="row-0-lecturers"[^>]*aria-invalid="true"', html), html[-1500:]
+    assert not re.search(r'<textarea id="row-1-lecturers"[^>]*aria-invalid="true"', html)
+
+
+# ---- data-integrity review round 9 (session 4) -------------------------------------------------------------
+
+R9_BORN = [
+    f"Born\t12-03-2001\n{ROW}\n",
+    f"Geboren\t12-03-2001\n{ROW}\n",
+    f"born\t12-03-2001\n{ROW}\n",
+    f"Name\tBorn\nNoor Example\t12-03-2001\n{ROW}\n",
+    f"Born\n12-03-2001\n{ROW}\n",
+    f"Geboren\n12 maart 2001\n{ROW}\n",
+    f"Born - 12 March 2001\n{ROW}\n",
+    f"Born, 12-03-2001\n{ROW}\n",
+    f"Born  -  12-03-2001\n{ROW}\n",
+    f"Born (12-03-2001)\n{ROW}\n",
+    f"Born\t\t12-03-2001\n{ROW}\n",
+    f"Born 12/3 2001\n{ROW}\n",
+    f"Geboren te Rotterdam op 12-03-2001\n{ROW}\n",
+]
+R9_DATES = ("12-03-2001", "12 March 2001", "12 maart 2001", "12/3 2001")
+
+
+@pytest.mark.parametrize("mode", list(MODES))
+@pytest.mark.parametrize("text", R9_BORN)
+def test_a_born_label_in_the_four_layouts_never_lets_the_date_through(text: str, mode: str) -> None:
+    """r9 F1 HIGH (my regression in #89): "Born" as a heading, label cell, label line or before layout 1's
+    separators was no label, so the date of birth was sent and stored. It strips or stops, as at HEAD."""
+    try:
+        first = identifiers.strip(text, CFG.courses)
+        out = first if mode == "read" else identifiers.strip(first, CFG.courses, marker_fills_slot=True)
+    except identifiers.UnresolvedIdentifier:
+        return
+    assert not any(d in out for d in R9_DATES), out
+    assert "FEB11010" in out
+
+
+@pytest.mark.parametrize("text", R9_BORN)
+def test_a_born_label_in_returned_fields_loses_the_date(text: str) -> None:
+    out = identifiers.strip(text, CFG.courses, strict=False)
+    assert not any(d in out for d in R9_DATES), out
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Programme code:\t\t50952\tStudent number:\t\t598431\n",
+        "Student number:\t\t598431\tProgramme code:\t\t50952\n",
+        "Ref:\t\t598431\tStudent number:\t\t512345\n",
+        "Student number:\t\t598431\tIssued:\t\t30-06-2024\n",
+    ],
+)
+def test_a_colon_key_across_empty_cells_is_a_key(text: str) -> None:
+    """r9 F4 LOW: with tab alignment the key of a non-label pair sat across empty cells, so the pair was not
+    recognised and the import stopped. The label's value strips; the other pair's value is kept."""
+    out = identifiers.strip(text, CFG.courses)
+    assert CFG.courses.removed_marker in out, out
+    kept = {"50952", "30-06-2024"} | ({"598431"} if text.startswith("Ref") else set())
+    assert all(v in out for v in kept if v in text), out
+
+
+TABLE = "FEB11001\tMathematics I\t8,0\t4\nFEB11002\tStatistics\t7,0\t4\nFEB11010\tEconometrics I\t7,5\t6\n"
+R9_ROWS = [
+    {"name": "Mathematics I", "code": "FEB11001", "grade": "8,0", "credits": 4.0},
+    {"name": "Statistics", "code": "FEB11002", "grade": "7,0", "credits": 4.0},
+    {"name": "Econometrics I", "code": "FEB11010", "grade": "7,5", "credits": 6.0},
+]
+
+
+def _r9_rows(**econometrics: object) -> list[dict]:
+    base = {"term": None, "institution": None, "lecturers": [], "description": ""}
+    rows = [{**base, **r} for r in R9_ROWS]
+    rows[2].update(econometrics)
+    return rows
+
+
+@pytest.mark.parametrize(
+    ("appendix", "description"),
+    [
+        (
+            "FEB11010 Econometrics I\n"
+            "This course builds on Mathematics I and Statistics: regression and inference.\n",
+            "This course builds on Mathematics I and Statistics: regression and inference.",
+        ),
+        (
+            "FEB11010 Econometrics I\nRegression and inference, with the\n"
+            "prerequisite FEB11001 Mathematics I.\n",
+            "Regression and inference, with the prerequisite FEB11001 Mathematics I.",
+        ),
+        ("FEB11010 Econometrics I\n\nLinear regression and inference.\n", "Linear regression and inference."),
+        (
+            "FEB11010 Econometrics I\nLinear regression.\n\nPanel data and inference.\n",
+            "Linear regression.\n\nPanel data and inference.",
+        ),
+        ("Econometrics I\nLinear regression and inference.\n", "Linear regression and inference."),
+        (
+            "FEB11010 Econometrics I\nRegression after the\nGFC 2008 and ISO 9001 audits.\n",
+            "Regression after the GFC 2008 and ISO 9001 audits.",
+        ),
+    ],
+)
+def test_a_described_course_keeps_its_own_description(appendix: str, description: str) -> None:
+    """r9 F2 MEDIUM (my regression in the r3 N2 fix): a correct description was flagged when it named another
+    course, held a code-shaped token, had a blank line after its heading or two paragraphs, or stood under a
+    heading without the code."""
+    text = f"{TABLE}\nCourse descriptions\n{appendix}"
+    rows = _r9_rows(description=description)
+    assert importer.DESCRIPTION_NOT_FOUND not in importer.row_problems(rows[2], text, [], CFG.courses, rows)
+
+
+def test_a_description_appendix_still_refuses_another_courses_description() -> None:
+    text = (
+        f"{TABLE}\nCourse descriptions\nFEB11010 Econometrics I\n\nLinear regression and inference.\n\n"
+        "FEB11002 Statistics\n\nProbability and estimation.\n"
+    )
+    rows = _r9_rows(description="Probability and estimation.")
+    assert importer.DESCRIPTION_NOT_FOUND in importer.row_problems(rows[2], text, [], CFG.courses, rows)
+
+
+@pytest.mark.parametrize(
+    ("text", "lecturers"),
+    [
+        (
+            "FEB11001\tMathematics I\t8,0\t4\nLecturer: Prof. dr. A. van den Berg (room HB 1012)\n",
+            ["Prof. dr. A. van den Berg"],
+        ),
+        (
+            "FEB11001\tMathematics I\t8,0\t4\nLecturer: Dr. J. Smit (Statistics group)\n"
+            "FEB11002\tStatistics\t7,0\t4\n",
+            ["Dr. J. Smit"],
+        ),
+    ],
+)
+def test_a_lecturer_line_mentioning_a_code_or_course_is_still_the_courses(
+    text: str, lecturers: list[str]
+) -> None:
+    """r9 F3 LOW (my regression in the r3 N1 fix): a mention of a code-shaped token or another course on the
+    lecturer's line ended the course's block."""
+    rows = _r9_rows()
+    maths = dict(rows[0], lecturers=lecturers)
+    rows[0] = maths
+    assert importer.LECTURER_NOT_FOUND not in importer.kinds(
+        importer.row_problems(maths, text, [], CFG.courses, rows)
+    )
+
+
+# ---- close-out (session 4): whole values (ai-output r3 N3) and the lecturer named (ui r6 W1) -------
+
+
+def _row_by_code(code: str, **changes: object) -> dict:
+    row = next(r for r in EXPECTED["courses"] if r["code"] == code)
+    return {**row, "description": "", **changes}
+
+
+def _stripped(fmt: str) -> str:
+    return identifiers.strip(_text(fmt), CFG.courses)
+
+
+@pytest.mark.parametrize("fmt", list(FORMATS))
+@pytest.mark.parametrize(
+    ("code", "short"),
+    [("FEB11005", "Mathematics"), ("FIN 3300", "Financial Modeling"), ("FEB13003", "Bachelor Thesis")],
+)
+def test_a_course_name_cut_short_is_flagged(fmt: str, code: str, short: str) -> None:
+    """N3: a returned name that is a proper prefix of the longer name on its row ("Mathematics" where the row
+    says "Mathematics II") passed as written; it is flagged on the name field."""
+    problems = importer.row_problems(_row_by_code(code, name=short), _stripped(fmt), [], CFG.courses)
+    assert importer.NAME_CUT_SHORT in problems, problems
+    assert importer.problem_field(importer.NAME_CUT_SHORT) == "name"
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "Mathematics I FEB11001 8,0 4\n",  # name first, the code after it
+        "Mathematics I 2021-2022 block 1 8,0 4\n",  # the term between the name and the grade
+        "FEB11001\tMathematics I\t8,0\t4\n",
+        "FEB11001 Mathematics I 8,0 4 Prof. dr. A. van den Berg\n",
+    ],
+)
+def test_a_whole_course_name_is_not_cut_short(line: str) -> None:
+    row = {
+        "name": "Mathematics I",
+        "code": "FEB11001",
+        "grade": "8,0",
+        "credits": 4.0,
+        "term": None,
+        "institution": None,
+        "lecturers": [],
+        "description": "",
+    }
+    assert importer.NAME_CUT_SHORT not in importer.row_problems(row, line, [], CFG.courses)
+
+
+@pytest.mark.parametrize("fmt", list(FORMATS))
+@pytest.mark.parametrize(
+    "lecturer",
+    [
+        "Prof. dr. A. van den Berg; Dr. J. Smit",  # two names merged into one
+        "Prof. dr. A. van den",  # ends in a particle
+        "Prof. dr. A.",  # ends in an initial
+    ],
+)
+def test_a_lecturer_that_is_not_one_whole_name_is_flagged(fmt: str, lecturer: str) -> None:
+    """N3: a merged ("A; B") or truncated lecturer stood in the document as words and passed."""
+    problems = importer.row_problems(
+        _row_by_code("FEB11001", lecturers=[lecturer]), _stripped(fmt), [], CFG.courses
+    )
+    assert (
+        f'Lecturer "{lecturer}" is not one whole name as written (cut off, or two names joined)' in problems
+    )
+    assert importer.LECTURER_NOT_FOUND in importer.kinds(problems)
+
+
+@pytest.mark.parametrize("fmt", list(FORMATS))
+def test_the_lecturer_problem_names_the_lecturer(fmt: str) -> None:
+    """ui r6 W1: "A lecturer not found …" didn't say which; each lecturer not found gets its own message."""
+    row = _row_by_code("FEB11001", lecturers=["Prof. dr. A. van den Berg", "Dr. Q. Invented"])
+    problems = importer.row_problems(row, _stripped(fmt), [], CFG.courses)
+    assert problems == ['Lecturer "Dr. Q. Invented" not found in the document as written'], problems
+    assert importer.problem_field(problems[0]) == "lecturers"
+
+
+def test_the_preview_shows_the_lecturer_by_name(client: FormClient, fake_rows) -> None:
+    rows = [dict(r, description="") for r in EXPECTED["courses"]]
+    rows[0]["lecturers"] = [*rows[0]["lecturers"], "Dr. Q. Invented"]
+    fake_rows({"courses": rows, "warnings": []})
+    html = _upload(client, "txt").text
+    assert (
+        "Lecturer &#34;Dr. Q. Invented&#34; not found" in html
+        or 'Lecturer "Dr. Q. Invented" not found' in html
+    )
+    area = re.search(r'<textarea id="row-0-lecturers"[^>]*>', html).group(0)
+    assert 'aria-invalid="true"' in area and "aria-describedby=" in area
+
+
+# ---- data-integrity review round 10 (close-out) ------------------------------------------------------------
+
+R10_BORN = [
+    f"     Born\t12-03-2001\n{ROW}\n",
+    f"      Born\n12-03-2001\n{ROW}\n",
+    f"Name\t     Born\nNoor Example\t12-03-2001\n{ROW}\n",
+    f"Born -- 12-03-2001\n{ROW}\n",
+    f"Born - (12-03-2001)\n{ROW}\n",
+    f"Born, (12-03-2001)\n{ROW}\n",
+    f"Born .. 12-03-2001\n{ROW}\n",
+    f"Born -, 12-03-2001\n{ROW}\n",
+    f"Born.: 12-03-2001\n{ROW}\n",
+    f"Born #: 12-03-2001\n{ROW}\n",
+    f"Born (dd-mm-yyyy): 12-03-2001\n{ROW}\n",
+    f"Born (date): 12-03-2001\n{ROW}\n",
+    f"Geboren (datum): 12-03-2001\n{ROW}\n",
+    f"Born (dd/mm/yyyy)\t12-03-2001\n{ROW}\n",
+    f"Geboren (dd-mm-jjjj)\t12-03-2001\n{ROW}\n",
+    f"Name\tBorn (dd-mm-yyyy)\nNoor Example\t12-03-2001\n{ROW}\n",
+    # not blocking in r10, closed by the same rule
+    f"Born 12 Maerz 2001\n{ROW}\n",
+    f"Born \u2014 12-03-2001\n{ROW}\n",
+    f"Born / 12-03-2001\n{ROW}\n",
+    f"Born/Geboren\t12-03-2001\n{ROW}\n",
+    f"- Born\t12-03-2001\n{ROW}\n",
+    f"1. Born\t12-03-2001\n{ROW}\n",
+    f"Born.\t12-03-2001\n{ROW}\n",
+    f"Noor Example (born 12-03-2001)\n{ROW}\n",
+    f"Born at Rotterdam, 12-03-2001\n{ROW}\n",
+]
+R10_DATES = ("12-03-2001", "12 Maerz 2001")
+
+
+@pytest.mark.parametrize("mode", list(MODES))
+@pytest.mark.parametrize("text", R10_BORN)
+def test_born_is_a_label_unless_a_name_or_a_word_says_otherwise(text: str, mode: str) -> None:
+    """r10 F1 HIGH: "born"/"geboren" is a label by default; it is no label only after a title, initial or
+    particle ("Prof. M. Born") or before a word that is not a month ("Born rule"). The date goes or stops."""
+    try:
+        first = identifiers.strip(text, CFG.courses)
+        out = first if mode == "read" else identifiers.strip(first, CFG.courses, marker_fills_slot=True)
+    except identifiers.UnresolvedIdentifier:
+        return
+    assert not any(d in out for d in R10_DATES), out
+    assert "FEB11010" in out
+
+
+@pytest.mark.parametrize("text", R10_BORN)
+def test_born_in_returned_fields_loses_the_date(text: str) -> None:
+    out = identifiers.strip(text, CFG.courses, strict=False)
+    assert not any(d in out for d in R10_DATES), out
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "PHY 2010 Quantum Mechanics 8 2 Prof. M. Born 8,0 4\n",  # a lecturer Born before a grade, untabbed
+        "PHY 2010\tQuantum Mechanics\tProf. dr. ir. M. Born\n",
+        "Lecturer: Dr. M. van Born\n",
+    ],
+)
+def test_a_lecturer_born_after_an_initial_title_or_particle_is_no_label(text: str) -> None:
+    assert identifiers.strip(text, CFG.courses) == text
+
+
+R10_HEADINGS = [
+    "Mathematics I (4 EC)\n",
+    "1. Mathematics I\n",
+    "Mathematics I:\n",
+    "Course: Mathematics I\n",
+    "FEB11001\n",
+]
+
+
+@pytest.mark.parametrize("heading", R10_HEADINGS)
+def test_a_description_under_any_heading_of_its_course_is_kept(heading: str) -> None:
+    """r10 F2 MEDIUM: a correct description under a heading naming the course in another form was flagged
+    (the course not last in its table). A description is flagged only when it is not in the document, or
+    stands in another returned course's block."""
+    text = f"{TABLE}\nCourse descriptions\n{heading}Calculus and linear algebra.\n"
+    rows = _r9_rows()
+    maths = dict(rows[0], description="Calculus and linear algebra.")
+    rows[0] = maths
+    assert importer.DESCRIPTION_NOT_FOUND not in importer.row_problems(maths, text, [], CFG.courses, rows)
+
+
+def test_a_description_on_its_heading_line_is_kept() -> None:
+    text = f"{TABLE}\nMathematics I: Calculus and linear algebra.\n"
+    rows = _r9_rows()
+    maths = dict(rows[0], description="Calculus and linear algebra.")
+    rows[0] = maths
+    assert importer.DESCRIPTION_NOT_FOUND not in importer.row_problems(maths, text, [], CFG.courses, rows)
+
+
+# ---- real-transcript finding (2026-11-08): unlabelled footer, brackets, wrapped names, own institution
+
+OWNER = "Noor Example"  # the fixture's invented student
+
+
+@pytest.mark.parametrize("mode", list(MODES))
+@pytest.mark.parametrize(
+    ("line", "gone", "kept"),
+    [
+        ("J.A. Example (512345)   1/9\n", ["512345"], ["1/9"]),
+        ("N. Example 512345   2/9\n", ["512345"], ["2/9"]),
+        ("N. Example 512345ab\n", ["512345ab"], []),
+        ("NOOR EXAMPLE, 12-03-2001\n", ["12-03-2001"], []),
+        ("Example, N. - S2034567\n", ["S2034567"], []),
+        ("Noor Example 598 431 12\n", ["598 431"], []),
+        (
+            "Courses taken by N. Example: FEB11001 2021-2022 ( 20.0 )\n",
+            [],
+            ["FEB11001", "2021-2022", "( 20.0 )"],
+        ),
+    ],
+)
+def test_on_a_line_with_the_owners_name_every_id_shaped_token_goes(
+    line: str, gone: list[str], kept: list[str], mode: str
+) -> None:
+    """Rule 1 (real transcript: a PDF footer "<initials> <surname> (<student number>)   n/9" with no label was
+    sent): on a line holding the owner's full name, surname or initials and surname, every ID-shaped token
+    (5+ digits, digits with a short suffix, a date) goes; course codes, year ranges and credits stay."""
+    first = identifiers.strip(line, CFG.courses, owner=OWNER)
+    out = (
+        first
+        if mode == "read"
+        else identifiers.strip(first, CFG.courses, marker_fills_slot=True, owner=OWNER)
+    )
+    assert out == first
+    assert not any(v in out for v in gone), out
+    assert all(v in out for v in kept), out
+
+
+def test_without_the_owners_name_an_unlabelled_number_stays() -> None:
+    """Control: rule 1 is anchored on the owner's name (rules 2 and 3 cover other shapes)."""
+    assert identifiers.strip("Archive reference 987654321\n", CFG.courses, owner=OWNER) == (
+        "Archive reference 987654321\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("line", "gone"),
+    [
+        ("Some Person (512345)\n", "512345"),
+        ("Ref. (S2034567) on file\n", "S2034567"),
+        ("Issued (12-03-2001)\n", "12-03-2001"),
+        ("Footer ( 598431 )\n", "598431"),
+        ("Number (512345ab)\n", "512345ab"),
+    ],
+)
+def test_a_bracket_holding_only_an_id_shaped_token_goes(line: str, gone: str) -> None:
+    """Rule 2: wherever it stands, a bracket holding only an ID-shaped token loses it."""
+    out = identifiers.strip(line, CFG.courses)
+    assert gone not in out and f"({CFG.courses.removed_marker})" in out.replace(" ", ""), out
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "FEB11001\tMathematics I\t8,0\t( 20.0 )\n",
+        "FEB11001 Mathematics I 8,0 ( 5.0 )\n",
+        "Thesis (FEB13003) 8,0 15\n",
+        "Exchange (FIN 3010)\n",
+        "Academic year (2021-2022)\n",
+        "Credits (30)\n",
+    ],
+)
+def test_bracketed_credits_codes_and_years_are_kept(line: str) -> None:
+    assert identifiers.strip(line, CFG.courses) == line
+
+
+def test_a_repeated_page_footer_loses_its_id_shaped_tokens() -> None:
+    """Rule 3: a line identical apart from its page number on 2+ pages is a header/footer; its ID-shaped
+    tokens go even without a label or the owner's name."""
+    text = "Transcript 598431 - page 1 of 2\nFEB11001 Mathematics I 8,0 4\nTranscript 598431 - page 2 of 2\n"
+    out = identifiers.strip(text, CFG.courses)
+    assert "598431" not in out and "FEB11001 Mathematics I 8,0 4" in out, out
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Transcript 598431 - page 1 of 2\nFEB11001 Mathematics I 8,0 4\n",  # once: not a repeated footer
+        "FEB11001 Mathematics I 8,0 4\nFEB11001 Mathematics I 8,0 4\n",  # repeated, no page number
+    ],
+)
+def test_a_line_without_a_repeated_page_number_is_no_footer(text: str) -> None:
+    assert identifiers.strip(text, CFG.courses) == text
+
+
+def _course_lines(text: str) -> list[str]:
+    return [line for line in text.splitlines() if re.match(r"(FEB|FIN|ECON|STAT|ACCT|COMM)\s?\d", line)]
+
+
+@pytest.mark.parametrize("fmt", list(FORMATS))
+def test_the_fixture_footer_never_reaches_claude_and_course_rows_are_unchanged(fmt: str) -> None:
+    """The eval fixture prints "N. Example (512345)   n/N" on every page (all three formats); after stripping
+    no 512345 is left anywhere, and every course row stands exactly as printed."""
+    raw = _text(fmt)
+    assert raw.count("N. Example (512345)") >= 2, "the footer is on every page"
+    out = identifiers.strip(raw, CFG.courses, owner=OWNER)
+    assert "512345" not in out
+    assert _course_lines(out) == _course_lines(raw) and len(_course_lines(raw)) >= 28
+
+
+WRAPPED = (
+    "WRP1001 Professional Development & 7,5 5 Dr. J. Smit\nMentoring I\n"
+    "WRP1002 Statistics II 8,0 5 Dr. J. Smit\n"
+)
+WRAPPED_TABBED = (
+    "WRP1001\tProfessional Development &\t7,5\t5\tDr. J. Smit\n\tMentoring I\t\t\t\n"
+    "WRP1002\tStatistics II\t8,0\t5\tDr. J. Smit\n"
+)
+
+
+def _wrapped_row(name: str = "Professional Development & Mentoring I") -> dict:
+    return {
+        "name": name,
+        "code": "WRP1001",
+        "grade": "7,5",
+        "credits": 5.0,
+        "term": None,
+        "institution": None,
+        "lecturers": ["Dr. J. Smit"],
+        "description": "",
+    }
+
+
+@pytest.mark.parametrize("text", [WRAPPED, WRAPPED_TABBED], ids=["untabbed", "tabbed"])
+def test_a_course_name_wrapped_onto_the_next_line_counts_as_written(text: str) -> None:
+    """Rule 4: "Professional Development &" / "Mentoring I" in the same column is the name as written when
+    the joined text matches it exactly."""
+    assert importer.row_problems(_wrapped_row(), text, [], CFG.courses) == []
+
+
+@pytest.mark.parametrize("text", [WRAPPED, WRAPPED_TABBED], ids=["untabbed", "tabbed"])
+@pytest.mark.parametrize(
+    "name",
+    [
+        "Professional Development & Mentoring",  # the tail cut short
+        "Professional Development & Mentoring II",  # not as written
+        "Professional Development and Mentoring I",  # reworded
+        "Professional Development & Statistics II",  # the next course's name
+    ],
+)
+def test_a_wrapped_name_must_still_match_verbatim(text: str, name: str) -> None:
+    problems = importer.row_problems(_wrapped_row(name), text, [], CFG.courses)
+    assert importer.COURSE_NOT_FOUND in problems or importer.NAME_CUT_SHORT in problems, problems
+
+
+@pytest.mark.parametrize("name", ["wrapped.txt", "wrapped.pdf"])
+def test_the_wrapped_fixture_imports_its_wrapped_course(name: str) -> None:
+    """A separate invented fixture (tests/evals/courses/wrapped.*), so the 28-course eval set is unchanged;
+    it also prints the owner footer on each of its pages."""
+    raw = (EVAL / name).read_bytes()
+    if name.endswith(".txt"):
+        text = extract.text_from_paste(raw.decode("utf-8"))
+    else:
+        text = extract.extract_text(name, raw, CFG.courses)
+    assert text.count("N. Example (512345)") >= 2
+    text = identifiers.strip(text, CFG.courses, owner=OWNER)
+    assert "512345" not in text
+    assert importer.row_problems(_wrapped_row(), text, [], CFG.courses) == [], text
+
+
+@pytest.mark.parametrize("step", ["review", "preview"])
+def test_cancel_writes_nothing(client: FormClient, data_dir: Path, fake_rows, step: str) -> None:
+    """Cancel (a link back to /courses/import) after the review or after the preview writes nothing to
+    sources/ or courses.yaml."""
+    page = _read(client, "pdf")
+    assert page.status_code == 200
+    if step == "preview":
+        page = _send(client, page.text)
+        assert page.status_code == 200
+    assert 'href="/courses/import"' in page.text
+    assert client.get("/courses/import").status_code == 200
+    assert not (data_dir / "courses.yaml").exists()
+    assert not (data_dir / "sources").exists() or not list((data_dir / "sources").iterdir())
+
+
+def _nfu_without_institution() -> list[dict]:
+    rows = [dict(r, description="") for r in EXPECTED["courses"]]
+    for r in rows:
+        if r["institution"] == "Northfield University":
+            r["institution"] = None
+    return rows
+
+
+def test_an_owner_entered_institution_fills_empty_rows_only(
+    client: FormClient, data_dir: Path, fake_rows
+) -> None:
+    """Item 5: "Institution for these courses (your own entry)" fills every row whose institution is empty;
+    stored as owner-entered, so the as-written check doesn't apply; rows with a document institution keep
+    theirs."""
+    fake_rows({"courses": _nfu_without_institution(), "warnings": []})
+    html = _upload(client, "txt").text
+    assert "Institution for these courses (your own entry)" in html
+    fields = [(k, v) for k, v in form_fields(html, "courses-preview") if k != "owner_institution"]
+    fields.append(("owner_institution", "Northfield Univ. (my entry)"))
+    res = client.post("/courses/import/save", data=[*fields, ("accept", "all")])
+    assert res.status_code == 200, res.text[-600:]
+    stored = YAML(typ="safe").load((data_dir / "courses.yaml").read_text(encoding="utf-8"))["courses"]
+    assert len(stored) == 28
+    by_code = {c["code"]: c for c in stored}
+    assert by_code["FIN 3010"]["institution"] == "Northfield Univ. (my entry)"
+    assert by_code["FIN 3010"]["institution_entered"] is True
+    assert by_code["FEB11001"]["institution"] == "Example School of Economics"
+    assert by_code["FEB11001"].get("institution_entered", False) is False
+
+
+def test_an_owner_entered_institution_survives_check_again_and_is_never_flagged(
+    client: FormClient, fake_rows, calls: Path
+) -> None:
+    fake_rows({"courses": _nfu_without_institution(), "warnings": []})
+    html = _upload(client, "txt").text
+    sent = calls.read_text(encoding="utf-8")
+    fields = [(k, v) for k, v in form_fields(html, "courses-preview") if k != "owner_institution"]
+    fields.append(("owner_institution", "Invented Institute"))
+    again = client.post("/courses/import/save", data=[*fields, ("accept", "check")]).text
+    assert importer.INSTITUTION_NOT_FOUND not in again
+    assert 'value="Invented Institute"' in again
+    assert calls.read_text(encoding="utf-8") == sent  # nothing more sent to Claude
+    assert "Invented Institute" not in sent

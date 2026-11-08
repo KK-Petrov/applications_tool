@@ -21,6 +21,9 @@ class TranscriptCourse(DataModel):
     name: str = Field(min_length=1)
     code: str | None = None
     institution: str | None = None
+    # true when the owner typed the institution in the import preview ("Institution for these courses (your
+    # own entry)"): not from the document, so the as-written check does not apply (DECISIONS #93)
+    institution_entered: bool = False
     grade: str | None = None
     credits: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     term: str | None = None

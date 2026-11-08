@@ -1,0 +1,7 @@
+EXAMPLE SCHOOL OF ECONOMICS
+Code Course Grade Credits Lecturer
+WRP1001 Professional Development & 7,5 5 Dr. J. Smit
+Mentoring I
+N. Example (512345)   1/2
+WRP1002 Statistics II 8,0 5 Dr. J. Smit
+N. Example (512345)   2/2

@@ -76,6 +76,11 @@
   <input type="hidden" name="original_name" value="{{ original_name }}">
   <input type="hidden" name="original_sha256" value="{{ original_sha256 }}">
   <input type="hidden" name="source" value="{{ source }}">
+  <div class="field field-wide owner-institution">
+    <label for="owner-institution">Institution for these courses (your own entry)</label>
+    <input id="owner-institution" name="owner_institution" type="text" value="{{ owner_institution or '' }}" aria-describedby="owner-institution-hint">
+    <p class="hint" id="owner-institution-hint">Optional. Used for every course below whose Institution is empty; an institution the document gives is kept. It is your entry, not from the document, and is not sent to Claude.</p>
+  </div>
   <p class="hint"><a href="#import-actions">Go to Accept all</a></p>
   {% for r in rows %}
   {% set i = loop.index0 %}
@@ -98,7 +103,9 @@
       {{ field(i, r, "grade", "Grade", r.grade or "") }}
       {{ field(i, r, "credits", "Credits", credits) }}
       {{ field(i, r, "term", "Term", r.term or "") }}
-      {{ field(i, r, "institution", "Institution", r.institution or "", wide=true) }}
+      {#- an owner-entered institution stays in the field above, so this one is left empty (#93) -#}
+      {{ field(i, r, "institution", "Institution", "" if r.institution_entered else (r.institution or ""), wide=true) }}
+      {% if r.institution_entered %}<p class="hint field-wide" id="row-{{ i }}-institution-entered">Institution: {{ r.institution }} (your entry above)</p>{% endif %}
       <div class="field field-wide">
         <label for="row-{{ i }}-lecturers">Lecturers</label>
         {%- set described = problem_ids(i, r, "lecturers") %}

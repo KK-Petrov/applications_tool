@@ -223,10 +223,13 @@ Rule 13: both checks run in Python, never in the model.
    row, an ID-shaped cell must be a taken value or the value cell of another (non-label) key cell
    ("Ref<TAB>598431"), else it stops; layout 2's label line holds no value at all ("4521 Student number"
    stops); a bracket holding a digit or the marker is the label's value, never its abbreviation, so
-   "Student number (512345)" reads the same at Send. The rules below describe how a value is found and taken whole inside these
+   "Student number (512345)" reads the same at Send. Session 4 (#88, #89, user decisions): a label followed by a
+   colon and then empty cells ("Student number:<TAB><TAB>598431", Word tab alignment) is layout 1, the value
+   being the next non-empty cell (without the colon it stays outside), and a non-label key with a colon is found across empty cells too ("Ref:<TAB><TAB>598431" keeps its value, #90); a .docx soft line break inside a table
+   cell reads as a space, so "Student⏎number" in a cell is one label. The rules below describe how a value is found and taken whole inside these
    layouts. A number or date is removed only when an identifier label (`courses.identifier_labels`, English and Dutch:
    student number / nr. / ID / identification number, matriculation or registration number, date of birth, DOB,
-   SSN, BSN, diploma register (number), document number, studentnummer, stud.nr., geboortedatum, geboren (op), burgerservicenummer, diplomaregisternummer, documentnummer, …) anchors it:
+   SSN, BSN, diploma register (number), document number / nr. / no. / nummer, passport no., ID card number, matrikelnummer, born on / in, studentnummer, stud.nr., geboortedatum, geboren op / in, burgerservicenummer, diplomaregisternummer, documentnummer, …) anchors it; "born" and "geboren" alone (`courses.date_labels`) are labels by default and none only right after a title token, an initial or a particle (config `names`: "Prof. M. Born", "Dr. K. Geboren", "M. van Born") or when the first thing after them, past an optional "(…)" and separators, is a word that is not a month ("the Born rule", "Born Rule Seminar"); a colon after them always makes them labels (#89, #90, #92); "born at" and "geboren te" are labels, so "Geboren te Rotterdam op 12-03-2001" stops as before #89:
    - **same line:** the first number of 2+ digits (a letter prefix and digit groups such as "123 456 782" allowed),
      date (numeric either way round; with a month name in English or Dutch, also abbreviated and with a 2-digit or
      'YY year: 12-MAR-01, 2001-Mar-12, 12 maart '01; with an ordinal "12th"/"3rd of"; a Roman month 12.III.2001;
@@ -241,7 +244,16 @@ Rule 13: both checks run in Python, never in the model.
    a month word, a Roman month or 'YY (an unknown format such as "12/3 2001"); another number later in its segment
    ("512345, previously 498765"); or a label whose value can't be found stops the import with the message above
    (#84); nothing is sent to the model or written. A standalone 9-digit number is treated as a BSN, and
-   removed, only if it passes the 11-check; a US SSN shape (123-45-6789) is removed even without a label. Course codes, grades, credits and years are kept. Each removed value
+   removed, only if it passes the 11-check; a US SSN shape (123-45-6789) is removed even without a label.
+   **Beyond labels (DECISIONS #93; real transcript: an unlabelled PDF footer "J.A. Example (512345)   1/9" on
+   every page was sent):** (a) on a line naming the owner (`settings.owner_name`: the surname with its particle,
+   as whole words, any case, which covers the full name and "J.A. Example"), (b) on a page header or footer (a
+   line holding a page number such as "1/9", "Page 1 of 9", "pagina 1 van 9" whose text apart from it stands
+   on 2+ lines), and (c) inside a bracket holding nothing else, every ID-shaped token goes. ID-shaped here: a
+   run of 5+ digits (digit groups allowed), at most one letter in front and up to 3 letters after (512345,
+   598 431, S2034567, 512345ab), or a date; never a course code ("FEB11001", "FIN 3010"), a year range,
+   credits ("( 20.0 )") or a page number. Known consequences (fail closed): a 5-digit programme code alone in
+   brackets ("(50952)") is removed; on a line naming the owner a 5+ digit number of any kind goes. Course codes, grades, credits and years are kept. Each removed value
    becomes `courses.removed_marker` ("[removed]"). Stripping runs on the text when it is read, again (strictly) when the user presses Send to Claude after reviewing it (DECISIONS #70; a label followed by the marker counts as already removed, so stripping stripped text changes nothing), and on every returned field (there, an unresolved label is left alone). The original
    file's name (stored in the source header) loses every date pattern and every run of 6 or more digits, and is
    kept on one line; the header's sha256 is written only if it is 64 hex digits.
@@ -259,6 +271,14 @@ Rule 13: both checks run in Python, never in the model.
    the row is flagged ("Grade not found in the document", "Credits not found on this course's row", "Course not
    found in the document") and can't be accepted until the user corrects it. The same check is used by the app's
    preview and the live grader. Known limit: a wrong grade that equals another value printed on that row (an
-   extra column) passes; the live eval also compares every grade with `expected.json`.
+   extra column) passes; the live eval also compares every grade with `expected.json`. Whole values (#91): a
+   course name cut short ("Mathematics" where the row says "Mathematics II") and a lecturer that is not one
+   whole name are flagged (docs/04 §9). **A name wrapped in its column** ("Professional Development &" /
+   "Mentoring I", #93) counts as written when the joined text is the name exactly: in a table row a cell holds
+   the first part and the same cell of the next line the rest, alone; on a line without tabs the first part is
+   followed only by the row's values and the next line is the rest, alone (a matching refinement, not a
+   looser check). Known limit: when a PDF puts the row's values after the wrapped part, the grade is not on
+   the name's first line and is flagged (safe side). Known limits: a description fragment passes; on an untabbed row an
+   institution's name right after the course name reads as part of it (flagged, safe side).
 3. **Scanned PDFs:** a PDF whose average non-space text per page is below `courses.min_pdf_text_per_page` is
    refused: "This PDF has no text layer; OCR is not supported. Export it as text or Word, or paste the text."

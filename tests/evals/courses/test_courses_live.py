@@ -31,6 +31,7 @@ pytestmark = pytest.mark.live
 
 HERE = Path(__file__).resolve().parent
 EXPECTED = json.loads((HERE / "expected.json").read_text(encoding="utf-8"))
+OWNER = "Noor Example"  # the invented student; the app strips with settings.owner_name (#93)
 FORMATS = {"txt": "transcript.txt", "docx": "transcript.docx", "pdf": "transcript.pdf"}
 REPORT = REPO_ROOT / "reports" / "live_courses.json"
 
@@ -54,10 +55,10 @@ def test_courses_live_import(fmt: str, tmp_path: Path) -> None:
     else:
         raw = path.read_bytes()
         text = extract.extract_text(path.name, raw, config.courses)
-    stripped = identifiers.strip(text, config.courses)  # Read
+    stripped = identifiers.strip(text, config.courses, owner=OWNER)  # Read, with the owner's name (#93)
     # Send strips the reviewed text again, strictly, in the Send mode, as /courses/import/send does; it
     # must change nothing (ai-output review round 2, F7; DECISIONS #86)
-    assert identifiers.strip(stripped, config.courses, marker_fills_slot=True) == stripped
+    assert identifiers.strip(stripped, config.courses, marker_fills_slot=True, owner=OWNER) == stripped
     sent_identifiers = course_graders.identifiers_in(stripped, EXPECTED["identifiers"])
     result = run_skill(
         "extract-courses",
@@ -68,7 +69,7 @@ def test_courses_live_import(fmt: str, tmp_path: Path) -> None:
         subject={},
         source="live",
     )
-    rows = [importer.strip_row(r, config.courses) for r in result.data["courses"]]
+    rows = [importer.strip_row(r, config.courses, OWNER) for r in result.data["courses"]]
     report = course_graders.grade(rows, stripped, EXPECTED)
     report["identifiers_sent"] = sent_identifiers
     # the extraction call wrote nothing (the routes' "nothing before confirm" is proven by the fast tests in
@@ -79,7 +80,7 @@ def test_courses_live_import(fmt: str, tmp_path: Path) -> None:
     source = importer.source_name(path.name, date.today().isoformat(), store.source_names())
     store.create_source_text(source, importer.source_header(path.name, importer.sha256(raw)) + stripped)
     taken: set[str] = set()
-    accepted = [r for r in rows if not importer.row_problems(r, stripped, [])]
+    accepted = [r for r in rows if not importer.row_problems(r, stripped, [], config.courses, rows)]
     store.add_courses([importer.to_course(r, importer.course_id(r, taken), source) for r in accepted])
     stored = store.load_courses().courses
     report |= course_graders.lecturers_graded(stored, EXPECTED, config.names, config.courses)
@@ -97,7 +98,12 @@ def test_courses_live_import(fmt: str, tmp_path: Path) -> None:
     report["written_by_extraction_call"] = written_by_call
     report["cost_usd"], report["duration_s"] = result.cost_usd, result.duration_s
     report["warnings"] = result.data.get("warnings", [])
-    report["passed"] = course_graders.passed(report) and not written_by_call and not sent_identifiers
+    report["passed"] = (
+        course_graders.passed(report)
+        and not written_by_call
+        and not sent_identifiers
+        and report["accepted"] == len(EXPECTED["courses"])  # r3 N5: the evidence says what the test asserts
+    )
     _record(fmt, report)
     assert sent_identifiers == [], sent_identifiers
     assert written_by_call == [], written_by_call

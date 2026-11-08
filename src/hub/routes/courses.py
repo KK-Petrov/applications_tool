@@ -56,6 +56,10 @@ def build_router(web: Web) -> APIRouter:
     web.templates.env.globals["import_limit_minutes"] = -(-config.claude.timeout_s // 60)
     web.templates.env.globals["import_max_mb"] = cfg.max_upload_bytes // 1_000_000
 
+    def owner() -> str:
+        """The owner's name from settings: a line naming them loses its ID-shaped tokens (DECISIONS #93)."""
+        return store.load_settings().owner_name
+
     # ---- the list --------------------------------------------------------------------------------
 
     @router.get("/courses", response_class=HTMLResponse)
@@ -126,7 +130,7 @@ def build_router(web: Web) -> APIRouter:
                 original, sha = PASTED, importer.sha256(pasted.encode("utf-8"))
             else:
                 return render_import(request, 409, error=NOTHING_GIVEN)
-            stripped = identifiers.strip(text, cfg)
+            stripped = identifiers.strip(text, cfg, owner=owner())
         except (extract.ExtractError, identifiers.UnresolvedIdentifier) as err:
             return render_import(request, 409, error=str(err))
         return render_review(request, stripped, identifiers.clean_filename(original, cfg), sha)
@@ -140,7 +144,9 @@ def build_router(web: Web) -> APIRouter:
         sha = str(form.get("original_sha256", ""))
         sha = sha if re.fullmatch(r"[0-9a-f]{64}", sha) else "not recorded"
         try:
-            stripped = identifiers.strip(_lf(str(form.get("text", ""))), cfg, marker_fills_slot=True)
+            stripped = identifiers.strip(
+                _lf(str(form.get("text", ""))), cfg, marker_fills_slot=True, owner=owner()
+            )
         except identifiers.UnresolvedIdentifier as err:
             return render_import(request, 409, error=str(err))
         if not stripped.strip():
@@ -148,7 +154,7 @@ def build_router(web: Web) -> APIRouter:
         output, error = await run_in_threadpool(call, stripped)
         if output is None:
             return render_review(request, stripped, original, sha, 409, error)
-        rows = [importer.strip_row(r, cfg) for r in output["courses"]]
+        rows = [importer.strip_row(r, cfg, owner()) for r in output["courses"]]
         return render_preview(request, stripped, original, sha, "", rows, output.get("warnings", []))
 
     def rows_from_form(form: Any) -> list[dict[str, Any]]:
@@ -187,7 +193,7 @@ def build_router(web: Web) -> APIRouter:
         out: list[dict] = []
         for n, row in enumerate(rows):
             saved = importer.is_duplicate(row, mine)
-            problems = [] if saved else importer.row_problems(row, text, others, cfg)
+            problems = [] if saved else importer.row_problems(row, text, others, cfg, rows)
             twin = next((j for j in range(n) if importer.same_course(rows[j], row)), None)
             if twin is not None and not saved:
                 problems.append(f"Same course as row {twin + 1}")  # the document lists it twice
@@ -202,7 +208,7 @@ def build_router(web: Web) -> APIRouter:
         duplicate) is tied only to the row's Accept button."""
         out: dict[str, list[int]] = {}
         for n, message in enumerate(problems):
-            name = importer.PROBLEM_FIELDS.get(message)
+            name = importer.problem_field(message)
             if name:
                 out.setdefault(name, []).append(n)
         return out
@@ -221,6 +227,7 @@ def build_router(web: Web) -> APIRouter:
         focus_row: int | None = None,
         problem: dict[str, Any] | None = None,
         focus_notice: bool = False,
+        owner_institution: str = "",
     ) -> HTMLResponse:
         snapshot = store.load_all()
         checked = checked_rows(rows, text, source, snapshot)
@@ -240,6 +247,7 @@ def build_router(web: Web) -> APIRouter:
             focus_row=focus_row,
             problem=problem,
             focus_notice=focus_notice,
+            owner_institution=owner_institution,
         )
 
     def problem_notice(checked: list[dict[str, Any]], first: int) -> dict[str, Any]:
@@ -272,14 +280,25 @@ def build_router(web: Web) -> APIRouter:
         # [removed]" and wrote it so to sources/ (data-integrity review round 6, F3). A stop means the
         # hidden text was edited: refused, nothing written (DECISIONS #82)
         try:
-            text = identifiers.strip(_lf(str(form.get("text", ""))), cfg, marker_fills_slot=True)
+            text = identifiers.strip(
+                _lf(str(form.get("text", ""))), cfg, marker_fills_slot=True, owner=owner()
+            )
         except identifiers.UnresolvedIdentifier:
             return render_import(request, 409, error=SAVE_TEXT_CHANGED)  # round 7, F7
         original = identifiers.clean_filename(str(form.get("original_name", "")), cfg)
         sha = str(form.get("original_sha256", ""))
         sha = sha if re.fullmatch(r"[0-9a-f]{64}", sha) else "not recorded"
         source = str(form.get("source", ""))
-        rows = [importer.strip_row(r, cfg) for r in rows_from_form(form)]
+        name = owner()
+        # the owner's own institution entry, for every course whose institution is empty (#93): typed by the
+        # owner after Send, so never sent to Claude; stripped like any field
+        owner_institution = identifiers.strip(
+            " ".join(str(form.get("owner_institution", "")).split()), cfg, strict=False, owner=name
+        )
+        rows = [
+            importer.with_owner_institution(importer.strip_row(r, cfg, name), owner_institution)
+            for r in rows_from_form(form)
+        ]
         accept = str(form.get("accept", ""))
         snapshot = store.load_all()
         if accept == "check":  # "Check again" after a correction: the checks, nothing written
@@ -303,6 +322,7 @@ def build_router(web: Web) -> APIRouter:
                 source,
                 rows,
                 [],
+                owner_institution=owner_institution,
                 notice=notice,
                 focus_row=first,
                 problem=problem,
@@ -330,6 +350,7 @@ def build_router(web: Web) -> APIRouter:
                 source,
                 rows,
                 [],
+                owner_institution=owner_institution,
                 status=409,
                 error=f"Nothing was saved: {reason}.",
             )
@@ -357,12 +378,24 @@ def build_router(web: Web) -> APIRouter:
                 source,
                 rows,
                 [],
+                owner_institution=owner_institution,
                 status=409,
                 error=f"Nothing was saved: {err.path} {err.message}",
             )
         notice = f"Saved {len(new)} course{'s' if len(new) != 1 else ''}."
         focus = chosen[0] if accept != "all" else None  # Accept on one row: stay at that course
-        return render_preview(request, text, original, sha, source, rows, [], notice=notice, focus_row=focus)
+        return render_preview(
+            request,
+            text,
+            original,
+            sha,
+            source,
+            rows,
+            [],
+            notice=notice,
+            focus_row=focus,
+            owner_institution=owner_institution,
+        )
 
     # ---- professors from the document (US-20) ------------------------------------------------------
 

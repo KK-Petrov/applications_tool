@@ -105,14 +105,18 @@ courses:                          # course import (docs/02 §10, docs/04 §9; DE
   identifier_labels:              # a number or date after one of these (same line, or the next line) is removed
     en: [student number, student no, student nr, stud.nr., stud. nr., student id, student-id,
          student identification number, "student #", id number, matriculation number, emplid, uin, banner id,
-         campus id, social security no., born,
+         campus id, social security no., born on, born in, born at,
          registration number, date of birth, birth date, birthdate, dob, d.o.b., national id, national id number,
          national identification number, citizen service number, social security number, ssn, passport number, bsn,
-         diploma register, diploma register number, document number]   # last three: DECISIONS #76
+         diploma register, diploma register number, document number,   # last three: DECISIONS #76
+         document nr, document no, document nummer, passport no, id card number, matrikelnummer]   # DECISIONS #89
     nl: [studentnummer, studentnr, student nummer, collegekaartnummer, geboortedatum, geb. datum, geb.datum,
-         geboren op, geboren, burgerservicenummer,
+         geboren op, geboren in, geboren te, burgerservicenummer,
          sofinummer, sofi-nummer, persoonsnummer, paspoortnummer, inschrijfnummer, bsn,
          diplomaregisternummer, documentnummer]
+  date_labels:                    # a label by default; none right after a title token, initial or particle
+    en: [born]                    # (`names`: "Prof. M. Born") or before a word that is not a month ("the Born
+    nl: [geboren]                 # rule"); a colon after it always makes it one (DECISIONS #89, #90, #92)
   month_names:                    # for dates such as "12 March 2001" or "12 maart 2001"
     en: [january, february, march, april, may, june, july, august, september, october, november, december,
          jan, feb, mar, apr, jun, jul, aug, sep, sept, oct, nov, dec]

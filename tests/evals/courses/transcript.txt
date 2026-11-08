@@ -35,6 +35,8 @@ FEB13001	Empirical Methods in Finance	8,5	6	2023-2024 block 1	Prof. dr. E. Bakke
 FEB13002	Bedrijfseconomie	7,5	4	2023-2024 block 1	Prof. dr. E. Bakker
 FEB13003	Bachelor Thesis Finance	8,0	15	2023-2024 block 4	Prof. dr. E. Bakker; Dr. J. Smit
 
+N. Example (512345)   1/2
+
 NORTHFIELD UNIVERSITY - Exchange semester record
 Student ID: N00412345
 Birth date: 03/12/2001
@@ -54,3 +56,5 @@ FIN 3900	Quantitative Trading Seminar	A	3.0	Fall 2023	Prof. Daniel O'Connor; Dr.
 
 Ref. 111222333
 Issued on 30 June 2024. This record is invented for testing.
+
+N. Example (512345)   2/2

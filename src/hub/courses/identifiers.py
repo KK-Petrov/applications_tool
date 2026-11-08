@@ -87,15 +87,16 @@ class _Patterns:
 
 @cache
 def _patterns(
-    labels: tuple[str, ...], months: tuple[str, ...], marker: str, marker_fills_slot: bool
+    labels: tuple[str, ...],
+    date_labels: tuple[str, ...],
+    name_words: tuple[str, ...],
+    months: tuple[str, ...],
+    marker: str,
+    marker_fills_slot: bool,
 ) -> _Patterns:
     def words(label: str) -> str:
         return r"[\s\-]*".join(re.escape(w) for w in re.split(r"[\s\-]+", label.strip()))
 
-    alternatives = "|".join(words(lb) for lb in sorted(set(labels), key=len, reverse=True))
-    # the label, then an optional bracketed abbreviation such as "(BSN)"; never a bracket holding a digit or
-    # the marker, which is the label's value ("Student number ([removed])" at Send; round 8, F3)
-    label = re.compile(rf"(?<![\w])(?:{alternatives})(?![\w])(?:\s*\([^)\n\d\[\]]{{0,30}}\))?", re.IGNORECASE)
     month = "|".join(re.escape(m) for m in sorted(set(months), key=len, reverse=True))
     ordinal = r"(?:st|nd|rd|th|ste|de|e)?"  # 12th, 3rd; Dutch 1ste, 12de, 12e
     roman = "XII|XI|X|IX|VIII|VII|VI|V|IV|III|II|I"  # a month as a Roman numeral (12.III.2001)
@@ -111,6 +112,22 @@ def _patterns(
             rf"(?:{month})\.?\s+\d{{4}}",  # March 2001
         ]
     )
+    alternatives = "|".join(words(lb) for lb in sorted(set(labels), key=len, reverse=True))
+    # a date label ("born", "geboren") is a label by default (#89, #90, data-integrity r10 F1); none only
+    # (a) right after a title token, an initial or a particle (`names`: "Prof. M. Born", "Dr. K. Geboren",
+    # "M. van Born"), or (b) when the first thing after it, past an optional "(…)" and separators, is a word
+    # that is not a month ("the Born rule", "Born Rule Seminar"). A colon after it always makes it a label.
+    dated = "|".join(words(lb) for lb in sorted(set(date_labels), key=len, reverse=True))
+    if dated:
+        before = [r"(?<![A-Z]\. )", r"(?<![A-Z]\.)"]  # an initial, with or without a space
+        for token in sorted(set(name_words)):
+            t = re.escape(token)
+            before += [rf"(?<!(?<![\w]){t} )", rf"(?<!(?<![\w]){t}\. )", rf"(?<!(?<![\w]){t}\.)"]
+        word_after = rf"[ \t]*(?:\([^)\n]*\))?[ \t;,.\-–#=]*(?!(?:{month})(?![^\W\d_]))[^\W\d_]"
+        alternatives += rf"|{''.join(before)}(?:{dated})(?!{word_after})"
+    # the label, then an optional bracketed abbreviation such as "(BSN)"; never a bracket holding a digit or
+    # the marker, which is the label's value ("Student number ([removed])" at Send; round 8, F3)
+    label = re.compile(rf"(?<![\w])(?:{alternatives})(?![\w])(?:\s*\([^)\n\d\[\]]{{0,30}}\))?", re.IGNORECASE)
     # letters then digits, optionally in groups ("123 456 782", "1234.56.782"); a group never swallows the
     # start of a date ("598431 12-03-2001", "598431 12 maart 2001" are two values; round 8, F8)
     number = rf"[A-Za-z]{{0,3}}\d{{2,}}(?:[ .]\d{{2,4}}(?![\d\-/.])(?![\s\-/.]+(?:{month})(?![a-z])))*"
@@ -130,7 +147,17 @@ def _patterns(
 
 def _p(cfg: CoursesConfig, marker_fills_slot: bool = False) -> _Patterns:
     labels, months = tuple(cfg.identifier_labels.all), tuple(cfg.month_names.all)
-    return _patterns(labels, months, cfg.removed_marker, marker_fills_slot)
+    dated = tuple(cfg.date_labels.all)
+    return _patterns(labels, dated, _name_words(), months, cfg.removed_marker, marker_fills_slot)
+
+
+@cache
+def _name_words() -> tuple[str, ...]:
+    """Title tokens and particles (config `names`): before "born"/"geboren" they make it a surname (#92)."""
+    from hub.config import load_config
+
+    names = load_config().names
+    return tuple(sorted({*names.title_tokens, *names.particles}))
 
 
 def passes_bsn_check(digits: str) -> bool:
@@ -200,6 +227,7 @@ def _cell_spans(line: str) -> list[tuple[int, int]]:
 # "Student number (512345)")
 _GAP = re.compile(r"[\s:;,.\-–#=(]*")
 _LETTER = re.compile(r"[^\W\d_]")
+_COLON_ONLY = re.compile(r"[ ]*:[ ]*")  # the rest of a label's cell is just its colon ("Student number:")
 
 
 class _Outside(Exception):
@@ -212,7 +240,9 @@ class _Outside(Exception):
         self.lines = lines
 
 
-def strip(text: str, cfg: CoursesConfig, *, strict: bool = True, marker_fills_slot: bool = False) -> str:
+def strip(
+    text: str, cfg: CoursesConfig, *, strict: bool = True, marker_fills_slot: bool = False, owner: str = ""
+) -> str:
     """``text`` with every identifier removed: the values of identifier labels in one of four known layouts,
     every 11-check-valid standalone 9-digit number and every US SSN shape, each replaced by
     ``cfg.removed_marker`` (user decision, DECISIONS #84; docs/02 §10). The four layouts:
@@ -261,6 +291,16 @@ def strip(text: str, cfg: CoursesConfig, *, strict: bool = True, marker_fills_sl
             continue
         for n, line_spans in found.items():
             spans.setdefault(n, []).extend(line_spans)
+    # beyond labels (real transcript, DECISIONS #93): a line naming the owner, a repeated page header/footer
+    # and a bracket holding only an ID-shaped token lose their ID-shaped tokens (fail closed)
+    owner_re = _owner_pattern(owner)
+    footers = _footer_lines(lines)
+    for n, line in enumerate(lines):
+        extra = _bracketed_ids(line, p)
+        if n in footers or (owner_re is not None and owner_re.search(line)):
+            extra += _id_spans(line, p)
+        if extra:
+            spans.setdefault(n, []).extend(extra)
     for n, line_spans in spans.items():
         lines[n] = _replace(lines[n], line_spans, marker)
     out = NEWLINE.join(lines)
@@ -269,6 +309,74 @@ def strip(text: str, cfg: CoursesConfig, *, strict: bool = True, marker_fills_sl
 
 
 Found = tuple[dict[int, list[tuple[int, int]]], int]  # spans per line, and the line to go on from
+
+# ID-shaped for the owner, bracket and footer rules (#93, user decision): a run of 5+ digits (groups of 2–4
+# after a space or full stop allowed), at most one letter in front and a suffix of up to 3 letters
+# (512345, 598 431, S2034567, 512345ab), or a date. Never a course code ("FEB11001", "FIN 3010"), a year
+# range ("2021-2022"), credits ("20.0") or a page number ("1/9").
+_ID_TOKEN = re.compile(r"(?<![\w.,/\-])[A-Za-z]?\d{2,}(?:[ .]\d{2,4})*[A-Za-z]{0,3}(?![\w])(?![.,/\-]\d)")
+_BRACKET = re.compile(r"\(([^()\n]*)\)")
+# a page number: "1/9", "1 / 9", "page 1", "Page 1 of 9", "pagina 1 van 9", "blz. 1"
+_PAGE_TOKEN = re.compile(
+    r"(?<![\w/.\-])\d{1,3}\s*/\s*\d{1,3}(?![\w/.\-])"
+    r"|(?<![\w])(?:page|pagina|blz\.?|p\.)\s*\d{1,3}(?:\s*(?:of|van|/)\s*\d{1,3})?(?![\w])",
+    re.IGNORECASE,
+)
+
+
+def _is_date(token: str) -> bool:
+    return bool(re.search(r"[-/.]\d|[A-Za-z]{3}", token)) and not re.fullmatch(
+        r"[A-Za-z]{0,3}\d[\d .]*", token
+    )
+
+
+def _id_spans(line: str, p: _Patterns) -> list[tuple[int, int]]:
+    """Every ID-shaped token on ``line`` (see ``_ID_TOKEN``): numbers of 5+ digits and dates."""
+    out = [
+        m.span() for m in _ID_TOKEN.finditer(line) if sum(ch.isdigit() for ch in m.group(0)) >= MIN_ID_DIGITS
+    ]
+    out += [m.span() for m in p.value.finditer(line) if m.group(0) != p.marker and _is_date(m.group(0))]
+    return out
+
+
+def _bracketed_ids(line: str, p: _Patterns) -> list[tuple[int, int]]:
+    """Rule 2 (#93): a bracket holding only an ID-shaped token ("(512345)", "( 598431 )", "(12-03-2001)")
+    loses it wherever it stands; "( 20.0 )", "(FEB13003)", "(2021-2022)" and "(30)" are kept."""
+    out = []
+    for m in _BRACKET.finditer(line):
+        inner = m.group(1)
+        start = m.start(1) + len(inner) - len(inner.lstrip())
+        token = inner.strip()
+        if not token:
+            continue
+        spans = _id_spans(token, p)
+        if any(a == 0 and b == len(token) for a, b in spans):
+            out.append((start, start + len(token)))
+    return out
+
+
+def _footer_lines(lines: list[str]) -> set[int]:
+    """Rule 3 (#93): lines holding a page number whose text apart from it stands on 2+ lines (a page header
+    or footer printed on every page)."""
+    keys: dict[str, list[int]] = {}
+    for n, line in enumerate(lines):
+        if _PAGE_TOKEN.search(line):
+            keys.setdefault(" ".join(_PAGE_TOKEN.sub("#", line).split()).casefold(), []).append(n)
+    return {n for found in keys.values() if len(found) >= 2 for n in found}
+
+
+@cache
+def _owner_pattern(owner: str) -> re.Pattern[str] | None:
+    """Rule 1 (#93): the owner's surname (with its particle) as whole words, any case. It covers the full
+    name and "initials surname" ("J.A. Example") too; a one-word name is matched as it is."""
+    if not owner.strip():
+        return None
+    from hub.config import load_config
+    from hub.rules.names import parse
+
+    surname = parse(owner, load_config().names).surname or owner
+    words = r"\s+".join(re.escape(w) for w in surname.split())
+    return re.compile(rf"(?<![\w]){words}(?![\w])", re.IGNORECASE)
 
 
 def _untabbed(lines: list[str], i: int, labels: list[re.Match[str]], p: _Patterns) -> Found:
@@ -336,8 +444,14 @@ def _tabbed(lines: list[str], i: int, labels: list[re.Match[str]], p: _Patterns)
                 raise _Outside(label, [i])  # "Date of birth: 12<TAB>03<TAB>2001" (#83)
             found.append(value)
             continue
-        if column + 1 < len(cells) and column + 1 not in by_cell:
-            next_start, next_end = cells[column + 1]
+        nxt = column + 1
+        if _COLON_ONLY.fullmatch(segment):
+            # "Label:<TAB><TAB>value" (Word tab alignment) is layout 1: with a colon after the label, empty
+            # cells before the value are skipped (user decision, DECISIONS #88); without one they are not
+            while nxt < len(cells) - 1 and not line[cells[nxt][0] : cells[nxt][1]].strip():
+                nxt += 1
+        if nxt < len(cells) and nxt not in by_cell:
+            next_start, next_end = cells[nxt]
             cell = line[next_start:next_end]
             if _only_a_value(cell, p):  # layout 3
                 value = next(iter(_values(cell, p, SAME_LINE_MIN_DIGITS)))
@@ -353,6 +467,11 @@ def _tabbed(lines: list[str], i: int, labels: list[re.Match[str]], p: _Patterns)
             if not _id_shaped(line[start:end], p) or any(start <= a < end for a, _ in found):
                 continue
             key = line[cells[n - 1][0] : cells[n - 1][1]] if n else ""
+            k = n - 1
+            while k > 0 and not line[cells[k][0] : cells[k][1]].strip():
+                k -= 1  # "Ref:<TAB><TAB>598431": a key with a colon across empty cells, as #88 (r9 F4)
+            if n and not key.strip() and line[cells[k][0] : cells[k][1]].rstrip().endswith(":"):
+                key = line[cells[k][0] : cells[k][1]]
             if not (_LETTER.search(key) and not _has_value(key, p) and not p.label.search(key)):
                 raise _Outside(labels[0], [i])
         return {i: found}, i + 1

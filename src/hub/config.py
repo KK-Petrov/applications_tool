@@ -176,6 +176,7 @@ class CoursesConfig(_Section):
     """Course import (docs/02 §10, docs/04 §9)."""
 
     identifier_labels: IdentifierLabels
+    date_labels: IdentifierLabels  # labels only before a colon or a date ("Born: …"; DECISIONS #89)
     month_names: IdentifierLabels
     allowed_types: list[str]
     max_upload_bytes: int = Field(gt=0)
