@@ -87,8 +87,11 @@ body {
   margin-bottom: 16px;
 }
 .today { margin: 0; }
-.zone-form { display: flex; align-items: center; gap: 8px; margin: 0; }
+/* wraps, so the no-JS Apply button never widens the page at 390 px (ui review round 3, W6) */
+.zone-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; min-width: 0; max-width: 100%; }
 .zone-form select {
+  min-width: 0;
+  max-width: 100%;
   min-height: var(--button-min-height);
   padding: 0 12px;
   border: 1px solid var(--color-text-muted);  /* >= 3:1 control boundary (WCAG 1.4.11) */
@@ -101,7 +104,7 @@ body {
 .title-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 h1 { font-size: var(--font-size-h1); font-weight: var(--weight-semibold); margin: 0 0 16px; }
 h2 { font-size: var(--font-size-h2); font-weight: var(--weight-semibold); }
-.actions { display: flex; gap: 8px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }  /* wraps at 320 px (ui review round 4, N2) */
 
 .card {
   background: var(--color-surface);
@@ -506,9 +509,11 @@ fieldset.research-deadline legend { font-weight: var(--weight-semibold); padding
   border-top: 1px solid var(--color-border); padding: 12px 0; margin: 0;
 }
 /* WCAG 2.4.11 (session 2): focus scrolling keeps the focused field above the sticky bar. app.js sets
-   --import-bar-space to the bar's measured height + 8 px; 96 px is the no-JS fallback (one row is 69 px).
+   --import-bar-space to the bar's measured height + 8 px; 105 px is the no-JS fallback: the bar wrapped to two
+   rows (97 px at 768-800 px wide) + 8 px (one row is 69 px; ui review round 3, W1). Without JS a focused
+   textarea can still sit partly under the bar (Chromium scrolls it only to its caret line; docs/03 §4.8).
    Below 760 px a course card can be taller than the space above the bar, so the bar is not sticky there. */
-html:has(#import-actions) { scroll-padding-bottom: var(--import-bar-space, 96px); }
+html:has(#import-actions) { scroll-padding-bottom: var(--import-bar-space, 105px); }
 @media (max-width: 759px) {
   .import-actions { position: static; }
   html:has(#import-actions) { scroll-padding-bottom: 0; }
@@ -523,6 +528,11 @@ html:has(#import-actions) { scroll-padding-bottom: var(--import-bar-space, 96px)
 .course-summary { margin: 0; overflow-wrap: anywhere; }
 .row-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 8px; }
 .row-status .refusal { margin: 0; }
+.row-problems { margin: 0 0 8px; }  /* under the legend: in view with the course's name (F1) */
+.row-problems .refusal { margin: 0; }
+.notice-problem { background: var(--color-danger-bg); color: var(--color-danger); }  /* Check again: what's left */
+.notice-problem a { color: inherit; }
+.course-row { scroll-margin-top: 16px; }
 
 /* Disabled buttons look disabled (ui review, #65): muted colours, never opacity (#55) */
 .button:disabled, .button:disabled:hover {

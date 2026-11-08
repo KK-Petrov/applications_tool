@@ -7,7 +7,10 @@
 - ``false_flags``: correct grades that the app's row-anchored check would flag (must be 0);
 - ``unflagged_wrong_grades``: wrong grades the check would let through (must be 0);
 - ``swap_caught``: the planted swap (a course given another course's grade, printed elsewhere) is flagged;
-- ``identifiers_in_output``: identifiers from ``expected.json`` found in any returned field.
+- ``identifiers_in_output``: identifiers from ``expected.json`` found in any returned field;
+- ``description_mismatches``, ``term_mismatches``, ``institution_mismatches``, ``lecturer_text_mismatches``:
+  each copied exactly as written (the fixture has no descriptions, so "" is the only right one; lecturers
+  as written, titles and order kept; rule 15, DECISIONS #86).
 Lecturer grouping is graded on the stored courses with ``lecturers_graded``.
 """
 
@@ -56,6 +59,11 @@ def grade(rows: list[dict[str, Any]], text: str, expected: dict[str, Any]) -> di
         "credit_mismatches": [],
         "false_flags": [],
         "unflagged_wrong_grades": [],
+        "description_mismatches": [],
+        "term_mismatches": [],
+        "institution_mismatches": [],
+        "lecturer_text_mismatches": [],
+        "rows_returned": rows,  # the evidence, as returned (after the second strip)
     }
     for code, row in got.items():
         want = by_code[code]
@@ -68,6 +76,15 @@ def grade(rows: list[dict[str, Any]], text: str, expected: dict[str, Any]) -> di
                 report["unflagged_wrong_grades"].append(code)
         elif flagged:
             report["false_flags"].append(code)
+        # copied as written (rule 15; #86): the fixture gives no description, so "" is the only right one
+        for key, got_value, want_value in (
+            ("description_mismatches", row.get("description") or "", want.get("description", "")),
+            ("term_mismatches", row.get("term"), want["term"]),
+            ("institution_mismatches", row.get("institution"), want["institution"]),
+            ("lecturer_text_mismatches", list(row.get("lecturers") or []), want["lecturers"]),
+        ):
+            if got_value != want_value:
+                report[key].append({"code": code, "got": got_value, "want": want_value})
         if row.get("credits") is None or abs(float(row["credits"]) - want["credits"]) > 1e-9:
             report["credit_mismatches"].append(
                 {"code": code, "got": row.get("credits"), "want": want["credits"]}
@@ -106,5 +123,6 @@ def lecturers_graded(
 def passed(report: dict[str, Any]) -> bool:
     gated = ("missing_courses", "extra_rows", "name_mismatches", "grade_mismatches", "credit_mismatches",
              "false_flags", "unflagged_wrong_grades", "identifiers_in_output", "lecturer_mismatches",
-             "identifiers_in_data_dir")  # fmt: skip
+             "identifiers_in_data_dir", "description_mismatches", "term_mismatches", "institution_mismatches",
+             "lecturer_text_mismatches")  # fmt: skip
     return all(not report.get(k) for k in gated) and report.get("swap_caught") is True

@@ -2,7 +2,8 @@
 
 Research is the one skill with web tools, so fetched pages could steer the model; nothing about the owner
 may be in reach of that call. New research sends ``{query, url, today}``; re-research sends
-``{programme_id, current, today}`` where ``current`` is the stored programme file and nothing else. Checked
+``{programme_id, current, today}`` where ``current`` holds only the stored programme's
+researched fields (#66). Checked
 on the builders and on what the fake Claude Code actually receives on stdin from both routes.
 """
 

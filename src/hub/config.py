@@ -186,6 +186,8 @@ class CoursesConfig(_Section):
     removed_marker: str
     grade_headings: list[str]  # heading-row cells that name the grade column (row check, #67)
     credit_headings: list[str]  # heading-row cells that name the credits column
+    term_words: list[str]  # "block 1", "semester 2": never a grade, nor are years (#80)
+    term_qualifiers: list[str]  # "1e", "Fall" before a term word: the number after it is no term (#81)
 
 
 class WrongSchoolConfig(_Section):

@@ -102,8 +102,10 @@ IDENTIFIERS = [
     "111222333",  # standalone 9 digits that pass the BSN 11-check
     "N00412345",  # Student ID: (inline, US)
     "03/12/2001",  # Birth date: (inline, US)
+    "2023-004512",  # Diploma register (year-serial; a label since session 3, DECISIONS #76)
+    "123456789",  # Document number (a label since session 3; fails the 11-check, removed by its label)
 ]
-KEEP = ["123456789", "2023-004512", "50952", "FEB12003", "FIN 3010", "2021-2022", "Fall 2023"]
+KEEP = ["987654321", "50952", "FEB12003", "FIN 3010", "2021-2022", "Fall 2023"]
 ROW_SWAP = {"code": "FEB12002", "wrong_grade": "9,5"}  # planted: Marketing given Corporate Finance's grade
 
 
@@ -126,6 +128,7 @@ def header_lines() -> list[tuple[str, list[str] | None]]:
             ],
         ),
         ("Programme: BSc Economics and Business Economics (programme code 50952)", None),
+        ("Archive reference 987654321", None),  # unlabelled, fails the 11-check: kept (#86, ai-output r2 F6)
         ("Geboortedatum:", None),
         ("12 maart 2001", None),
         ("Diploma register 2023-004512 - Document number 123456789", None),

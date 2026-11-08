@@ -107,10 +107,12 @@ courses:                          # course import (docs/02 §10, docs/04 §9; DE
          student identification number, "student #", id number, matriculation number, emplid, uin, banner id,
          campus id, social security no., born,
          registration number, date of birth, birth date, birthdate, dob, d.o.b., national id, national id number,
-         national identification number, citizen service number, social security number, ssn, passport number, bsn]
+         national identification number, citizen service number, social security number, ssn, passport number, bsn,
+         diploma register, diploma register number, document number]   # last three: DECISIONS #76
     nl: [studentnummer, studentnr, student nummer, collegekaartnummer, geboortedatum, geb. datum, geb.datum,
          geboren op, geboren, burgerservicenummer,
-         sofinummer, sofi-nummer, persoonsnummer, paspoortnummer, inschrijfnummer, bsn]
+         sofinummer, sofi-nummer, persoonsnummer, paspoortnummer, inschrijfnummer, bsn,
+         diplomaregisternummer, documentnummer]
   month_names:                    # for dates such as "12 March 2001" or "12 maart 2001"
     en: [january, february, march, april, may, june, july, august, september, october, november, december,
          jan, feb, mar, apr, jun, jul, aug, sep, sept, oct, nov, dec]
@@ -122,9 +124,13 @@ courses:                          # course import (docs/02 §10, docs/04 §9; DE
   min_pdf_text_per_page: 100      # average non-space characters per page below this → "scanned", refused
   letter_grade_order: [A+, A, A-, B+, B, B-, C+, C, C-, D+, D, D-, F]   # best first; Pass and unknown come last
   numeric_grade_scale: 10         # numeric grades rank on this scale (Dutch 1–10); larger numbers on 100
-  removed_marker: "[removed]"
+  removed_marker: "[removed]"    # replaces each identifier in the stored and sent text
   grade_headings: [grade, grades, result, cijfer, resultaat, beoordeling]   # a table heading row: the grade column
-  credit_headings: [credits, credit, ects, ec, studiepunten, units, credit hours, hours]   # and the credits column     # replaces each identifier in the stored and sent text
+  credit_headings: [credits, credit, ects, ec, studiepunten, units, credit hours, hours]   # and the credits column
+  term_words: [block, blok, period, periode, semester, sem, quarter, kwartaal, kw, q, s, trimester, term]   # "<word> N" on a row is
+                                  # part of its term, never its grade (with years; DECISIONS #80; q, s as #83)
+  term_qualifiers: [1e, 2e, 3e, 4e, 1ste, 2de, 1st, 2nd, 3rd, 4th, first, second, third, fourth, fall, spring,
+                    autumn, winter, summer, najaar, voorjaar]   # "Fall semester 8": the 8 is the grade unless another follows (#81, #82)
 
 wrong_school:
   own_background_terms: [RSM, Erasmus, Rotterdam, UVA, Virginia, McIntire]   # source: user's background

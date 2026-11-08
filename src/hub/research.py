@@ -46,6 +46,7 @@ from hub.models.programme import (
 from hub.programme_form import slugify, unique_slug
 
 NO_OFFICIAL_SOURCE = "No official source found"
+BY_HAND = {"official_domains", "letters_note"}  # rows "Accept all changes" never ticks (#68, #80)
 RESEARCHED_NOTE = "Researched, not checked"  # docs/02 §3 badge reason
 SAVE_NEEDS_DEADLINE = "Save needs at least one deadline with a time zone and an official source URL."
 MISSING_SOURCE = "missing; every filled field needs an official source"
@@ -518,9 +519,11 @@ class Change:
 
 def accept_all_ids(changes: Sequence[Change]) -> list[str]:
     """The rows "Accept all changes" ticks, in comparison order (DECISIONS #68): every row that can be
-    accepted (new or changed, source official), except ``official_domains``, which the user confirms by hand.
-    Never a refused, kept or unchanged row. Ticking is not saving: apply re-checks everything."""
-    return [c.id for c in changes if c.acceptable and c.id != "official_domains"]
+    accepted (new or changed, source official), except ``official_domains``, which the user confirms by
+    hand, and ``letters_note``, which may be the owner's own text (kept out of the payload, #66, so any
+    finding shows as a change; ticked by hand; DECISIONS #80). Never a refused, kept or unchanged row.
+    Ticking is not saving: apply re-checks everything."""
+    return [c.id for c in changes if c.acceptable and c.id not in BY_HAND]
 
 
 def selection_text(changes: Sequence[Change], ticked: set[str]) -> str:
@@ -867,8 +870,11 @@ def _apply_field(p: Programme, change: Change, prefix: str, item_id: str) -> Non
             stored.name, stored.description = item["name"], item["description"]
     elif prefix == "fee":
         p.fee.amount, p.fee.currency = item["amount"], item["currency"] or p.fee.currency
-        if item["note"]:
-            p.fee.note = item["note"]
+        # the note is the owner's (kept out of the payload, #66) and isn't shown in the row, so research never
+        # changes it (as requirement notes, #67); only the app's own placeholder goes once a fee is found
+        # (ai-output review round 2, F3; DECISIONS #80)
+        if p.fee.note == NO_OFFICIAL_SOURCE and p.fee.amount is not None:
+            p.fee.note = None
     elif prefix == "ai_policy":
         p.ai_policy.text, p.ai_policy.source_url = item["value"], item["source_url"]
     elif prefix == "curriculum_summary":
@@ -877,3 +883,11 @@ def _apply_field(p: Programme, change: Change, prefix: str, item_id: str) -> Non
         p.aliases = list(item["value"])
     else:
         setattr(p, prefix, item["value"])
+        # as for the fee (#80): the app's own placeholder goes once letters are found, the owner's note never
+        # (data-integrity review round 5, F5; DECISIONS #81)
+        if (
+            prefix == "letters_required"
+            and item["value"] is not None
+            and p.letters_note == NO_OFFICIAL_SOURCE
+        ):
+            p.letters_note = None

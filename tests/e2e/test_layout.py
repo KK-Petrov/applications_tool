@@ -29,3 +29,51 @@ def test_sidebar_stacks_on_narrow_screens(page: Page, live_server: str) -> None:
     assert round(sidebar["width"]) == 760
     assert main["y"] >= sidebar["y"] + sidebar["height"] - 1
     assert page.evaluate("document.documentElement.scrollWidth") <= 760
+
+
+NO_JS_PAGES = [
+    "/",
+    "/courses",
+    "/courses/import",
+    "/recommenders",
+    "/recommenders/new",
+    "/programmes/new",
+    "/programmes/princeton-mfin",
+    "/usage",  # ui review round 5 note: the 320 px guard reuses this list
+    "/settings",
+]
+
+
+def test_without_js_no_page_scrolls_sideways_at_390px(browser, live_server: str) -> None:  # noqa: ANN001
+    """ui review round 3, W6: without JS the header's zone form shows an Apply button (<noscript>), which
+    pushed every page 21 px wide at 390 px. The form wraps instead."""
+    context = browser.new_context(java_script_enabled=False, viewport={"width": 390, "height": 844})
+    page = context.new_page()
+    try:
+        wide = []
+        for route in NO_JS_PAGES:
+            page.goto(live_server + route, wait_until="load")  # without JS, DOMContentLoaded can beat the CSS
+            width = page.evaluate("document.documentElement.scrollWidth")
+            if width > 390:
+                wide.append(f"{route}: {width}")
+        assert wide == []
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize("js", [True, False])
+def test_no_page_scrolls_sideways_at_320px(browser, live_server: str, js: bool) -> None:  # noqa: ANN001
+    """ui review round 4, N2: 320 CSS px is the WCAG 1.4.10 reflow width; the Recommenders toolbar (four
+    buttons since 2c) did not wrap."""
+    context = browser.new_context(java_script_enabled=js, viewport={"width": 320, "height": 800})
+    page = context.new_page()
+    try:
+        wide = []
+        for route in NO_JS_PAGES:
+            page.goto(live_server + route, wait_until="load")
+            width = page.evaluate("document.documentElement.scrollWidth")
+            if width > 320:
+                wide.append(f"{route}: {width}")
+        assert wide == []
+    finally:
+        context.close()

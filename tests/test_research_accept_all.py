@@ -223,3 +223,84 @@ def test_a_tampered_proposal_on_select_never_ticks_a_refused_row(
     res = client.post(f"/programmes/{PID}/research/select", data=[*fields, ("select", "all")])
     assert "deadline:main" not in _ticked(res.text)
     assert data_snapshot(data_dir) == before
+
+
+# ---- ui review round 3, W4 and W5 (session 3, DECISIONS #75) ---
+
+
+def test_the_accept_all_button_is_described_by_its_hint(compared: str) -> None:
+    """W5: the rule "never the official domains or a refused row" is heard on the button."""
+    button = re.search(r'<button[^>]*value="all"[^>]*>', compared).group(0)
+    assert 'aria-describedby="selection-hint"' in button
+    assert 'id="selection-hint"' in compared
+
+
+def test_research_without_changes_says_so_and_offers_no_selection(
+    client: FormClient, config, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, calls: Path
+) -> None:
+    """W4: research that matches the stored file shows "Research found no changes." instead of a
+    "0 of 0 changes selected" bar with a disabled Accept all."""
+    monkeypatch.setenv(
+        "FAKE_CLAUDE_RECORDING", str(write_recording(tmp_path, mirror_output(_programme(config), BCF)))
+    )
+    res = client.post(f"/programmes/{PID}/research", data={})
+    assert res.status_code == 200
+    assert "Research found no changes." in res.text
+    assert "selection-count" not in res.text and "selection-hint" not in res.text
+    assert "0 of 0" not in res.text
+    assert 'data-announce="Research finished. Research found no changes."' in res.text
+
+
+# ---- ai-output review round 2, F3 (session 3, DECISIONS #80) ---
+
+
+def _fee_change(config, owner_note: str | None):
+    """Stored fee with the owner's note; research finds a new amount with its own note."""
+    programme = _programme(config)
+    programme.fee.amount, programme.fee.currency, programme.fee.note = 100, "USD", owner_note
+    out = mirror_output(programme, BCF)
+    out["fee"] = {"amount": 125, "currency": "USD", "note": "Non-refundable", "source_url": BCF}
+    return programme, out
+
+
+def test_an_accepted_fee_change_keeps_the_owners_fee_note(config) -> None:
+    """F3: accepting the Fee row replaced the owner's note, which the comparison never showed (#66, #67:
+    research never changes the owner's notes)."""
+    programme, out = _fee_change(config, "OWNER: fee waiver requested by email on 1 Oct")
+    changed = research.apply(programme, out, ["princeton.edu"], {"fee"}, TODAY, SHARED)
+    assert (changed.fee.amount, changed.fee.note) == (125, "OWNER: fee waiver requested by email on 1 Oct")
+
+
+def test_a_found_fee_clears_the_apps_own_no_source_note(config) -> None:
+    programme, out = _fee_change(config, "No official source found")
+    programme.fee.amount = None
+    changed = research.apply(programme, out, ["princeton.edu"], {"fee"}, TODAY, SHARED)
+    assert changed.fee.amount == 125 and changed.fee.note != "No official source found"
+
+
+def test_accept_all_never_ticks_the_letters_note(config) -> None:
+    """F3: letters_note may be the owner's own text (kept out of the payload, #66), so any research finding
+    shows as a change; Accept all leaves it for the user to tick by hand, like the official domains."""
+    programme = _programme(config)
+    out = mirror_output(programme, BCF)
+    out["letters_note"] = sourced("Two letters, one academic.", BCF)
+    changes = research.compare(programme, out, ["princeton.edu"], SHARED)
+    assert any(c.id == "letters_note" and c.acceptable for c in changes)
+    assert "letters_note" not in research.accept_all_ids(changes)
+
+
+# ---- data-integrity review round 5, F5 and F6 (session 3, DECISIONS #81) ----------------------------------
+
+
+def test_found_letters_clear_the_apps_own_no_source_note(config) -> None:
+    programme = _programme(config)
+    programme.letters_required, programme.letters_note = None, "No official source found"
+    out = mirror_output(programme, BCF)
+    out["letters_required"] = sourced(3, BCF)
+    changed = research.apply(programme, out, ["princeton.edu"], {"letters_required"}, TODAY, SHARED)
+    assert changed.letters_required == 3 and changed.letters_note != "No official source found"
+
+
+def test_the_accept_all_hint_names_the_letters_note(compared: str) -> None:
+    hint = re.search(r'<p class="hint" id="selection-hint">(.*?)</p>', compared, re.S).group(1)
+    assert "letters note" in hint.lower()

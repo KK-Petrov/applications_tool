@@ -9,6 +9,7 @@ S2034567
 Studentnummer	Geboortedatum	Opleiding
 598431	12-03-2001	BSc Economie en Bedrijfseconomie
 Programme: BSc Economics and Business Economics (programme code 50952)
+Archive reference 987654321
 Geboortedatum:
 12 maart 2001
 Diploma register 2023-004512 - Document number 123456789

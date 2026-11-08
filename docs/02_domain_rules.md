@@ -198,10 +198,35 @@ Whitfield.
 ## 10. Identifiers and grades in imported documents (Phase 2c, DECISIONS #44)
 Rule 13: both checks run in Python, never in the model.
 0. **Invisible characters first** (DECISIONS #69): before any label or value matching, every Unicode default-ignorable code point (#74: also the combining grapheme joiner, variation selectors, Hangul fillers) and format character (category Cf: zero-width space, zero-width (non-)joiner, byte-order mark, soft hyphen, direction marks …) is removed and every space character (category Zs: no-break, narrow no-break, thin, figure …) becomes a plain space, so neither can hide a label ("Student\u200Bnumber") or split a value ("51\u200B2345"). The normalised text is what is shown, sent and stored; the original file name is normalised the same way.
-1. **Identifier stripping is label-anchored and fails closed** (`src/hub/courses/identifiers.py`; DECISIONS #64,
-   #65). A number or date is removed only when an identifier label (`courses.identifier_labels`, English and Dutch:
+1. **Identifier stripping is label-anchored, known layouts only, and fails closed** (`src/hub/courses/identifiers.py`;
+   DECISIONS #64, #65, #84). **Known layouts only (user decision, #84):** a label's value is removed only in one
+   of four layouts; any identifier label outside them stops the import with "The document mentions "<label>" on
+   line <n>, but not in a layout the app can read safely, so it can't remove its value whole. Nothing was sent
+   to Claude. Paste the text, or put the identifier as "Label: value" on its own line." The four layouts:
+   (1) **"Label: value"**, on a line or in a table cell: each label directly followed (only separators: spaces,
+   `: ; , . - – # = (`) by its own value, taken whole; several pairs may share a line ("Diploma register
+   2023-004512 - Document number 123456789"); an ID-shaped value before the first label is outside;
+   (2) **label, value on the next line**: a line of one or more labels with no value on it (other words allowed),
+   then the next non-empty line, without tabs and without a label, starting with their values in order
+   ("Student ID" / "S2034567"; a PDF heading row "Studentnummer Geboortedatum Opleiding" / "598431 12-03-2001
+   BSc …", the tabbed layout 4 with its tabs lost); (3) **label cell, value cell**: a cell holding one label and
+   nothing else, the next cell holding the value alone (words after it allowed, none before);
+   (4) **heading row, value row**: a tabbed row of headings, at most one label per cell and no value anywhere on
+   it, then the next non-empty row, also tabbed and without a label, each label's value alone in its column, not
+   going on in the next cell; a cell no heading heads holds nothing ID-shaped. Words between a label and its value
+   ("Student identification number or code (if available): 512345"), two labels in one cell, a heading cell
+   beside a "Label: value" cell, a label line followed by a table row or another label line, and a value split
+   across cells are all outside. Edges inside the layouts (#87): after a layout 2 or 4 value row, the rows that
+   follow are read on (layout 4: tabbed rows with digits and no label, past blank lines, until a heading row;
+   layout 2: the lines right after it with no blank line, tab or label), and an ID-shaped value in a label's
+   column, or leading such a line, stops (a second enrolment, a table of earlier diplomas); in a layout 1 or 3
+   row, an ID-shaped cell must be a taken value or the value cell of another (non-label) key cell
+   ("Ref<TAB>598431"), else it stops; layout 2's label line holds no value at all ("4521 Student number"
+   stops); a bracket holding a digit or the marker is the label's value, never its abbreviation, so
+   "Student number (512345)" reads the same at Send. The rules below describe how a value is found and taken whole inside these
+   layouts. A number or date is removed only when an identifier label (`courses.identifier_labels`, English and Dutch:
    student number / nr. / ID / identification number, matriculation or registration number, date of birth, DOB,
-   SSN, BSN, studentnummer, stud.nr., geboortedatum, geboren (op), burgerservicenummer, …) anchors it:
+   SSN, BSN, diploma register (number), document number, studentnummer, stud.nr., geboortedatum, geboren (op), burgerservicenummer, diplomaregisternummer, documentnummer, …) anchors it:
    - **same line:** the first number of 2+ digits (a letter prefix and digit groups such as "123 456 782" allowed),
      date (numeric either way round; with a month name in English or Dutch, also abbreviated and with a 2-digit or
      'YY year: 12-MAR-01, 2001-Mar-12, 12 maart '01; with an ordinal "12th"/"3rd of"; a Roman month 12.III.2001;
@@ -211,12 +236,11 @@ Rule 13: both checks run in Python, never in the model.
      the next non-empty line ("Student ID" / "S2034567", or a short "4123"); anything else first stops the import;
    - **table label row, then value row:** a tab-separated pair is matched column by column ("Studentnummer
      Opleiding  Geboortedatum" / "598431  56966 BSc …  12-03-2001": the middle column's programme code is kept);
-     without tabs (a PDF row) the k values must lead the next line, in order. Each such value must be taken whole as on the label's line (no month word, Roman month or 'YY right after it, and no digit after the last one), and nothing ID-shaped (5+ digits, or a date) may remain on the line after the labels' values; otherwise the import stops: the app can't tell which is the identifier (DECISIONS #73, #74). A bracket after a label belongs to it only without digits ("(BSN)"). In fields Claude returns, a value not taken whole is removed with every other candidate after its label (#74). At Read the marker "[removed]" is never a value; at Send it may fill a label's slot but never hides a number after it (#73).
+     without tabs (a PDF row) the k values must lead the next line, in order. Each such value must be taken whole as on the label's line (no month word, Roman month or 'YY right after it, and no digit after the last one), and nothing ID-shaped (5+ digits, or a date) may remain on the line after the labels' values; otherwise the import stops: the app can't tell which is the identifier (DECISIONS #73, #74). A bracket after a label belongs to it only without digits ("(BSN)"). In fields Claude returns, a value not taken whole is removed with every other candidate after its label (#74). At Read the marker "[removed]" is never a value; at Send it may fill a label's slot but never hides a number after it (#73). A tabbed value row stops the import if a cell no label heads (past the label row's last cell, or under a blank heading cell) holds an ID-shaped token (5+ digits or a date; at Send also the marker): no heading says what it is (DECISIONS #77, #78). In a key/value row the next cell is the value cell only if it holds the value alone (spaces and punctuation around it) and doesn't start with another label; otherwise the row is a label row and the value is on the next row (#78, #81, #82). Two labels in one cell stop the import, in a key/value row and in a label row (a merged Word header "Student number / Date of birth") (#82, #83). The value cell may have words after the value (no digit, no label) but none before it (#83). A short value (under 5 digits, no date) whose next cell goes on with a digit, month word, Roman month or 'YY ("12<TAB>03<TAB>2001") stops the import (#83). A label row without a heading cell followed by a row with words in its other cells (a course row) is not its value row: the import stops (#82). The Save step re-strips the text as Send does and refuses (409, "Nothing was saved: the text changed after it was checked. Read the document again.") a text that no longer strips (#82, #83); a label row may keep nothing ID-shaped beside its labels' removed values, otherwise the import stops (#81). A heading is a cell with a letter; a column headed by an identifier label is an identifier column (#81). In fields Claude returns, a value row, a label row or a key/value cell that can't be resolved loses every candidate (#78, #81). A year-serial register number (4 digits, a hyphen, 5+ digits: "2023-004512") is one value; "2021-2022" and "5123-45" are not (DECISIONS #76).
    **Fail closed:** the value must be taken whole: a digit just before it; just after it, past separators, a digit,
    a month word, a Roman month or 'YY (an unknown format such as "12/3 2001"); another number later in its segment
-   ("512345, previously 498765"); or a label whose value can't be found stops the import with "The document
-   mentions "<label>" on line <n>, but the app could not find its value to remove whole. Nothing was sent to
-   Claude. …"; nothing is sent to the model or written. A standalone 9-digit number is treated as a BSN, and
+   ("512345, previously 498765"); or a label whose value can't be found stops the import with the message above
+   (#84); nothing is sent to the model or written. A standalone 9-digit number is treated as a BSN, and
    removed, only if it passes the 11-check; a US SSN shape (123-45-6789) is removed even without a label. Course codes, grades, credits and years are kept. Each removed value
    becomes `courses.removed_marker` ("[removed]"). Stripping runs on the text when it is read, again (strictly) when the user presses Send to Claude after reviewing it (DECISIONS #70; a label followed by the marker counts as already removed, so stripping stripped text changes nothing), and on every returned field (there, an unresolved label is left alone). The original
    file's name (stored in the source header) loses every date pattern and every run of 6 or more digits, and is
@@ -226,7 +250,7 @@ Rule 13: both checks run in Python, never in the model.
    the code is on no line, its name on word boundaries, so "Mathematics I" doesn't match "Mathematics II"). The
    grade is accepted only if its exact string stands on that row as a whole value **outside the row's own name,
    code, term and one credits value** ("8" doesn't match "8,5"; "A" doesn't match "A-", "A+" or an initial "A.";
-   a grade equal to the credits "4", the year "2021" or "block 1" is not found; a real grade "6" with credits "6"
+   a grade equal to the credits "4", the year "2021" or "block 1" is not found (after the row's own name, code and term, years, year ranges whose second year follows the first, and "<term word> N" from `courses.term_words` are taken out of the row even when the model returned no term, DECISIONS #80, #81; dates on the row are taken out first; after a qualifier from `courses.term_qualifiers` ("1e", "Fall"), and after a one-letter term word ("Q 1", "S 2"), the number is the grade unless another grade-shaped value comes between it and the credits ("Fall semester 2 7 4": 2 is the term number; #82, #83); with no credits returned the row's last value stands in for them, so "Fall semester 8 4 A" (an ECTS letter after the credits) is then read as a term number (known limit); a term word after an apostrophe ("Master's 9") is no term word (#83); word grades (Pass, V, VR) are not counted as values (known limit, #83); known limits: a bare "semester 8" is read as the term, so a grade 8 right after it is flagged, and with no credits returned a wrong grade equal to the printed credits is found); a real grade "6" with credits "6"
    still is, since the row then holds 6 twice). The credits must stand on the row too, compared as numbers ("3",
    "3.0", "3.00", "7,5" all equal 3 or 7.5). With a term, only rows that also hold it count ("Term not found on this
    course's row" otherwise: a course taken twice has two rows). In a tab table under a heading row naming a grade or

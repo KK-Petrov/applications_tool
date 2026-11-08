@@ -85,3 +85,39 @@ def test_a_grade_equal_to_the_credits_is_flagged_now() -> None:
     rows[1]["grade"] = "6"  # Microeconomics' credits: the row check takes them out first (review fix)
     report = course_graders.grade(rows, TEXT, EXPECTED)
     assert report["grade_mismatches"] and not report["unflagged_wrong_grades"]
+
+
+# ---- ai-output review round 2, F2 (session 3, DECISIONS #86) ---
+
+
+def _rows_with(n: int, **changes: object) -> list[dict]:
+    rows = [{**r, "description": ""} for r in EXPECTED["courses"]]
+    rows[n] = {**rows[n], **changes}
+    return rows
+
+
+@pytest.mark.parametrize(
+    ("changes", "key"),
+    [
+        ({"description": "An invented description."}, "description_mismatches"),
+        ({"term": "2021-2022"}, "term_mismatches"),
+        ({"institution": "Example School"}, "institution_mismatches"),
+        ({"lecturers": ["A. van den Berg", "Dr. J. Smit"]}, "lecturer_text_mismatches"),
+        ({"lecturers": ["Dr. J. Smit", "Prof. dr. A. van den Berg"]}, "lecturer_text_mismatches"),
+    ],
+)
+def test_the_grader_catches_text_not_as_written(changes: dict, key: str) -> None:
+    report = course_graders.grade(_rows_with(0, **changes), TEXT, EXPECTED)
+    assert report[key], report
+    assert not course_graders.passed({**report, "lecturer_mismatches": [], "identifiers_in_data_dir": []})
+
+
+def test_the_grader_passes_the_rows_as_written() -> None:
+    report = course_graders.grade(_rows_with(0), TEXT, EXPECTED)
+    for key in (
+        "description_mismatches",
+        "term_mismatches",
+        "institution_mismatches",
+        "lecturer_text_mismatches",
+    ):
+        assert report[key] == [], (key, report[key])

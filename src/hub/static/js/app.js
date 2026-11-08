@@ -534,7 +534,15 @@
       if (!target.hasAttribute("tabindex")) {
         target.setAttribute("tabindex", "-1");
       }
-      target.focus();
+      if (target.matches("fieldset.course-row")) {
+        // A course card can be taller than the space above the actions bar; plain focus() would scroll its
+        // lower part into view and hide the course's name and its problem (ui review round 3, F1). Show the
+        // card from its top instead: the legend and the problems stand there.
+        target.focus({ preventScroll: true });
+        target.scrollIntoView({ block: "start" });
+      } else {
+        target.focus();
+      }
     }
     if (main.dataset.announce) {
       window.setTimeout(function () { announce(main.dataset.announce); }, 50);

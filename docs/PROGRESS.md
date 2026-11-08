@@ -8,19 +8,45 @@ Estimated sessions are the kit's recommendation. `/phase` and `/resume` add 1 to
 | 1 Programmes and dashboard | Done with known issues | 1–2 | 1 | medium | 2026-11-05 | C-1-01 to C-1-05 PASS (20/20 tz cases, axe 0 serious); C-1-06 confirmed by user; 369 tests, fast 25 s; both reviewers READY | low items in Phase notes |
 | 2a Recommender sheet | Done with known issues | 1 | 1 | medium | 2026-11-06 | C-2a-01 PASS (US-6 to US-9, 14 e2e); C-2a-02 PASS (40 cases, priorities 1–8); C-2a-03 PASS (115–290 ms worst warm load, limit 1000); You check confirmed by user; 510 tests, test-fast 26.6 → ~14 s with xdist (8 workers); data-integrity READY, ui READY | minor items in Phase notes |
 | 2b Recommendation email generator | Done with known issues | 1–2 | 1 | high | 2026-11-06 | C-2b-01 to C-2b-04 PASS (final eval, 10 cases: schema/fact/form/unsupported 0, tuning 1–7 and held-out 8–10 both 0; calibration 3/3; $1.48); C-2b-05 PASS (47 tests); C-2b-06 confirmed by user; lockdown proved live (#47); 707+1 tests, test-fast 17.5 s; data-integrity READY, ai-output READY, ui READY at round 8 (each FAIL fixed with a guard test, #53–#55, #57, #58); Phase 1 fix: unverified badges on the dashboard alert and tile (#58) | No-JS refresh re-posts a failed generation (Phase 5 PRG); emails reuse openings (Phase 4a, C-4a-04, #59); stored warnings re-announced (role=alert); back-forward-cache busy reset and Save-and-generate double submit not test-guarded; deadline-kind alert untested; long notes make tall Data cells, a URL note makes the programmes table scroll inside its box; programme page scrolls 7 px at 390 px (Phase 1) |
-| 2c Programme research and course import | In progress | 2 | 2 | high | 2026-11-06 | All parts built: C-5-01 PASS live (2/2), C-2c-02 PASS, C-2c-03 PASS (fast + live 3/3); session 2: #68–#74 (Accept all changes, invisible characters, review before Send, flake cause, 2.4.11, identifier rule, data-integrity r3 fixes), C-2c-03 live rerun 3/3; reviews: data-integrity r3 NOT READY → fixed (r4 pending), ui r3 NOT READY (F1 open), ai-output r2 pending; full suite 1206 + 1 | see hand-off 2026-11-07, end of session 2 |
+| 2c Programme research and course import | In progress | 2 | 3 | high | 2026-11-06 | All parts built: C-5-01 PASS live (2/2, evidence predates the F9 skill wording), C-2c-02 PASS, C-2c-03 PASS (fast + live 3/3 on the current fixture and stricter grader, #86); session 3: #75–#87 incl. known-layouts-only identifier stripping (#84); reviews: ui r5 READY (+ #85), data-integrity r8 NOT READY → fixed (#87; converging), ai-output r3 running at hand-off; full suite 1513 + 1 | see hand-off 2026-11-07, end of session 3 |
 | 3 Reminders, calendar and digest | Not started | 1–2 | 0 | high | | | |
-| 4a Biography bank, essays, CVs and exact checks | Not started | 1–2 | 0 | high | | Scope addition #59: grounded /rec-email (biography selection, course-to-programme link), C-4a-04 | |
+| 4a Biography bank, essays, CVs and exact checks | Not started | 1–2 | 0 | high | | Scope addition #59: grounded /rec-email (biography selection, course-to-programme link), C-4a-04; scope addition #86 (ai-output 2c r2 F4): email eval cases with 2–3 linked courses (one without a description, one manual-description case (c)), tuning + held-out, one eval-email run | |
 | 4b AI essay and CV evaluator | Not started | 1–2 | 0 | high | | | |
 | 5 Polish | Not started | 1–2 | 0 | medium | | | |
 
 Status values: Not started · In progress · Done · Done with known issues
 
 ## Calibration
-Actual ÷ estimated sessions over finished phases: 0.67 (Phase 0: 1 ÷ 1; Phase 1: 1 ÷ 2; Phase 2a: 1 ÷ 1; Phase 2b: 1 ÷ 2; total 4 ÷ 6). Below 1.3, so the remaining estimates stand. Phase 2c (in progress) is at 2 of 2 estimated sessions on 2026-11-07, its second session. (updated by /phase and /resume)
+Actual ÷ estimated sessions over finished phases: 0.67 (Phase 0: 1 ÷ 1; Phase 1: 1 ÷ 2; Phase 2a: 1 ÷ 1; Phase 2b: 1 ÷ 2; total 4 ÷ 6). Below 1.3, so the remaining estimates stand. Phase 2c (in progress) is at 3 of 2 estimated sessions on 2026-11-07, its third session (1.5 for this phase alone; it counts once it is finished). (updated by /phase and /resume)
 
 ## Hand-offs
 <!-- /handoff writes a section here: Done / Half-done / Left / Open questions / Next first step -->
+
+### Phase 2c hand-off (2026-11-07, end of session 3)
+State at hand-off: full `uv run python tasks.py test` 1513 passed + 1 serial (75 s, exit 0); `test-fast` 1361 passed (29.8 s); lint clean; criteria guard OK (39 match the lock). Nothing half-written. Supersedes the "Left" of the session-2 hand-off below. Review reports in `reports/review_2c_*.md` are saved by the main session (reviewers stay read-only, user decision).
+
+- **Done** (tested; uncommitted working tree; DECISIONS #75–#87):
+  - **UI:** r3 F1 Check again (announced notice + `#row-N` link, refusals under the legend, `aria-describedby` on fields and blocked Accept) and W1–W6 (#75); r4 N1/N2 (#79); clean Check again focuses its notice (#85, user decision); **ui r5 READY** (`review_2c_ui_r5.md`).
+  - **Identifiers** (`src/hub/courses/identifiers.py`, docs/02 §10): labels incl. diploma register / document number (#76), then **known layouts only (#84, user decision)**: "Label: value" (several pairs per line, in a cell too), labels then values on the next line (also a tab-less PDF heading row), label cell + value cell, tabbed heading row + value row; everything else near a label stops ("… Paste the text, or put the identifier as \"Label: value\" on its own line."). Edges fixed after the confirming round (#87): further value rows, ID cells beside a pair, the bracket form at Send, a short value before a lone label, month-name dates. Save re-strips as Send and refuses an edited text (#82, #83).
+  - **Grade check** (`importer.py`): term tokens (#80–#83; config `courses.term_words`, `courses.term_qualifiers`).
+  - **As written (#86, #87; rule 15):** description, institution and lecturers must stand in the document as written (whole words; lecturers on the course's lines plus continuation lines; never only the tail of a longer name after a title, initial or particle). The grader gates description, term, institution and lecturers exactly and records `rows_returned`.
+  - **Eval set:** fixture gained "Archive reference 987654321" (unlabelled, kept) and regenerated; the live test runs the Send re-strip. **Live C-2c-03 rerun on the current fixture and grader: 3/3, 28/28 accepted, every mismatch list empty, 0 identifiers sent/output/stored, $0.30** (`reports/live_courses.json`); the fixture strips identically after #87.
+  - **Research:** fee note never changed, letters placeholder cleared, letters note never ticked by Accept all (#80, #81); research SKILL.md: null value has null `source_url` and exactly "No official source found"; `ai_policy` in full or null (F9, #86).
+  - Phase 4a row in this file: linked-course email eval cases (ai-output r2 F4, #86).
+- **Half-done:** nothing in code. **ai-output review round 3 was running at hand-off** (read-only; prompt scope: r2 findings, skills after F9, graders/eval set, #86 as-written checks, whether C-5-01 needs a rerun). If its report arrived after this was written it is in `reports/review_2c_ai-output_r3.md`; otherwise rerun it.
+- **Left:**
+  1. ai-output round 3 report (save, or rerun) and fix any FAIL test-first.
+  2. ui round 6, short: #85 notice focus and the new invalid description/lecturer textareas (#86).
+  3. Possibly data-integrity round 9 scoped to #87 (open question 4).
+  4. End of phase: acceptance table (C-5-01, C-2c-02, C-2c-03 + earlier criteria), You-check list, PROGRESS Done row + Phase notes, commit message.
+- **Open questions (for you):**
+  1. **F7 (r8, MEDIUM, class accepted in #67):** a .docx soft line break inside a table cell ("Student⏎number") hides a label, so its value is sent. Recommended: render a soft break inside a table cell as a space (small, stricter).
+  2. **Institution fragments (r8 F5 rest, LOW):** "Example" or the other school's name on a course still pass the app's as-written check (the grader checks exactly). Recommended: accept as a known limit (fix needs section-aware matching).
+  3. **C-5-01 rerun** (~$0.5): the evidence predates the research skill's F9 wording. Recommended: decide after the ai-output r3 verdict on it.
+  4. **Data-integrity round 9** scoped to #87: recommended, one short round.
+  5. **Known limits to confirm** (documented in 02 §10.2): credits not returned (a wrong grade equal to the printed credits; an ECTS letter after the credits read as a term number); word grades (Pass, V, VR) not counted; a label whose value is missing takes the next row's course code; bare "semester 8"; the over-stops listed in `review_2c_data-integrity_r8.md` ("Over-stopping"), e.g. Word tab alignment "Student number:<TAB><TAB>598431" and bilingual labels.
+  6. **Identifier scope (carried over):** add "Document nr./no./nummer", "passport no.", "ID card number", "matrikelnummer"; match "born"/"geboren" only as "born on/in" (a lecturer named Born stops an import). Recommended: yes.
+- **Next first step:** `/resume 2c`; check for `reports/review_2c_ai-output_r3.md` (rerun the ai-output reviewer if missing); answer the open questions; run `uv run python tasks.py test`.
 
 ### Phase 2c hand-off (2026-11-07, end of session 2, ~70% context)
 State at hand-off: full `uv run python tasks.py test` 1206 passed + 1 serial (58 s), `test-fast` 1068 passed (27.8 s, after #74), lint clean, criteria guard OK (39 match the lock). Nothing half-written. Supersedes the "Left" of the 2026-11-07 hand-off below. Actual sessions: 2 (est. 2); the rate-limit pause in this session did not add one (user).

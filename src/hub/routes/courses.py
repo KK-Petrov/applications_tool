@@ -37,6 +37,8 @@ IMPORT_PAGE = Page("recommenders", "/courses/import", "Recommenders", "Import co
 PROFESSORS_PAGE = Page("recommenders", "/courses/import/professors", "Recommenders", "Create professors")
 ROW_TEXT = ("name", "code", "institution", "grade", "credits", "term", "lecturers", "description")
 NOTHING_GIVEN = "Choose a file or paste the text of your transcript. Nothing was read."
+# the Save step found the hidden text no longer strips: it was changed after Send (DECISIONS #82, #83)
+SAVE_TEXT_CHANGED = "Nothing was saved: the text changed after it was checked. Read the document again."
 PASTED = "pasted text"
 
 
@@ -68,6 +70,7 @@ def build_router(web: Web) -> APIRouter:
         extra.setdefault("error", None)
         extra.setdefault("rows", None)
         extra.setdefault("review", None)
+        extra.setdefault("focus_notice", False)
         return web.render(
             request, "pages/courses_import.html", IMPORT_PAGE, snapshot, status_code=status, **extra
         )
@@ -188,7 +191,20 @@ def build_router(web: Web) -> APIRouter:
             twin = next((j for j in range(n) if importer.same_course(rows[j], row)), None)
             if twin is not None and not saved:
                 problems.append(f"Same course as row {twin + 1}")  # the document lists it twice
-            out.append({**row, "saved": saved, "problems": problems})
+            out.append(
+                {**row, "saved": saved, "problems": problems, "problem_fields": problem_fields(problems)}
+            )
+        return out
+
+    def problem_fields(problems: list[str]) -> dict[str, list[int]]:
+        """For each field a problem is about, the indexes of those problems: the field is marked invalid and
+        described by them (``aria-describedby``; ui review round 3, F1). A problem about the whole row (a
+        duplicate) is tied only to the row's Accept button."""
+        out: dict[str, list[int]] = {}
+        for n, message in enumerate(problems):
+            name = importer.PROBLEM_FIELDS.get(message)
+            if name:
+                out.setdefault(name, []).append(n)
         return out
 
     def render_preview(
@@ -203,6 +219,8 @@ def build_router(web: Web) -> APIRouter:
         error: str | None = None,
         notice: str | None = None,
         focus_row: int | None = None,
+        problem: dict[str, Any] | None = None,
+        focus_notice: bool = False,
     ) -> HTMLResponse:
         snapshot = store.load_all()
         checked = checked_rows(rows, text, source, snapshot)
@@ -220,13 +238,43 @@ def build_router(web: Web) -> APIRouter:
             any_saved=any(r["saved"] for r in checked),
             acceptable=sum(1 for r in checked if not r["saved"] and not r["problems"]),
             focus_row=focus_row,
+            problem=problem,
+            focus_notice=focus_notice,
         )
+
+    def problem_notice(checked: list[dict[str, Any]], first: int) -> dict[str, Any]:
+        """What Check again tells the user when a course still has a problem (ui review round 3, F1;
+        DECISIONS #75): how many courses, which one it lands on and why, shown at the top of the page with a
+        link to that course (so it works without JS) and announced."""
+        flagged = sum(1 for r in checked if r["problems"])
+        row = checked[first]
+        course = f"Course {first + 1}" + (f" ({row['name']})" if row.get("name") else "")
+        reason = "; ".join(row["problems"])
+        lead = (
+            "1 course still has a problem:"
+            if flagged == 1
+            else f"{flagged} courses still have a problem. First:"
+        )
+        return {
+            "lead": lead,
+            "row": first,
+            "course": course,
+            "reason": reason,
+            "text": f"{lead} {course}: {reason}.",
+        }
 
     @router.post("/courses/import/save", response_class=HTMLResponse)
     async def import_save(request: Request) -> HTMLResponse:
         form = await request.form()
-        # checked again, never trusted; a browser posts line breaks as CRLF, stored as LF (#39(8))
-        text = identifiers.strip(_lf(str(form.get("text", ""))), cfg, strict=False)
+        # checked again, never trusted; a browser posts line breaks as CRLF, stored as LF (#39(8)).
+        # Stripped as Send does (strict, the marker fills a slot): the text was stripped at Read and at
+        # Send, so this changes nothing; a non-strict strip took the course code after "Student number:
+        # [removed]" and wrote it so to sources/ (data-integrity review round 6, F3). A stop means the
+        # hidden text was edited: refused, nothing written (DECISIONS #82)
+        try:
+            text = identifiers.strip(_lf(str(form.get("text", ""))), cfg, marker_fills_slot=True)
+        except identifiers.UnresolvedIdentifier:
+            return render_import(request, 409, error=SAVE_TEXT_CHANGED)  # round 7, F7
         original = identifiers.clean_filename(str(form.get("original_name", "")), cfg)
         sha = str(form.get("original_sha256", ""))
         sha = sha if re.fullmatch(r"[0-9a-f]{64}", sha) else "not recorded"
@@ -236,12 +284,29 @@ def build_router(web: Web) -> APIRouter:
         snapshot = store.load_all()
         if accept == "check":  # "Check again" after a correction: the checks, nothing written
             again = checked_rows(rows, text, source, snapshot)
-            first = next((n for n, r in enumerate(again) if r["problems"]), None)  # stay where the work is
-            if first is None:  # nothing flagged: the first course not yet saved (usually the one corrected)
+            flagged = next((n for n, r in enumerate(again) if r["problems"]), None)  # stay where the work is
+            problem = problem_notice(again, flagged) if flagged is not None else None
+            first, notice = flagged, None
+            if flagged is None:  # nothing flagged: the first course not yet saved (usually the one corrected)
                 first = next((n for n, r in enumerate(again) if not r["saved"]), None)
-            notice = "Checked again: every course can be accepted." if first is None else None
+                notice = (  # ui review round 4, N1: never a problem notice without a problem
+                    "Checked again: every course can be accepted."
+                    if first is not None
+                    else "Checked again: every course is saved."
+                )
+                first = None  # the notice gets focus, shown above the first course (ui round 5, W1; #85)
             return render_preview(
-                request, text, original, sha, source, rows, [], notice=notice, focus_row=first
+                request,
+                text,
+                original,
+                sha,
+                source,
+                rows,
+                [],
+                notice=notice,
+                focus_row=first,
+                problem=problem,
+                focus_notice=flagged is None and notice.endswith("can be accepted."),
             )
         checked = checked_rows(rows, text, source, snapshot)
         if accept == "all":

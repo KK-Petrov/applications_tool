@@ -54,7 +54,10 @@ def test_courses_live_import(fmt: str, tmp_path: Path) -> None:
     else:
         raw = path.read_bytes()
         text = extract.extract_text(path.name, raw, config.courses)
-    stripped = identifiers.strip(text, config.courses)
+    stripped = identifiers.strip(text, config.courses)  # Read
+    # Send strips the reviewed text again, strictly, in the Send mode, as /courses/import/send does; it
+    # must change nothing (ai-output review round 2, F7; DECISIONS #86)
+    assert identifiers.strip(stripped, config.courses, marker_fills_slot=True) == stripped
     sent_identifiers = course_graders.identifiers_in(stripped, EXPECTED["identifiers"])
     result = run_skill(
         "extract-courses",
@@ -68,7 +71,9 @@ def test_courses_live_import(fmt: str, tmp_path: Path) -> None:
     rows = [importer.strip_row(r, config.courses) for r in result.data["courses"]]
     report = course_graders.grade(rows, stripped, EXPECTED)
     report["identifiers_sent"] = sent_identifiers
-    written_before_accept = sorted(str(p.relative_to(data_dir)) for p in data_dir.rglob("*") if p.is_file())
+    # the extraction call wrote nothing (the routes' "nothing before confirm" is proven by the fast tests in
+    # tests/test_course_import.py: preview, Check again and Save; F7)
+    written_by_call = sorted(str(p.relative_to(data_dir)) for p in data_dir.rglob("*") if p.is_file())
     # Accept all, as the app does: only rows without a problem.
     store = Store.from_config(config)
     source = importer.source_name(path.name, date.today().isoformat(), store.source_names())
@@ -89,13 +94,13 @@ def test_courses_live_import(fmt: str, tmp_path: Path) -> None:
             )
         }
     )
-    report["written_before_accept"] = written_before_accept
+    report["written_by_extraction_call"] = written_by_call
     report["cost_usd"], report["duration_s"] = result.cost_usd, result.duration_s
     report["warnings"] = result.data.get("warnings", [])
-    report["passed"] = course_graders.passed(report) and not written_before_accept and not sent_identifiers
+    report["passed"] = course_graders.passed(report) and not written_by_call and not sent_identifiers
     _record(fmt, report)
     assert sent_identifiers == [], sent_identifiers
-    assert written_before_accept == [], written_before_accept
+    assert written_by_call == [], written_by_call
     assert course_graders.passed(report), {
         k: v for k, v in report.items() if v and k not in ("rows", "warnings")
     }

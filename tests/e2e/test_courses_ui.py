@@ -14,9 +14,9 @@ import json
 from pathlib import Path
 
 import pytest
-from playwright.sync_api import Page, Route, expect
+from playwright.sync_api import Browser, Page, Route, expect
 
-from helpers import write_recording
+from helpers import long_description, write_recording
 from paths import REPO_ROOT
 
 pytestmark = pytest.mark.e2e
@@ -174,7 +174,10 @@ def test_a_retry_after_a_failure_starts_clean(
     expect(page.locator("#courses-notice .working-meta")).to_be_hidden()  # no stale timer or limit line
     page.get_by_role("button", name="Send to Claude").click()
     notice = page.locator("#courses-notice")
-    expect(notice.locator(".working-title")).to_contain_text("Reading the courses.")
+    # W3 (session 3, disclosed, DECISIONS #75): the title was "Reading the courses."
+    expect(notice.locator(".working-title")).to_contain_text(
+        "Sending the text to Claude Code and reading the courses."
+    )
     expect(notice.locator(".spinner")).to_be_visible()
     expect(notice.locator(".working-error")).to_have_count(0)
     assert "working-failed" not in (notice.get_attribute("class") or "")
@@ -185,7 +188,10 @@ def test_check_again_keeps_the_user_at_the_course_with_a_problem(page: Page, liv
     _preview(page, live_server)
     page.locator("#row-0-grade").fill("8,0")
     page.get_by_role("button", name="Check again").click()
-    expect(page.locator("#row-0")).to_be_focused()
+    # changed with disclosure (DECISIONS #85, user decision on ui round 5 W1): with the only problem corrected
+    # the success notice gets focus (it was Course 1, which hid the notice); Course 1 is still in view
+    expect(page.locator("#import-notice")).to_be_focused()
+    expect(page.locator("#row-0 > legend")).to_be_in_viewport()
     expect(page.locator("[data-row='0']")).not_to_contain_text("Grade not found")
 
 
@@ -264,3 +270,117 @@ def test_the_actions_bar_never_covers_a_field_while_tabbing(
         stops += 1
     assert stops > 28 * 7, stops  # every card's fields were visited
     assert covered == [], covered[:5]
+
+
+# ---- ui review round 3, F1: after Check again the course's name and its problem are in view (session 3) ----
+
+IN_VIEW = """(sel) => {
+    const bar = document.querySelector('#import-actions').getBoundingClientRect();
+    const sticky = getComputedStyle(document.querySelector('#import-actions')).position === 'sticky';
+    const bottom = sticky ? Math.min(bar.top, innerHeight) : innerHeight;
+    return [...document.querySelectorAll(sel)].map(el => {
+        const r = el.getBoundingClientRect();
+        return r.top >= -0.5 && r.bottom <= bottom + 0.5
+            ? null : `${sel}: ${Math.round(r.top)}-${Math.round(r.bottom)} outside 0-${Math.round(bottom)}`;
+    }).filter(Boolean);
+}"""
+
+
+@pytest.fixture
+def tall_rows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """As ``rows``, with a 1,600-character description on course 21 (a tall card, as in the round-3 probe)."""
+    bad = [dict(r) for r in EXPECTED["courses"]]
+    bad[0]["grade"] = "10,0"
+    out = _output(bad)
+    out["courses"][20]["description"] = long_description(1600)
+    monkeypatch.setenv("FAKE_CLAUDE_RECORDING", str(write_recording(tmp_path, out, "courses.json")))
+
+
+@pytest.mark.parametrize(("width", "height"), [(1280, 720), (960, 540), (1280, 800), (390, 844)])
+def test_after_check_again_the_course_name_and_its_problem_are_in_view(
+    page: Page, live_server: str, tall_rows, width: int, height: int
+) -> None:
+    """960x540 is 1920x1080 at 200 % zoom. The legend names the course; the refusal says what is wrong."""
+    page.set_viewport_size({"width": width, "height": height})
+    _preview(page, live_server)
+    page.locator("#row-0-grade").fill("8,0")  # the planted bad grade, corrected
+    page.locator("#row-20-grade").fill("1,0")  # a new problem low on the page
+    page.get_by_role("button", name="Check again").click()
+    expect(page.locator("#row-20")).to_be_focused()
+    page.wait_for_timeout(150)  # app.js scrolls after focus
+    for sel in ("#row-20 > legend", "#row-20 .refusal"):
+        assert page.evaluate(IN_VIEW, sel) == [], page.evaluate(IN_VIEW, sel)
+    expect(page.locator("#live-status")).to_contain_text("Grade not found in the document")
+
+
+def test_without_js_check_again_names_the_course_and_links_to_it(
+    browser: Browser, live_server: str, rows
+) -> None:
+    context = browser.new_context(java_script_enabled=False, viewport={"width": 1280, "height": 720})
+    page = context.new_page()
+    try:
+        _preview_without_js(page, live_server)
+        page.locator("#row-0-grade").fill("8,0")
+        page.locator("#row-20-grade").fill("1,0")
+        page.get_by_role("button", name="Check again").click()
+        notice = page.locator("main .notice-problem")
+        expect(notice).to_contain_text("Course 21")
+        expect(notice).to_contain_text("Grade not found in the document")
+        assert notice.bounding_box()["y"] < 720  # seen on arrival, at the top of the page
+        notice.get_by_role("link").click()
+        assert page.evaluate(IN_VIEW, "#row-20 > legend") == []
+    finally:
+        context.close()
+
+
+def _preview_without_js(page: Page, live_server: str) -> None:
+    page.goto(live_server + "/courses/import", wait_until="domcontentloaded")
+    page.get_by_label("Transcript file").set_input_files(str(EVAL / "transcript.docx"))
+    page.get_by_role("button", name="Read courses").click()
+    page.get_by_role("button", name="Send to Claude").click()
+    page.locator("#courses-preview").wait_for(timeout=20000)
+
+
+@pytest.mark.parametrize(("width", "height"), [(800, 480), (768, 432), (1280, 720)])
+def test_without_js_the_scroll_padding_covers_the_actions_bar(
+    browser: Browser, live_server: str, rows, width: int, height: int
+) -> None:
+    """ui review round 3, W1: the no-JS fallback for the page's scroll padding must cover the actions bar
+    even where it wraps to two rows (97 px at 768-800 px wide), plus the 8 px app.js adds."""
+    context = browser.new_context(java_script_enabled=False, viewport={"width": width, "height": height})
+    page = context.new_page()
+    try:
+        _preview_without_js(page, live_server)
+        bar, padding = page.evaluate(
+            """() => [document.querySelector('#import-actions').offsetHeight,
+                      parseFloat(getComputedStyle(document.documentElement).scrollPaddingBottom)]"""
+        )
+        assert padding >= bar + 8, (bar, padding)
+        assert padding >= 105
+    finally:
+        context.close()
+
+
+def test_a_clean_check_again_announces_success_not_a_problem(page: Page, live_server: str, rows) -> None:
+    """ui review round 4, N1."""
+    _preview(page, live_server)
+    page.locator("#row-0-grade").fill("8,0")  # the only problem, corrected
+    page.get_by_role("button", name="Check again").click()
+    expect(page.locator("main .notice").first).to_have_text("Checked again: every course can be accepted.")
+    expect(page.locator(".notice-problem")).to_have_count(0)
+    expect(page.locator("#live-status")).to_have_text("Checked again: every course can be accepted.")
+
+
+@pytest.mark.parametrize(("width", "height"), [(390, 844), (1280, 800)])
+def test_a_clean_check_again_shows_its_notice(
+    page: Page, live_server: str, rows, width: int, height: int
+) -> None:
+    """ui review round 5, W1: with JS the success notice was above the viewport (focus on Course 1)."""
+    page.set_viewport_size({"width": width, "height": height})
+    _preview(page, live_server)
+    page.locator("#row-0-grade").fill("8,0")
+    page.get_by_role("button", name="Check again").click()
+    notice = page.locator("#import-notice")
+    expect(notice).to_be_focused()
+    box = notice.bounding_box()
+    assert box is not None and box["y"] >= 0 and box["y"] + box["height"] <= height, box

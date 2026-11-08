@@ -7,6 +7,7 @@
 {% block main_attrs %}
 {%- if error %} data-focus="research-error" data-announce="{{ error }}"
 {%- elif notice %} data-focus="compare-title" data-announce="{{ notice }}"
+{%- elif not (changes | selectattr('kind', 'in', ['new', 'changed']) | list) %} data-focus="compare-title" data-announce="Research finished. Research found no changes."
 {%- else %} data-focus="compare-title" data-announce="Research finished. The comparison is below."
 {%- endif %}{% endblock %}
 {% block content %}
@@ -30,12 +31,17 @@
   <h2 id="compare-title" tabindex="-1">Comparison with your stored data</h2>
   {#- Accept all / Clear all (DECISIONS #68): with JS app.js ticks the boxes marked data-accept-all; without JS
       these submit to /research/select, which re-renders this page with those rows ticked and writes nothing. -#}
+  {%- set total = changes | selectattr('kind', 'in', ['new', 'changed']) | list | length %}
+  {% if total == 0 %}
+  <p class="notice" id="no-changes">Research found no changes.</p>{#- ui review round 3, W4: no "0 of 0" bar -#}
+  {% else %}
   <div class="selection-bar" data-selection>
-    <button class="button button-secondary" type="submit" formaction="/programmes/{{ p.id }}/research/select" name="select" value="all"{% if not accept_all %} disabled{% endif %}>Accept all changes</button>
+    <button class="button button-secondary" type="submit" formaction="/programmes/{{ p.id }}/research/select" name="select" value="all" aria-describedby="selection-hint"{% if not accept_all %} disabled{% endif %}>Accept all changes</button>
     <button class="button button-secondary" type="submit" formaction="/programmes/{{ p.id }}/research/select" name="select" value="none">Clear all</button>
-    <p id="selection-count" class="selection-count" data-total="{{ changes | selectattr('kind', 'in', ['new', 'changed']) | list | length }}" data-refused="{{ refused | length }}">{{ selection }}</p>
+    <p id="selection-count" class="selection-count" data-total="{{ total }}" data-refused="{{ refused | length }}">{{ selection }}</p>
   </div>
-  <p class="hint" id="selection-hint">Accept all changes ticks every change that can be accepted, but never the official domains or a refused row. Nothing is saved until you press <strong>Save accepted changes</strong>.</p>
+  <p class="hint" id="selection-hint">Accept all changes ticks every change that can be accepted, but never the official domains, the letters note or a refused row. Nothing is saved until you press <strong>Save accepted changes</strong>.</p>
+  {% endif %}
   <div class="table-scroll" tabindex="0" role="region" aria-labelledby="compare-title">
   <table class="table research-table compare-table">
     <thead><tr><th scope="col">Accept</th><th scope="col">Field</th><th scope="col">Result</th><th scope="col">Stored</th><th scope="col">Research found</th><th scope="col">Source</th></tr></thead>

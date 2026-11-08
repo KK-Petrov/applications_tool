@@ -7,17 +7,25 @@
 {% block main_attrs %}
 {%- if error %} data-focus="import-error" data-announce="{{ error }}"
 {%- elif review %} data-focus="review-title" data-announce="Text read. Check what will be sent below; nothing has been sent yet."
-{%- elif rows is not none and focus_row is not none %} data-focus="row-{{ focus_row }}" data-announce="{{ notice or '' }}"
+{%- elif rows is not none and focus_row is not none %} data-focus="row-{{ focus_row }}" data-announce="{{ problem.text if problem else (notice or '') }}"
+{%- elif rows is not none and focus_notice %} data-focus="import-notice" data-announce="{{ notice }}"
 {%- elif rows is not none and notice %} data-focus="preview-title" data-announce="{{ notice }}"
 {%- elif rows is not none %} data-focus="preview-title" data-announce="Reading finished. Check every course below."
 {%- endif %}{% endblock %}
 {% block before_title %}
 <nav class="breadcrumb" aria-label="Breadcrumb"><a href="/recommenders">Recommenders</a> <span aria-hidden="true">›</span> <a href="/courses">Courses</a> <span aria-hidden="true">›</span> <span aria-current="page">Import</span></nav>
 {% endblock %}
-{% macro field(i, name, label, value, invalid=false, wide=false) -%}
+{#- the ids of a row's problems (refusal texts) about one field, or about every field when name is none -#}
+{% macro problem_ids(i, r, name=none) -%}
+{%- if name is none %}{% for m in r.problems %}row-{{ i }}-problem-{{ loop.index0 }}{% if not loop.last %} {% endif %}{% endfor %}
+{%- else %}{% for n in r.problem_fields.get(name, []) %}row-{{ i }}-problem-{{ n }}{% if not loop.last %} {% endif %}{% endfor %}{% endif -%}
+{%- endmacro %}
+{#- a field with a problem is marked invalid and described by that problem's text (ui review round 3, F1) -#}
+{% macro field(i, r, name, label, value, wide=false) -%}
+{%- set described = problem_ids(i, r, name) -%}
 <div class="field{% if wide %} field-wide{% endif %}">
   <label for="row-{{ i }}-{{ name }}">{{ label }}</label>
-  <input id="row-{{ i }}-{{ name }}" name="row-{{ i }}-{{ name }}" type="text" value="{{ value }}"{% if invalid %} aria-invalid="true"{% endif %}>
+  <input id="row-{{ i }}-{{ name }}" name="row-{{ i }}-{{ name }}" type="text" value="{{ value }}"{% if described %} aria-invalid="true" aria-describedby="{{ described }}"{% endif %}>
 </div>
 {%- endmacro %}
 {% block content %}
@@ -26,7 +34,7 @@
 {% if review %}
 <section class="card" aria-labelledby="review-title">
   <h2 id="review-title" tabindex="-1">Check what will be sent</h2>
-  <p>This is exactly the text that <strong>Send to Claude</strong> sends to Claude Code; nothing has been sent yet. {{ removed_count }} value{{ "" if removed_count == 1 else "s" }} the app recognised as a student number, date of birth or national ID number {{ "is" if removed_count == 1 else "are" }} replaced by the highlighted <mark class="removed removed-sample">{{ marker }}</mark>. If a personal number is still there, press <strong>Cancel</strong> and remove it from the document first.</p>
+  <p>This is exactly the text that <strong>Send to Claude</strong> sends to Claude Code; nothing has been sent yet. {% if removed_count %}{{ removed_count }} value{{ "" if removed_count == 1 else "s" }} the app recognised as a student number, date of birth or national ID number {{ "is" if removed_count == 1 else "are" }} replaced by the highlighted <mark class="removed removed-sample">{{ marker }}</mark>.{% else %}The app found no student number, date of birth or national ID number. Check the text below before sending.{% endif %} If a personal number is still there, press <strong>Cancel</strong> and remove it from the document first.</p>
   <div class="review-text" tabindex="0" role="region" aria-label="Text to be sent">
 <pre>{% for part in text.split(marker) %}{{ part }}{% if not loop.last %}<mark class="removed">{{ marker }}</mark>{% endif %}{% endfor %}</pre>
   </div>
@@ -38,7 +46,7 @@
     <div class="research-actions"><button class="button button-primary" type="submit" data-busy-text="Sending…">Send to Claude</button>
       <a class="button button-secondary" href="/courses/import" data-writes>Cancel</a></div>
   </form>
-  {{ working_notice("courses-notice", "Nothing is saved until you accept courses.", title="Reading the courses.", action="the import", minutes=import_limit_minutes) }}
+  {{ working_notice("courses-notice", "Nothing is saved until you accept courses.", title="Sending the text to Claude Code and reading the courses.", action="the import", minutes=import_limit_minutes) }}
 </section>
 {% elif rows is none %}
 <section class="card" aria-labelledby="upload-title">
@@ -58,7 +66,8 @@
   </form>
 </section>
 {% else %}
-{% if notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
+{% if notice %}<p class="notice" role="status" id="import-notice" tabindex="-1">{{ notice }}</p>{% endif %}
+{% if problem %}<p class="notice notice-problem">{{ problem.lead }} <a href="#row-{{ problem.row }}">{{ problem.course }}</a>: {{ problem.reason }}.</p>{% endif %}
 {% if warnings %}<div class="research-warnings"><h2>Notes from the import</h2><ul>{% for w in warnings %}<li>{{ w }}</li>{% endfor %}</ul></div>{% endif %}
 <form method="post" action="/courses/import/save" id="courses-preview" class="card">
   <h2 id="preview-title" tabindex="-1">Check every course</h2>
@@ -73,6 +82,8 @@
   {% set credits = r.credits_text if r.credits_text is defined else ('%g' | format(r.credits) if r.credits is not none else '') %}
   <fieldset class="course-row{% if r.problems %} refused{% endif %}{% if r.saved %} saved{% endif %}" data-row="{{ i }}" id="row-{{ i }}" tabindex="-1">
     <legend>Course {{ loop.index }}{% if r.name %}: {{ r.name }}{% endif %}</legend>
+    {#- the problems stand right under the course's name, so both are in view where Check again lands (F1) -#}
+    {% if r.problems and not r.saved %}<div class="row-problems">{% for m in r.problems %}<p class="refusal" id="row-{{ i }}-problem-{{ loop.index0 }}">{{ m }}</p>{% endfor %}</div>{% endif %}
     {% if r.saved %}
       {#- read-only: a saved course is not edited here (it would write a near-duplicate) -#}
       {% for name in ("name", "code", "institution", "grade", "term", "description") %}<input type="hidden" name="row-{{ i }}-{{ name }}" value="{{ r[name] or '' }}">{% endfor %}
@@ -82,26 +93,27 @@
       <p class="course-summary"><span class="chip chip-success">Saved</span> {{ parts | join(" · ") }}</p>
     {% else %}
     <div class="course-fields">
-      {{ field(i, "name", "Course name", r.name, wide=true) }}
-      {{ field(i, "code", "Code", r.code or "") }}
-      {{ field(i, "grade", "Grade", r.grade or "", invalid=("Grade not found in the document" in r.problems)) }}
-      {{ field(i, "credits", "Credits", credits, invalid=("Credits not found on this course's row" in r.problems)) }}
-      {{ field(i, "term", "Term", r.term or "") }}
-      {{ field(i, "institution", "Institution", r.institution or "", wide=true) }}
+      {{ field(i, r, "name", "Course name", r.name, wide=true) }}
+      {{ field(i, r, "code", "Code", r.code or "") }}
+      {{ field(i, r, "grade", "Grade", r.grade or "") }}
+      {{ field(i, r, "credits", "Credits", credits) }}
+      {{ field(i, r, "term", "Term", r.term or "") }}
+      {{ field(i, r, "institution", "Institution", r.institution or "", wide=true) }}
       <div class="field field-wide">
         <label for="row-{{ i }}-lecturers">Lecturers</label>
-        <textarea id="row-{{ i }}-lecturers" name="row-{{ i }}-lecturers" rows="{{ [2, r.lecturers | length] | max }}">
+        {%- set described = problem_ids(i, r, "lecturers") %}
+        <textarea id="row-{{ i }}-lecturers" name="row-{{ i }}-lecturers" rows="{{ [2, r.lecturers | length] | max }}"{% if described %} aria-invalid="true" aria-describedby="{{ described }}"{% endif %}>
 {{ r.lecturers | join("\n") }}</textarea>
       </div>
       <div class="field field-wide">
         <label for="row-{{ i }}-description">Description</label>
-        <textarea id="row-{{ i }}-description" name="row-{{ i }}-description" rows="{{ [2, [10, (r.description | length) // 70 + r.description.count(nl) + 1] | min] | max }}">
+        {%- set described = problem_ids(i, r, "description") %}
+        <textarea id="row-{{ i }}-description" name="row-{{ i }}-description" rows="{{ [2, [10, (r.description | length) // 70 + r.description.count(nl) + 1] | min] | max }}"{% if described %} aria-invalid="true" aria-describedby="{{ described }}"{% endif %}>
 {{ r.description }}</textarea>
       </div>
     </div>
     <div class="row-status">
-      {% for m in r.problems %}<p class="refusal">{{ m }}</p>{% endfor %}
-      <button class="button button-secondary" type="submit" name="accept" value="{{ i }}" aria-label="Accept {{ r.name or ('course ' ~ loop.index) }}"{% if r.problems %} disabled{% endif %}>Accept</button>
+      <button class="button button-secondary" type="submit" name="accept" value="{{ i }}" aria-label="Accept {{ r.name or ('course ' ~ loop.index) }}"{% if r.problems %} disabled aria-describedby="{{ problem_ids(i, r) }}"{% endif %}>Accept</button>
     </div>
     {% endif %}
   </fieldset>
