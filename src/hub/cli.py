@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import typer
 
-from hub.config import load_config
+from hub.config import Config, load_config
 from hub.init_data import init_data, settings_exist
 
 app = typer.Typer(help="Application Hub: track master's applications locally.", no_args_is_help=True)
@@ -108,27 +108,76 @@ def import_usage() -> None:
         typer.echo(f"{result.unreadable} unreadable line(s) in the old log were skipped.")
 
 
-def _not_yet(phase: str) -> None:
-    typer.echo(f"Not yet implemented (Phase {phase}).")
-    raise typer.Exit(1)
+def _logging(cfg: Config) -> None:
+    """The commands log to <data_dir>/logs/hub.log like the app (Task Scheduler runs them; docs/05 §5)."""
+    from hub.app import configure_logging
+
+    configure_logging(cfg)
 
 
 @app.command("sync")
-def sync(dry_run: bool = typer.Option(False, "--dry-run")) -> None:
-    """Push reminders to the Google Calendar "Applications" (Phase 3)."""
-    _not_yet("3")
+def sync(dry_run: bool = typer.Option(False, "--dry-run", help="Count the changes; call nothing.")) -> None:
+    """Push reminders to the Google Calendar "Applications" (docs/05 §2)."""
+    from datetime import UTC, datetime
+
+    from hub.google import auth, calendar_sync
+    from hub.store import Store
+
+    cfg = load_config()
+    _logging(cfg)
+    try:
+        service = None if dry_run else auth.calendar_service(cfg)
+    except auth.NotConnected as err:
+        typer.echo(str(err), err=True)
+        raise typer.Exit(1) from None
+    result = calendar_sync.sync(Store.from_config(cfg), service, cfg, datetime.now(UTC), dry_run=dry_run)
+    counts = ", ".join(f"{k} {v}" for k, v in result.counts.items())
+    if result.error:
+        typer.echo(f"Sync stopped: {result.error}", err=True)
+        raise typer.Exit(1)
+    typer.echo(("Dry run, nothing sent: " if dry_run else "Synced: ") + counts + ".")
+    if result.counts["errors"]:
+        typer.echo("Some calls failed; the next sync tries them again (details in logs/hub.log).", err=True)
+        raise typer.Exit(1)
 
 
 @app.command("digest")
-def digest(dry_run: bool = typer.Option(False, "--dry-run")) -> None:
-    """Send the daily digest to the owner's own address (Phase 3)."""
-    _not_yet("3")
+def digest(dry_run: bool = typer.Option(False, "--dry-run", help="Print the message; send nothing.")) -> None:
+    """Send the daily digest to the owner's own address, at most once a day (docs/05 §4)."""
+    from datetime import UTC, datetime
+
+    from hub.google import auth
+    from hub.google import digest as daily
+    from hub.store import Store
+
+    cfg = load_config()
+    _logging(cfg)
+    try:
+        service = None if dry_run else auth.gmail_service(cfg)
+    except auth.NotConnected as err:
+        typer.echo(str(err), err=True)
+        raise typer.Exit(1) from None
+    result = daily.send(Store.from_config(cfg), service, cfg, datetime.now(UTC), dry_run=dry_run)
+    if dry_run:
+        typer.echo(result.preview)
+    elif result.sent:
+        typer.echo("Sent the digest to the owner address in settings.yaml.")
+    else:
+        typer.echo(f"No digest sent: {result.reason}")
 
 
 @app.command("connect-google")
 def connect_google() -> None:
-    """Authorise Google Calendar and Gmail access (Phase 3)."""
-    _not_yet("3")
+    """Authorise Google Calendar and Gmail access in the browser (docs/05 §1)."""
+    from hub.google import auth
+    from hub.store import Store
+
+    cfg = load_config()
+    try:
+        typer.echo(auth.connect(cfg, Store.from_config(cfg)))
+    except auth.NotConnected as err:
+        typer.echo(str(err), err=True)
+        raise typer.Exit(1) from None
 
 
 if __name__ == "__main__":

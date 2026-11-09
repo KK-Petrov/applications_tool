@@ -40,6 +40,7 @@ NO_JS_PAGES = [
     "/recommenders",
     "/recommenders/new",
     "/recommenders/from-courses",  # #102
+    "/recommenders/emails",  # #104
     "/programmes/new",
     "/programmes/princeton-mfin",
     "/programmes/booth-mif/standard",  # #97

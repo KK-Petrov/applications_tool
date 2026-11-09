@@ -1,0 +1,11 @@
+# Test fixture: invented professor (docs/02 §5.4), asked for Princeton on 29 Oct 2026.
+id: example-a
+name: Prof. A. Example
+email: a.example@example.org
+university: Example University
+course: Investments
+course_description: An invented description.
+letters:
+  princeton-mfin:
+    status: requested
+    requested_on: 2026-10-29

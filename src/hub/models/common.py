@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Any
@@ -55,8 +56,19 @@ def _check_zone(value: str) -> str:
     return value
 
 
+# Invisible or separator characters and address punctuation: an address with any of them looks like a real
+# one but isn't the same string (a zero-width space slips past the one-email rule) or isn't deliverable
+# ("mailto:x@…", "<x@…>"). Refused wherever an email is stored (data-integrity Phase 3 r1 F3, #105).
+_EMAIL_BAD_CATEGORIES = frozenset({"Cc", "Cf", "Zs", "Zl", "Zp"})
+_EMAIL_BAD_CHARS = frozenset(':<>",;()[]' + "\\")
+
+
 def _check_email(value: str) -> str:
-    if not _EMAIL_RE.fullmatch(value):
+    if (
+        not _EMAIL_RE.fullmatch(value)
+        or any(unicodedata.category(ch) in _EMAIL_BAD_CATEGORIES for ch in value)
+        or any(ch in _EMAIL_BAD_CHARS for ch in value)
+    ):
         raise ValueError(f"{value!r} is not an email address")
     return value
 

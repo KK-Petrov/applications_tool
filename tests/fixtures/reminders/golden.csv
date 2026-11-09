@@ -1,0 +1,31 @@
+row,rule,programme,subject,when
+1,letters_request_due,princeton-mfin,,2026-11-03
+2,documents_due,princeton-mfin,,2026-11-24
+3,letters_check,princeton-mfin,,2026-12-01
+4,deadline_alert_14,princeton-mfin,,2026-12-01
+5,essay_final,princeton-mfin,,2026-12-08
+6,deadline_alert_7,princeton-mfin,,2026-12-08
+7,deadline_alert_2,princeton-mfin,,2026-12-13
+8,deadline_alert_1,princeton-mfin,,2026-12-14
+9,deadline,princeton-mfin,,2026-12-15 23:59 America/New_York
+10,interview_eve,princeton-mfin,math-test,2026-12-18
+11,interview,princeton-mfin,math-test,2026-12-19 10:00 America/New_York
+12,letters_request_due,booth-mif,,2026-11-26
+13,documents_due,booth-mif,,2026-12-17
+14,letters_check,booth-mif,,2026-12-24
+15,deadline_alert_14,booth-mif,,2026-12-24
+16,essay_final,booth-mif,,2026-12-31
+17,deadline_alert_7,booth-mif,,2026-12-31
+18,deadline_alert_2,booth-mif,,2027-01-05
+19,deadline_alert_1,booth-mif,,2027-01-06
+20,deadline,booth-mif,,2027-01-07 23:59 America/Chicago
+21,letters_request_due,columbia-msfe,,2026-12-04
+22,documents_due,columbia-msfe,,2026-12-25
+23,letters_check,columbia-msfe,,2027-01-01
+24,deadline_alert_14,columbia-msfe,,2027-01-01
+25,essay_final,columbia-msfe,,2027-01-08
+26,deadline_alert_7,columbia-msfe,,2027-01-08
+27,deadline_alert_2,columbia-msfe,,2027-01-13
+28,deadline_alert_1,columbia-msfe,,2027-01-14
+29,deadline,columbia-msfe,,2027-01-15 23:59 America/New_York
+30,letter_follow_up,princeton-mfin,example-a,2026-11-05

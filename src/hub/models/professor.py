@@ -10,6 +10,9 @@ from pydantic import Field
 from hub.models.common import AwareTimestamp, DataModel, Email, Slug
 
 COURSE_DESCRIPTION_MAX_CHARS = 20_000  # docs/01 §4
+# Words used by /recommenders/<word> routes: a professor with such an id would have its edit posted to that
+# route ("POST /recommenders/emails" is Update emails), so new ids never take one (DECISIONS #104).
+ROUTE_WORDS = frozenset({"new", "import", "emails", "from-courses", "course-suggestions"})
 
 
 class LetterStatus(StrEnum):

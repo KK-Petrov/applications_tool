@@ -10,11 +10,13 @@
     {%- if a.kind.value == "letters" -%}
       {%- if a.overdue -%}Request {{ s.programme.short_name }} recommendations: overdue since {{ a.due | fdate }}
       {%- else -%}Request {{ s.programme.short_name }} recommendations by {{ a.due | fdate }}{%- endif -%}
-    {%- else -%}{{ s.programme.short_name }} deadline: {{ s.countdown.label }}{%- endif -%}
+    {%- elif a.kind.value == "deadline" -%}{{ s.programme.short_name }} deadline: {{ s.countdown.label }}
+    {%- else -%}{{ a.text }}: {% if a.overdue %}overdue since{% else %}due{% endif %} {{ a.due | fdate }}{%- endif -%}
   </h2>
   <p class="alert-detail">
     {% if a.kind.value == "letters" %}{{ a.letters_required }} letters needed, {{ a.letters_confirmed }} confirmed{% if a.letters_assumed %} (number assumed){% endif %} · deadline {{ deadline(s.deadline) }}{% if s.badge.unverified %} {{ data_badge(s.badge) }}{% endif %}
-    {% else %}{{ deadline(s.deadline) }}{% if s.badge.unverified %} {{ data_badge(s.badge) }}{% endif %} · requirements {{ s.requirements[0] }} / {{ s.requirements[1] }} done{% endif %}
+    {% elif a.kind.value == "deadline" %}{{ deadline(s.deadline) }}{% if s.badge.unverified %} {{ data_badge(s.badge) }}{% endif %} · requirements {{ s.requirements[0] }} / {{ s.requirements[1] }} done
+    {% else %}deadline {{ deadline(s.deadline) }}{% if s.badge.unverified %} {{ data_badge(s.badge) }}{% endif %}{% endif %}
     · <a href="/programmes/{{ s.programme.id }}">Open {{ s.programme.short_name }}</a>
   </p>
 </section>
@@ -58,6 +60,16 @@
 
 <section class="card" aria-labelledby="upcoming-title">
   <h2 id="upcoming-title">Upcoming reminders</h2>
-  <p class="empty">Reminders arrive in Phase 3.</p>
+  {% if board.upcoming %}
+  <ul class="plain upcoming">
+    {% for r in board.upcoming %}{% set s = board.by_id[r.programme_id] %}
+    <li>
+      <span class="chip chip-neutral">{{ reminder_category[r.category] }}</span>
+      {% if r.rule == "deadline" %}{{ r.title | replace("[Hub] ", "") }}: {{ deadline(s.deadline) }}{% if s.badge.unverified %} {{ data_badge(s.badge) }}{% endif %}
+      {% else %}<span class="mono">{{ r.date | fdate }}</span> · {{ r.title | replace("[Hub] ", "") }}{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="empty">No reminders: nothing is due.</p>{% endif %}
 </section>
 {% endblock %}

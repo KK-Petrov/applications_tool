@@ -1,0 +1,24 @@
+# Test fixture for the reminder engine (docs/02 §5.4).
+id: columbia-msfe
+name: Columbia MS in Financial Economics
+short_name: Columbia MSFE
+school: Columbia Business School
+status: not_started
+verification: unverified
+sources:
+  - url: https://academics.business.columbia.edu/admissions/ms/application-requirements
+    title: Application requirements
+deadlines:
+  - id: main
+    label: Application deadline
+    due_local: 2027-01-15T23:59
+    tz: America/New_York
+    source_url: https://academics.business.columbia.edu/admissions/ms/application-requirements
+letters_required: 2
+documents:
+  - id: transcript
+    label: Official transcript
+    status: not_requested
+essays:
+  - id: goals
+    title: Career goals

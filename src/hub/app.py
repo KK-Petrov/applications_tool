@@ -49,7 +49,7 @@ PLACEHOLDER_PAGES = {"essays", "biography", "settings"}
 NOT_FOUND = Page("not-found", "", "", "Page not found", "There is no page at this address.")
 
 
-def _configure_logging(config: Config) -> None:
+def configure_logging(config: Config) -> None:
     """Rotating log in data_dir/logs/hub.log; never logs payloads (essays, emails, descriptions)."""
     logger = logging.getLogger("hub")
     for handler in [h for h in logger.handlers if getattr(h, "_hub_handler", False)]:
@@ -75,7 +75,7 @@ def create_app(config: Config | None = None, clock: Callable[[], datetime] | Non
     """Build the app. ``clock`` returns the current aware time; tests pass a fixed one."""
     config = config or load_config()
     clock = clock or (lambda: datetime.now(UTC))
-    _configure_logging(config)
+    configure_logging(config)
 
     app = FastAPI(title="Application Hub", docs_url=None, redoc_url=None, openapi_url=None)
     app.state.config = config  # what this app was built with (the e2e guard checks its usage-log paths)
@@ -87,7 +87,10 @@ def create_app(config: Config | None = None, clock: Callable[[], datetime] | Non
     @app.get("/", response_class=HTMLResponse, name="dashboard")
     async def dashboard_page(request: Request) -> HTMLResponse:
         snapshot = store.load_all()
-        board = dashboard(snapshot.programmes, snapshot.professors, clock(), config, web.display_tz(snapshot))
+        rtz = snapshot.settings.reminder_tz if snapshot.settings else None
+        board = dashboard(
+            snapshot.programmes, snapshot.professors, clock(), config, web.display_tz(snapshot), rtz
+        )
         return web.render(request, "pages/dashboard.html", PAGES[0], snapshot, board=board)
 
     # research first: POST /programmes/research must not reach POST /programmes/{pid}

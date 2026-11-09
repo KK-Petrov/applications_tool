@@ -35,6 +35,7 @@ PAGES = [
     "/recommenders/new",
     "/recommenders/jansen/edit",
     "/recommenders/import",
+    "/recommenders/emails",  # upload form (#104; preview: tests/e2e/test_update_emails_ui.py)
     "/recommenders/from-courses",  # empty state (#102; rows: tests/e2e/test_professors_from_courses_ui.py)
     "/courses",  # empty state (2c)
     "/courses/import",  # upload form (2c; preview, professors and suggestions in tests/e2e/test_courses.py)

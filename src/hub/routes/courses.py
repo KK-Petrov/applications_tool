@@ -242,12 +242,15 @@ def build_router(web: Web) -> APIRouter:
         posted: list[dict[str, Any]] | None = None,
         errors: dict[int, str] | None = None,
         notice: str | None = None,
+        *,
+        digest: str,
     ) -> HTMLResponse:
         """The merge page, one form for every group (batch merge, DECISIONS #101): every group of duplicates,
         or (``selected``, from "Merge selected") one group of the ticked courses, or (``posted``) the groups
         that were posted, with the owner's ticks, kept copies and picks (ui review round 7, F1); ``errors``
         holds a message per group, shown inside it. The form carries a digest of courses.yaml and the
-        professor files, so a submit after either changed is refused."""
+        professor files, taken by the caller before loading ``snapshot`` (``load_merge``), so a submit after
+        either changed is refused, also a change while the page loaded (F6, DECISIONS #105)."""
         counts = link_counts(snapshot)
         if posted is not None:
             plans = [
@@ -275,22 +278,52 @@ def build_router(web: Web) -> APIRouter:
             errors=errors or {},
             notice=notice,
             posted=posted,
-            digest=store.courses_and_professors_digest(),
+            digest=digest,
         )
 
-    def apply_merges(snapshot: Snapshot, merges: list[tuple[Any, set[str]]]) -> None:
+    def load_merge() -> tuple[Snapshot, str, bool]:
+        """Everything, with the courses-and-professors digest taken before and after loading (F6)."""
+        return store.load_with_digest(store.courses_and_professors_digest)
+
+    def unreadable_professors(snapshot: Snapshot) -> str | None:
+        """A professor file that can't be loaded can't be repointed, so it would keep linking the merged-away
+        copy (docs/01 §10): merging waits until it is fixed (data-integrity Phase 3 r1 F4, DECISIONS #105)."""
+        broken = [e.path for e in snapshot.errors if e.path.startswith("professors/")]
+        if not broken:
+            return None
+        return (
+            f"{', '.join(broken)} can't be read, so its course links can't be moved to the course that is "
+            "kept. Fix the file first (the Recommenders page names the problem). Nothing was merged."
+        )
+
+    def apply_merges(snapshot: Snapshot, merges: list[tuple[Any, set[str]]]) -> str | None:
         """Write merges: each (kept course, ids merged away). Every professor linking a merged-away copy is
         repointed to its kept course (no duplicates in the list), professors first, so a failure later leaves
-        the copies in place; the copies get ``deleted: true`` and ``merged_into`` (ids never reused)."""
+        the copies in place and every repointed link on an active kept course; the copies get
+        ``deleted: true`` and ``merged_into`` (ids never reused). Returns None, or what was written before a
+        write failed (F5, DECISIONS #105)."""
         into = {cid: kept.id for kept, away in merges for cid in away}
-        for professor in snapshot.professors:
-            if into.keys() & set(professor.course_ids):
-                repointed: list[str] = []
-                for cid in professor.course_ids:
-                    target = into.get(cid, cid)
-                    if target not in repointed:
-                        repointed.append(target)
+        moving = [p for p in snapshot.professors if into.keys() & set(p.course_ids)]
+        done = 0
+
+        def stopped(err: DataError) -> str:
+            return (
+                f"{done} of {len(moving)} professors were repointed, then it stopped: {err.path} "
+                f"{err.message.rstrip('.')}. No course was merged yet: the copies are all still on your "
+                "list, and the professors already moved link the course that is kept. Merge again to finish."
+            )
+
+        for professor in moving:
+            repointed: list[str] = []
+            for cid in professor.course_ids:
+                target = into.get(cid, cid)
+                if target not in repointed:
+                    repointed.append(target)
+            try:
                 store.save_professor(professor.model_copy(update={"course_ids": repointed}))
+            except DataError as err:
+                return stopped(err)
+            done += 1
         kept_by_id = {kept.id: kept for kept, _ in merges}
         current = store.load_courses()
         current.courses = [
@@ -301,7 +334,11 @@ def build_router(web: Web) -> APIRouter:
             else c
             for c in current.courses
         ]
-        store.save_courses(current)
+        try:
+            store.save_courses(current)
+        except DataError as err:
+            return stopped(err)
+        return None
 
     @router.post("/courses/merge-all", response_class=HTMLResponse)
     async def merge_all(request: Request) -> Response:
@@ -309,6 +346,23 @@ def build_router(web: Web) -> APIRouter:
         transcript's form; the default copy is kept). Groups with a real conflict are left for
         /courses/merge."""
         snapshot = store.load_all()
+
+        def refuse(message: str) -> HTMLResponse:
+            fresh = store.load_all()  # after a failure part way, what is stored now
+            return web.render(
+                request,
+                "pages/courses.html",
+                COURSES_PAGE,
+                fresh,
+                status_code=409,
+                courses=fresh.courses,
+                notice=None,
+                error=message,
+            )
+
+        blocked = unreadable_professors(snapshot)
+        if blocked:
+            return refuse(blocked)
         counts = link_counts(snapshot)
         merges: list[tuple[Any, set[str]]] = []
         waiting = 0
@@ -319,8 +373,9 @@ def build_router(web: Web) -> APIRouter:
                 continue
             picks = {f.name: f.preset for f in plan.fields if f.conflict and f.preset}
             merges.append((merging.merged(plan, picks), {c.id for c in found if c.id != plan.keep}))
-        if merges:
-            apply_merges(snapshot, merges)
+        failed = apply_merges(snapshot, merges) if merges else None
+        if failed:
+            return refuse(failed)
         return see_other(f"/courses?merged_all={len(merges)}&waiting={waiting}")
 
     @router.post("/courses/selected", response_class=HTMLResponse)
@@ -328,7 +383,7 @@ def build_router(web: Web) -> APIRouter:
         """The list's selection: "Delete selected" (refused while professors link any, unless ``unlink=1``)
         or "Merge selected" (the merge preview of exactly the ticked courses; nothing written)."""
         form = await request.form()
-        snapshot = store.load_all()
+        snapshot, digest, _ = load_merge()
         wanted = [str(v) for v in form.getlist("select")]
         chosen = [c for c in snapshot.courses if c.id in wanted]
         action = str(form.get("action", ""))
@@ -348,7 +403,7 @@ def build_router(web: Web) -> APIRouter:
         if action == "merge":
             if len(chosen) < 2:
                 return refuse("Select at least two courses to merge. Nothing was merged.")
-            return render_merge(request, snapshot, selected=chosen)
+            return render_merge(request, snapshot, selected=chosen, digest=digest)
         if action != "delete" or not chosen:
             return refuse(
                 "Select at least one course, then Delete selected or Merge selected. Nothing was changed."
@@ -380,7 +435,8 @@ def build_router(web: Web) -> APIRouter:
     @router.get("/courses/merge", response_class=HTMLResponse)
     async def merge_form(request: Request) -> HTMLResponse:
         """Every group of duplicate courses with what merging them gives; nothing is written."""
-        return render_merge(request, store.load_all())
+        snapshot, digest, _ = load_merge()
+        return render_merge(request, snapshot, digest=digest)
 
     def posted_groups(form: Any, by_id: dict[str, Any]) -> list[dict[str, Any]] | None:
         """The groups of the merge form (``g<n>-ids``, ``-include``, ``-keep`` and a pick per field), or None
@@ -436,26 +492,51 @@ def build_router(web: Web) -> APIRouter:
         copies go to Deleted courses with ``merged_into`` (their ids are never reused). The whole submit is
         refused, nothing written, when courses.yaml or a professor file changed since the page was shown."""
         form = await request.form()
-        snapshot = store.load_all()
+        snapshot, digest, unchanged = load_merge()
         groups = posted_groups(form, {c.id: c for c in snapshot.courses})
         if groups is None:
             return render_merge(
-                request, snapshot, 409, "These courses changed since the page was shown. Nothing was merged."
+                request,
+                snapshot,
+                409,
+                "These courses changed since the page was shown. Nothing was merged.",
+                digest=digest,
             )
-        if form.get("digest") != store.courses_and_professors_digest():
-            return render_merge(request, snapshot, 409, MERGE_PAGE_STALE, posted=groups)
+        if not unchanged or form.get("digest") != digest:
+            return render_merge(request, snapshot, 409, MERGE_PAGE_STALE, posted=groups, digest=digest)
+        blocked = unreadable_professors(snapshot)
+        if blocked:
+            return render_merge(request, snapshot, 409, blocked, posted=groups, digest=digest)
+
+        def failed_part_way(message: str) -> HTMLResponse:
+            fresh, fresh_digest, _ = load_merge()
+            by_id = {c.id: c for c in fresh.courses}
+            if any(c.id not in by_id for g in groups for c in g["copies"]):
+                return render_merge(request, fresh, 409, message, digest=fresh_digest)
+            again = [dict(g, copies=[by_id[c.id] for c in g["copies"]]) for g in groups]
+            return render_merge(request, fresh, 409, message, posted=again, digest=fresh_digest)
+
         action = str(form.get("merge", ""))
         if action.isdigit() and int(action) < len(groups):  # one group's own button
             n = int(action)
             result, message = decide(snapshot, groups[n])
             if result is None:
-                return render_merge(request, snapshot, 409, posted=groups, errors={n: message or ""})
-            apply_merges(snapshot, [result])
+                return render_merge(
+                    request, snapshot, 409, posted=groups, errors={n: message or ""}, digest=digest
+                )
+            failed = apply_merges(snapshot, [result])
+            if failed:
+                return failed_part_way(failed)
             kept, away = result
             return see_other(f"/courses?merged={kept.id}&count={len(away)}")
         if action != "decided":
             return render_merge(
-                request, snapshot, 409, "Choose a Merge button. Nothing was merged.", posted=groups
+                request,
+                snapshot,
+                409,
+                "Choose a Merge button. Nothing was merged.",
+                posted=groups,
+                digest=digest,
             )
         decisions = [decide(snapshot, g) for g in groups]
         merges = [result for result, _ in decisions if result is not None]
@@ -464,11 +545,12 @@ def build_router(web: Web) -> APIRouter:
             for g, (result, message) in zip(groups, decisions, strict=True)
             if result is None
         ]
-        if merges:
-            apply_merges(snapshot, merges)  # one write per professor for every group together
+        failed = apply_merges(snapshot, merges) if merges else None  # one write per professor, all groups
+        if failed:
+            return failed_part_way(failed)
         if not waiting:
             return see_other(f"/courses?merged_all={len(merges)}&waiting=0")
-        fresh = store.load_all()  # the undecided groups' courses are unchanged; shown with the posted choices
+        fresh, fresh_digest, _ = load_merge()  # the undecided groups' courses are unchanged; posted choices
         by_id = {c.id: c for c in fresh.courses}
         left = [dict(g, copies=[by_id[c.id] for c in g["copies"]]) for g, _ in waiting]
         return render_merge(
@@ -478,6 +560,7 @@ def build_router(web: Web) -> APIRouter:
             posted=left,
             errors={n: message for n, (_, message) in enumerate(waiting)},
             notice=batch_notice(len(merges), len(waiting)),
+            digest=fresh_digest,
         )
 
     @router.get("/courses/{course_id}/edit", response_class=HTMLResponse)
@@ -1037,6 +1120,8 @@ def build_router(web: Web) -> APIRouter:
         #102)."""
         picks = [str(p) for p in form.getlist("pick")]
         creates, links, problems = [], [], []
+        if len(set(picks)) != len(picks):  # one lecturer created twice (F1)
+            problems.append("a ticked choice is not valid")
         for pick in picks:
             kind, _, rest = pick.partition(":")
             key, _, pid = rest.partition(":")

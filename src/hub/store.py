@@ -19,6 +19,7 @@ import logging
 import os
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import Enum
@@ -34,6 +35,7 @@ from ruamel.yaml.scalarstring import DoubleQuotedScalarString, LiteralScalarStri
 from hub.config import Config
 from hub.models import Biography, Professor, Programme, Settings
 from hub.models.course import Courses, TranscriptCourse
+from hub.models.sync import CalendarMap, CalendarMapEntry, DigestState, LastSync
 
 log = logging.getLogger(__name__)
 
@@ -44,6 +46,9 @@ BIOGRAPHY_FILE = "biography.yaml"
 PROGRAMMES_DIR = "programmes"
 PROFESSORS_DIR = "professors"
 COURSES_FILE = "courses.yaml"
+CALENDAR_MAP_FILE = "sync/calendar_map.json"  # docs/01 §8
+DIGEST_STATE_FILE = "sync/digest_state.json"
+LAST_SYNC_FILE = "sync/last_sync.json"  # DECISIONS #106 Q5
 SOURCES_DIR = "sources"
 
 
@@ -519,6 +524,44 @@ class Store:
                 )
             self._save(folder / f"{item_id}.yaml", model)
 
+    # ---- sync state (docs/01 §8; Phase 3) ---------------------------------------------------------------
+
+    def _write_json(self, rel: str, model: BaseModel) -> None:
+        path = self.data_dir / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self.write_bytes_atomic(path, (model.model_dump_json(indent=2) + "\n").encode("utf-8"))
+
+    def _read_json(self, rel: str, model_cls: type[M]) -> M | None:
+        """The file as ``model_cls``, None when missing; a DataError naming the file when unreadable."""
+        path = self.data_dir / rel
+        if not path.exists():
+            return None
+        try:
+            return model_cls.model_validate_json(self._read_bytes(path))
+        except ValidationError as exc:
+            raise _error_from_validation(rel, exc) from None
+
+    def load_calendar_map(self) -> dict[str, CalendarMapEntry] | None:
+        """Reminder id → Google event, or None when there is no map (sync rebuilds it from Google)."""
+        found = self._read_json(CALENDAR_MAP_FILE, CalendarMap)
+        return None if found is None else dict(found.root)
+
+    def save_calendar_map(self, mapping: dict[str, CalendarMapEntry]) -> None:
+        """Written atomically after each successful Google call, so a crash never causes duplicates."""
+        self._write_json(CALENDAR_MAP_FILE, CalendarMap(dict(sorted(mapping.items()))))
+
+    def load_last_sync(self) -> LastSync | None:
+        return self._read_json(LAST_SYNC_FILE, LastSync)
+
+    def save_last_sync(self, last: LastSync) -> None:
+        self._write_json(LAST_SYNC_FILE, last)
+
+    def load_digest_state(self) -> DigestState:
+        return self._read_json(DIGEST_STATE_FILE, DigestState) or DigestState()
+
+    def save_digest_state(self, state: DigestState) -> None:
+        self._write_json(DIGEST_STATE_FILE, state)
+
     # ---- biography -------------------------------------------------------------------------------
 
     def load_biography(self) -> Biography:
@@ -537,9 +580,29 @@ class Store:
     def courses_and_professors_digest(self) -> str:
         """sha256 over courses.yaml and every professors/*.yaml (names and exact bytes): the merge page
         refuses a submit when any of them changed since it was shown (batch merge, DECISIONS #101)."""
-        digest = hashlib.sha256()
+        return self._digest([self.data_dir / COURSES_FILE, *self._professor_paths()])
+
+    def load_with_digest(self, digest: Callable[[], str]) -> tuple[Snapshot, str, bool]:
+        """Everything loaded, with ``digest()`` taken before and after: (snapshot, digest before, unchanged).
+
+        A page embeds the "before" digest, so a change while it loads makes its submit refused; a submit is
+        accepted only when the posted digest equals both, so it never acts on files newer than the check
+        (data-integrity Phase 3 r1 F6, DECISIONS #105)."""
+        before = digest()
+        snapshot = self.load_all()
+        return snapshot, before, digest() == before
+
+    def professors_digest(self) -> str:
+        """sha256 over every professors/*.yaml (names and exact bytes): Update emails refuses a Save when any
+        professor changed since the preview (DECISIONS #104)."""
+        return self._digest(self._professor_paths())
+
+    def _professor_paths(self) -> list[Path]:
         folder = self.data_dir / PROFESSORS_DIR
-        paths = [self.data_dir / COURSES_FILE, *(sorted(folder.glob("*.yaml")) if folder.is_dir() else [])]
+        return sorted(folder.glob("*.yaml")) if folder.is_dir() else []
+
+    def _digest(self, paths: list[Path]) -> str:
+        digest = hashlib.sha256()
         for path in paths:
             digest.update(self._rel(path).encode("utf-8") + b"\0")
             digest.update((self._read_bytes(path) if path.exists() else b"<missing>") + b"\0")

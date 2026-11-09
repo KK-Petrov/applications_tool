@@ -45,8 +45,11 @@ Run **data-integrity-reviewer** at the end.
 
 ## You check
 - Follow README/docs/05 §1 to connect Google, then run `uv run hub sync`.
-- C-3-05: on your iPhone, the Applications calendar shows the Princeton reminders (3 Nov request letters,
-  15 Dec deadline) with alerts. Change a deadline in the app, sync again, and see the event move, not duplicate.
+- C-3-05: on your iPhone, the Applications calendar shows the Princeton reminders (the letters check and
+  deadline alerts, and the 15 Dec deadline) with alerts; the overdue letter request (3 Nov) is in the dashboard
+  alert and the digest's Overdue section, not the calendar (docs/02 §5.1: no reminders dated before today).
+  Change a deadline in the app, sync again, and see the event move, not duplicate. (Wording changed 2026-11-08,
+  DECISIONS #106 Q1; the C-3-05 criterion itself is unchanged.)
 - Run `uv run hub digest --dry-run` and read it; then send one for real and check your inbox.
 
 ## Out of scope

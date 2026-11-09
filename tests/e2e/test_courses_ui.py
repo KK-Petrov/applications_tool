@@ -137,8 +137,8 @@ def test_creating_professors_is_confirmed_on_the_sheet(
     page.get_by_role("button", name="Send to Claude").click()  # after the review step (#70)
     page.get_by_role("button", name="Accept all").click()
     page.get_by_role("button", name="Create professors from this document").click()
-    page.locator("[data-lecturer='odegaard-l']").get_by_role("checkbox").check()
-    page.locator("[data-lecturer='bakker-e']").get_by_role("checkbox").check()
+    page.locator("[data-lecturer^='odegaard-l-']").get_by_role("checkbox").check()
+    page.locator("[data-lecturer^='bakker-e-']").get_by_role("checkbox").check()
     page.get_by_role("button", name="Create ticked professors").click()
     page.wait_for_url("**/recommenders?created=*", wait_until="domcontentloaded")
     # Scoped to main: the page has two role=status elements, the visible notice and the global #live-status

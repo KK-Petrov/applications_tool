@@ -7,7 +7,7 @@
     {%- if not prof.email %} <span class="chip chip-urgent email-missing">Email missing</span>{% endif %}
   </th>
   <td class="course">{{ r.course_text }}</td>
-  <td>{{ prof.grade or "" }}</td>
+  <td class="grade">{{ r.grade_text }}</td>
   {% for cell in r.cells %}
   {% set cid = prof.id ~ "-" ~ cell.programme.id %}
   <td class="cell" data-cell="{{ prof.id }}:{{ cell.programme.id }}" data-status="{{ cell.status }}">

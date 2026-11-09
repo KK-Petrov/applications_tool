@@ -16,7 +16,14 @@ from typing import TYPE_CHECKING, Any
 from pydantic import TypeAdapter, ValidationError
 
 from hub.models.common import Email
-from hub.models.professor import COURSE_DESCRIPTION_MAX_CHARS, Letter, LetterStatus, Professor, Tone
+from hub.models.professor import (
+    COURSE_DESCRIPTION_MAX_CHARS,
+    ROUTE_WORDS,
+    Letter,
+    LetterStatus,
+    Professor,
+    Tone,
+)
 from hub.programme_form import slugify, unique_slug
 from hub.rules import names
 from hub.rules.letters import ASKABLE
@@ -216,7 +223,7 @@ def message(field_name: str, text: str) -> str:
 def new_id(name: str, taken: set[str]) -> str:
     """A file id from the surname (last word of the name), e.g. "Prof. Rosa Lindqvist" → ``lindqvist``."""
     words = name.split()
-    folded = {t.casefold() for t in taken}  # Windows: lee.yaml and Lee.yaml are one file
+    folded = {t.casefold() for t in taken} | ROUTE_WORDS  # Windows: lee.yaml and Lee.yaml are one file
     slug = unique_slug(slugify(words[-1] if words else name, fallback="professor"), folded)
     taken.add(slug)
     return slug

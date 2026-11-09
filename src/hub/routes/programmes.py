@@ -87,6 +87,7 @@ def build_router(web: Web) -> APIRouter:
     def programme_context(snapshot: Snapshot, p: Programme, **extra: Any) -> dict[str, Any]:
         return {
             "p": p,
+            "reminder_counts": web.reminder_counts(snapshot, p),
             "summary": summarise(p, snapshot.professors, web.clock(), config),
             "interviews": [
                 InterviewView.of(i) for i in sorted(p.interviews, key=lambda i: (i.start_local, i.id))

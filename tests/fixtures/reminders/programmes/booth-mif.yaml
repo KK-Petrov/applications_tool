@@ -1,0 +1,24 @@
+# Test fixture for the reminder engine (docs/02 §5.4): letters_required null → 2 assumed.
+id: booth-mif
+name: Chicago Booth Master in Finance
+short_name: Booth MiF
+school: University of Chicago Booth School of Business
+status: not_started
+verification: unverified
+sources:
+  - url: https://www.chicagobooth.edu/programs/masters-programs/mif
+    title: Master in Finance
+deadlines:
+  - id: round-1
+    label: Round 1
+    due_local: 2027-01-07T23:59
+    tz: America/Chicago
+    source_url: https://www.chicagobooth.edu/programs/masters-programs/mif
+letters_required: null
+documents:
+  - id: transcript
+    label: Official transcript
+    status: not_requested
+essays:
+  - id: why-booth
+    title: Why the MiF

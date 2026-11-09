@@ -11,7 +11,7 @@
     <dt>University</dt><dd>{{ prof.university }}</dd>
     {% if prof_row.courses %}<dt>Linked courses</dt><dd><ul class="plain">{% for c in prof_row.courses %}<li>{{ c.name }}{% if c.code %} ({{ c.code }}){% endif %}{% if c.grade %} · grade {{ c.grade }}{% endif %}{% if c.term %} · {{ c.term }}{% endif %}{% if c.edited %} · <span class="chip chip-neutral">edited by you</span>{% endif %}</li>{% endfor %}</ul></dd>
     {% else %}<dt>Course</dt><dd>{{ prof.course or "Not set" }}</dd>{% endif %}
-    {% if prof.grade %}<dt>Grade</dt><dd>{{ prof.grade }}</dd>{% endif %}
+    {% if prof_row.grade_text %}<dt>Grade</dt><dd>{{ prof_row.grade_text }}</dd>{% endif %}
     {% if prof.term %}<dt>Term</dt><dd>{{ prof.term }}</dd>{% endif %}
     {% if prof.interaction %}<dt>Specific interaction</dt><dd class="pre-line">{{ prof.interaction }}</dd>{% endif %}
     <dt>Tone</dt><dd>{{ "Slightly warmer" if prof.tone.value == "warm" else "Formal" }}</dd>

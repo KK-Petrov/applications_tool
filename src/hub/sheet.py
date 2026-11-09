@@ -103,6 +103,16 @@ class Row:
         """The Course column: the linked courses' names, else the manual course (DECISIONS #44)."""
         return ", ".join(c.name for c in self.courses) if self.courses else self.professor.course
 
+    @property
+    def grade_text(self) -> str:
+        """The Grade column and the panel's Grade: the professor's own grade, else the grades of the linked
+        courses in the professor's link order (the Course column's order), joined with " · "; a linked
+        course without a grade adds nothing. Display only, never stored (DECISIONS #103)."""
+        own = (self.professor.grade or "").strip()
+        if own:
+            return self.professor.grade or ""
+        return " · ".join(g for c in self.courses if (g := (c.grade or "").strip()))
+
 
 @dataclass(frozen=True)
 class Sheet:

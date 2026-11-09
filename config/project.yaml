@@ -54,8 +54,11 @@ reminders:                        # offsets in days before the deadline's local 
   interview_eve_days: 1
   time_of_day: "09:00"            # in settings.reminder_tz
   rule_event_minutes: 15
+  deadline_event_minutes: 30      # docs/02 §5.2
+  interview_event_minutes: 60     # docs/02 §5.2
   deadline_popups_minutes: [1440, 120]
   interview_popups_minutes: [1440, 60]
+  dashboard_upcoming: 8           # the dashboard's Upcoming reminders list (docs/03 §4.1)
 
 email:
   min_words: 180                  # source: recommended; long enough for the five parts, short enough to read
@@ -195,6 +198,7 @@ google:
   token_path: .secrets/token.json
   timeout_s: 30
   max_retries: 3
+  backoff_s: [1, 2, 4]             # waits before retrying a 429/5xx (docs/05 §2.5)
 
 digest:
   lookahead_days: 14

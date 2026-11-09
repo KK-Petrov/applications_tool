@@ -192,6 +192,15 @@ NEW_WRITE_ROUTES = {
         "/recommenders/from-courses",
         {"data": {"step": "create", "pick": "create:x"}},
     ),
+    # Update emails (Phase 3 pre-build, #104): the preview writes nothing, the save writes professors
+    "update emails preview": (
+        "/recommenders/emails",
+        {"data": {"text": "Prof. Dr. Eva Jansen;x@example.com"}},
+    ),
+    "update emails save": (
+        "/recommenders/emails/save",
+        {"data": {"text": "Prof. Dr. Eva Jansen;x@example.com", "row-1": "use", "digest": "x"}},
+    ),
 }
 
 

@@ -545,3 +545,10 @@ html:has(#import-actions) { scroll-padding-bottom: var(--import-bar-space, 105px
 .working-notice.working-failed .spinner, .working-notice.working-failed .working-meta,
 .working-notice.working-failed .working-leave { display: none; }
 .working-error:focus { outline: 2px solid var(--color-danger); outline-offset: 2px; }
+
+/* Update emails (DECISIONS 104): a row's choice sits in its table cell; controls keep a 24 px target (WCAG 2.5.8) */
+.emails-input textarea { font-family: var(--font-mono); }
+table.emails td { vertical-align: top; overflow-wrap: anywhere; }
+fieldset.email-choice { border: 0; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 4px 16px; }
+label.check { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; white-space: nowrap; }
+label.check input { width: 20px; height: 20px; margin: 0; accent-color: var(--color-accent); }

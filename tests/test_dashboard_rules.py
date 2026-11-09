@@ -159,16 +159,41 @@ def test_alert_overdue_after_request_due(snapshot, config) -> None:
 
 
 def test_alert_skips_covered_and_submitted_programmes(snapshot, config) -> None:
+    """Rewritten for the reminder engine (Phase 3, DECISIONS #106 Q3). Same scenario; changed expectation: the
+    interim alert said MIT's letter request (24 Nov); the engine's earliest task is the follow-up of Jansen's
+    Booth request (asked 2 Nov, follow up 9 Nov)."""
     princeton = _get(snapshot, "princeton-mfin")
     princeton.status = ProgrammeStatus.SUBMITTED
     alert = alerts.most_urgent(snapshot.programmes, snapshot.professors, NOW, config)
-    assert alert.programme_id == "mit-sloan-mfin"  # request_due 2026-11-24
-    assert alert.kind is AlertKind.LETTERS and alert.letters_assumed
+    assert alert.programme_id != "princeton-mfin"
+    assert (alert.kind, alert.reminder.rule, alert.programme_id, alert.due) == (
+        AlertKind.TASK,
+        "letter_follow_up",
+        "booth-mif",
+        date(2026, 11, 9),
+    )
 
 
 def test_alert_falls_back_to_the_deadline_when_letters_are_covered(snapshot, config) -> None:
+    """Rewritten for the reminder engine (DECISIONS #106 Q3). Same scenario (no programme needs letters);
+    changed expectation: the interim alert fell back to Princeton's deadline; the engine names the earliest
+    task first, the Booth follow-up (9 Nov). With no task left, the deadline comes back (next test)."""
     for p in snapshot.programmes:
         p.letters_required = 0
+    alert = alerts.most_urgent(snapshot.programmes, snapshot.professors, NOW, config)
+    assert (alert.kind, alert.reminder.rule, alert.programme_id, alert.due) == (
+        AlertKind.TASK,
+        "letter_follow_up",
+        "booth-mif",
+        date(2026, 11, 9),
+    )
+
+
+def test_alert_is_the_deadline_when_no_task_comes_before_it(snapshot, config) -> None:
+    for p in snapshot.programmes:
+        p.letters_required, p.documents, p.essays = 0, [], []
+    for prof in snapshot.professors:
+        prof.letters = {}
     alert = alerts.most_urgent(snapshot.programmes, snapshot.professors, NOW, config)
     assert (alert.kind, alert.programme_id, alert.due) == (
         AlertKind.DEADLINE,
@@ -178,6 +203,9 @@ def test_alert_falls_back_to_the_deadline_when_letters_are_covered(snapshot, con
 
 
 def test_no_alert_when_everything_is_submitted(snapshot, config) -> None:
+    """Same scenario and expectation as before. Only Princeton's scheduled math test remains; the strip names
+    the next thing to do (docs/03 §4.1), so a "deadline in N days" notice or an interview is in Upcoming
+    reminders, never the alert (DECISIONS #106 Q3)."""
     for p in snapshot.programmes:
-        p.status = ProgrammeStatus.SUBMITTED
+        p.status = ProgrammeStatus.SUBMITTED  # only Princeton's scheduled math test remains
     assert alerts.most_urgent(snapshot.programmes, snapshot.professors, NOW, config) is None

@@ -88,7 +88,7 @@
       <dt>AI-use policy</dt>
       <dd>{% if p.ai_policy.text %}{{ p.ai_policy.text }}{% if p.ai_policy.source_url %} <a href="{{ p.ai_policy.source_url }}" target="_blank" rel="noopener noreferrer">source</a>{% endif %}{% else %}<span class="note">Not stated yet</span>{% endif %}</dd>
       <dt>Reminders</dt>
-      <dd><span class="note">Reminders arrive in Phase 3</span></dd>
+      {% set soon, late = reminder_counts %}<dd><span class="mono">{{ soon }}</span> upcoming{% if late %}, <span class="mono">{{ late }}</span> overdue{% endif %} <span class="note">(listed on the dashboard)</span></dd>
       {% if p.fee.amount or p.fee.note %}
       <dt>Fee</dt>
       <dd>{% if p.fee.amount %}<span class="mono">{{ "%.0f" | format(p.fee.amount) }} {{ p.fee.currency }}</span> {% endif %}{% if p.fee.note %}<span class="note">{{ p.fee.note }}</span>{% endif %}</dd>

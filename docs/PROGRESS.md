@@ -9,10 +9,10 @@ Estimated sessions are the kit's recommendation. `/phase` and `/resume` add 1 to
 | 2a Recommender sheet | Done with known issues | 1 | 1 | medium | 2026-11-06 | C-2a-01 PASS (US-6 to US-9, 14 e2e); C-2a-02 PASS (40 cases, priorities 1–8); C-2a-03 PASS (115–290 ms worst warm load, limit 1000); You check confirmed by user; 510 tests, test-fast 26.6 → ~14 s with xdist (8 workers); data-integrity READY, ui READY | minor items in Phase notes |
 | 2b Recommendation email generator | Done with known issues | 1–2 | 1 | high | 2026-11-06 | C-2b-01 to C-2b-04 PASS (final eval, 10 cases: schema/fact/form/unsupported 0, tuning 1–7 and held-out 8–10 both 0; calibration 3/3; $1.48); C-2b-05 PASS (47 tests); C-2b-06 confirmed by user; lockdown proved live (#47); 707+1 tests, test-fast 17.5 s; data-integrity READY, ai-output READY, ui READY at round 8 (each FAIL fixed with a guard test, #53–#55, #57, #58); Phase 1 fix: unverified badges on the dashboard alert and tile (#58) | No-JS refresh re-posts a failed generation (Phase 5 PRG); emails reuse openings (Phase 4a, C-4a-04, #59); stored warnings re-announced (role=alert); back-forward-cache busy reset and Save-and-generate double submit not test-guarded; deadline-kind alert untested; long notes make tall Data cells, a URL note makes the programmes table scroll inside its box; programme page scrolls 7 px at 390 px (Phase 1) |
 | 2c Programme research and course import | Done with known issues | 2 | 5 | high | 2026-11-08 | C-5-01 PASS live on the current skill (2/2, Berkeley Haas MFE and CMU MSCF, problems [], unverified, $0.52, session 4; research, skills and payloads unchanged since); C-2c-02 PASS (32 us18 tests); C-2c-03 PASS (fast tests; live rerun 2026-11-08 3/3, 28/28, 0 identifiers sent, $0.27; after #100 the five eval files strip byte-identically, so no rerun); session 5: merged rows in Create professors (#96), Add standard steps and documents (#97), review fixes (#98, #99), born-date rule and ID suffix (#100), batch merge (#101), Professors from your courses (#102); full suite 1993 + 1 serial (109 s), test-fast 1820 (four runs at the end: 68.8, 77.8, 49.1, 44.5 s; two above the C-0-02 60 s limit, no single slow test, likely machine load; watch); criteria guard OK (39); You check confirmed by user 2026-11-08 (incl. #96–#102); reviews: ui r7 and data-integrity r11 NOT READY → HIGH/MEDIUM fixed, no confirming round (stopping rule) | see Phase notes: #100–#102 unreviewed; LOWs carried to Phase 5; r10 F3, O(rows²) check, 02 §10.2 limits |
-| 3 Reminders, calendar and digest | Not started | 1–2 | 0 | high | | | |
+| 3 Reminders, calendar and digest | In progress | 1–2 | 1 | high | 2026-11-09 | Session 1: pre-build (C-0-02 median 47.5 s; Grade from linked courses #103; Update emails #104; data-integrity r1 on #101–#104 NOT READY → HIGH/MEDIUM fixed, F6 fixed, LOWs to Phase 5, #105); Steps 1–5 (#106): C-3-01 PASS (14), C-3-02 PASS (26, fake Google), C-3-03 PASS (12, golden), C-3-06 PASS (5); full suite 2127 + 1 serial; test-fast 1950, median 45.4 s (42.6, 44.6, 45.4, 45.5, 71.4); criteria guard OK (39) | Steps 6–9 left (Settings page, Task Scheduler, live test C-3-04, end of phase); C-3-04 and C-3-05 need Google connected |
 | 4a Biography bank, essays, CVs and exact checks | Not started | 1–2 | 0 | high | | Scope addition #59: grounded /rec-email (biography selection, course-to-programme link), C-4a-04; scope addition #86 (ai-output 2c r2 F4): email eval cases with 2–3 linked courses (one without a description, one manual-description case (c)), tuning + held-out, one eval-email run | |
 | 4b AI essay and CV evaluator | Not started | 1–2 | 0 | high | | | |
-| 5 Polish | Not started | 1–2 | 0 | medium | | Carried from 2c (DECISIONS #98–#100, user): ui r7 F7 fieldsets with browser-default borders and plain legends, F8 "Linked to:"/"From:" on items already there, F9 /courses notices not focused or announced and "Merged 0 groups…" wording, F10 "Tick" capitalisation; data-integrity r11 F5 re-import offers "Merge into" its own course (useless retired copy), F7 merge and delete don't see unreadable professor files | |
+| 5 Polish | Not started | 1–2 | 0 | medium | | Carried from 2c (DECISIONS #98–#100, user): ui r7 F7 fieldsets with browser-default borders and plain legends, F8 "Linked to:"/"From:" on items already there, F9 /courses notices not focused or announced and "Merged 0 groups…" wording, F10 "Tick" capitalisation; data-integrity r11 F5 re-import offers "Merge into" its own course (useless retired copy), F7 merge and delete don't see unreadable professor files (merge fixed in Phase 3, #105; delete stays); Phase 3 data-integrity r1 (#105): F7 create_or_link link-phase failure under-reports / can 500, F8 Tick all links every exact match, F10 OS-unreadable professor file → digest 500, F11 route-word ids for existing files; candidate (user, Phase 3 Q9): target round per programme | |
 
 Status values: Not started · In progress · Done · Done with known issues
 
@@ -21,6 +21,35 @@ Actual ÷ estimated sessions over finished phases: 1.13 (Phase 0: 1 ÷ 1; Phase 
 
 ## Hand-offs
 <!-- /handoff writes a section here: Done / Half-done / Left / Open questions / Next first step -->
+
+### Phase 3 hand-off (2026-11-09, end of session 1)
+State: nothing committed this session (HEAD 386030e); working tree has all of the below; `tasks.py test` 2127 passed + 1 serial
+(120 s); `test-fast` 1950 passed, median of 5 = 45.4 s; lint clean; criteria guard OK (39).
+
+- **Done** (tested; DECISIONS #103–#106):
+  - Pre-build: C-0-02 measured (median 47.5 s, PASS; no fix needed); sheet Grade from linked courses (#103,
+    `sheet.Row.grade_text`); Update emails (#104, `src/hub/email_update.py`, `/recommenders/emails`); new professor ids avoid
+    route words (`ROUTE_WORDS`).
+  - Data-integrity Phase 3 round 1 on #101–#104 (`reports/review_3_data-integrity_r1.md`): F1 HIGH lecturer keys, F2 first
+    names (D1 a, docs/02 §9), F3 shared Email check, F4 merge fails closed on unreadable professor files, F5 merge write
+    failure reported, F6 digest before/after loading (D3); D2 documented; F7, F8, F10, F11 to Phase 5 (#105).
+  - Step 1 engine `src/hub/rules/reminders.py` (+ `overdue`), dashboard alert and Upcoming reminders, programme page count;
+    Step 2 `tests/fakes/fake_google.py`; Step 3 `src/hub/google/calendar_sync.py`, `hub sync [--dry-run]`; Step 4
+    `src/hub/google/auth.py`, `hub connect-google` (OAuth findings with URLs in #106); Step 5 `src/hub/google/digest.py`,
+    `hub digest [--dry-run]`, `tests/test_no_outbound_email.py`.
+- **Half-done:** nothing.
+- **Left (session 2):**
+  1. Step 6 Settings page (US-17): read-only owner/zones/data folder, Google status, Sync now (+ dry run) with counts, last
+     sync from `sync/last_sync.json`, digest preview; injectable Google service factory; foreign-Origin test; e2e + axe.
+  2. Step 7 `hub install-schedule` / `uninstall-schedule` (schtasks /XML; argv and XML tested with a mock).
+  3. Step 8 `tests/test_calendar_live.py` (marker `live`; own temporary calendar only, asserted); run
+     `tasks.py live -k calendar` after you connect Google (README/docs/05 §1).
+  4. Step 9 end of phase: README steps, CLAUDE.md commands (install-schedule), every acceptance check, criteria guard,
+     data-integrity-reviewer (prompt) + ui-reviewer (dashboard, programme page, Update emails page, Settings), C-0-02
+     median of 5, PROGRESS/DECISIONS, commit message.
+- **Open questions:** none blocking. You may want to review DECISIONS #106 for the two changed alert expectations and the
+  C-3-01 test-first exception.
+- **Next first step:** `/resume 3`, then Step 6 tests first (tests/test_settings_page.py, tests/e2e/test_settings_ui.py).
 
 ### Phase 2c hand-off (2026-11-08, end of session 4) — resolved in session 5 (see Phase notes)
 State at hand-off: everything committed (HEAD 28e3f7d, tree clean); `test-fast` 1706 passed (37.9 s); last full `tasks.py test` 1868 passed + 1 serial; lint clean; criteria guard OK (39 match the lock). Nothing half-written. Phase status: Done with known issues, **You check pending**.

@@ -44,6 +44,15 @@ class Page:
     wide: bool = False
 
 
+REMINDER_CATEGORY = {
+    "letters": "Letters",
+    "documents": "Documents",
+    "essays": "Essays",
+    "deadline": "Deadline",
+    "interview": "Interview",
+}
+
+
 class Web:
     """Templates plus the per-request context every page needs (display zone, date, nav, errors)."""
 
@@ -64,6 +73,7 @@ class Web:
         env.globals["labels"] = LABELS
         env.globals["all_zones"] = ALL_ZONES
         env.globals["field_label"] = field_label
+        env.globals["reminder_category"] = REMINDER_CATEGORY  # the dashboard chip (docs/03 §4.1)
 
     # ---- filters ---------------------------------------------------------------------------------
 
@@ -83,6 +93,15 @@ class Web:
 
     def display_tz(self, snapshot: Snapshot) -> str:
         return snapshot.settings.display_tz if snapshot.settings else self.config.time.default_display_tz
+
+    def reminder_counts(self, snapshot: Snapshot, programme: Any) -> tuple[int, int]:
+        """(upcoming, overdue) reminders of a programme for its page (``views.reminder_counts``)."""
+        from hub.views import reminder_counts
+
+        rtz = snapshot.settings.reminder_tz if snapshot.settings else self.display_tz(snapshot)
+        return reminder_counts(
+            programme, snapshot.professors, rtz, self.today(snapshot), self.clock(), self.config
+        )
 
     def today(self, snapshot: Snapshot) -> date:
         """Today's date in the display zone: used to stamp dates the user sets (documents, verify)."""

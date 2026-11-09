@@ -161,6 +161,11 @@ CVs are evaluated with the same rubric; Programme fit uses the target programme.
 - `sync/calendar_map.json`: `{ "<reminder_id>": {"event_id": "...", "hash": "<sha256 of event body>", "synced_at": "..."} }`.
   It can be rebuilt from Google by listing events with the private extended property `hub_reminder_id` (docs/05 §2.4).
 - `sync/digest_state.json`: `{ "last_sent_date": "YYYY-MM-DD" }` in `reminder_tz`.
+- `sync/last_sync.json` (DECISIONS #106 Q5): the last `hub sync` or Sync now, for the Settings page:
+  `{ "synced_at": "<ISO with offset>", "dry_run": bool, "created", "updated", "deleted", "unchanged",
+  "errors": int, "error": null | "<why the run stopped>" }` (never titles, descriptions or addresses).
+- Each event also carries `hub_hash` (the body's sha256) in its private extended properties, so a rebuilt
+  map knows what each event holds (#106). All three files are written atomically; the map after each call.
 
 ## 9. Models and loader
 - `src/hub/models/` holds one Pydantic model per file type above; enums as `StrEnum`.
@@ -220,6 +225,10 @@ courses:
 - **A document's "Create professors" step (DECISIONS #96)** lists the lecturers of its confirmed active courses
   and of its copies merged into another course (at import or on /courses/merge), each copy's lecturers linked
   to the active course its `merged_into` chain ends at. Courses deleted without a merge are left out.
+- **"Professors from your courses" (DECISIONS #102, #105)** lists the lecturers of **every active course**, confirmed or
+  not: a course added by hand in courses.yaml has `confirmed: false` (only the import sets `true`) and its lecturers
+  are listed too. Deleted courses are left out. A merge is refused while any professor file can't be loaded, so no
+  link to a merged-away copy is left behind (#105).
 
 ## 11. logs/ai_usage.jsonl: AI usage log (DECISIONS #60)
 One JSON object per line, appended by `run_skill` for every AI call, whether it succeeds or fails. Lines

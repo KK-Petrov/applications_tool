@@ -56,7 +56,9 @@ def test_dashboard_lists_programmes_in_deadline_order(client: TestClient) -> Non
     assert "46 days" in html
     assert "Request Princeton MFin recommendations by 3 Nov 2026" in html
     assert "3 letters needed, 0 confirmed" in html
-    assert "Reminders arrive in Phase 3" in html
+    # Phase 3 replaced the placeholder with the engine's reminders (DECISIONS #106): the first is Princeton's
+    upcoming = html[html.index('id="upcoming-title"') :]
+    assert "3 Nov 2026</span> · Princeton MFin: request letters (3 needed)" in upcoming
 
 
 # ---- requirements and steps ------------------------------------------------------------------------

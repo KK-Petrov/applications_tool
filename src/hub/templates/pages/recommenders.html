@@ -5,11 +5,13 @@
 <a class="button button-secondary" href="/courses/import">Import courses</a>
 <a class="button button-secondary" href="/recommenders/from-courses">Professors from your courses</a>
 <a class="button button-secondary" href="/recommenders/import">Import CSV</a>
+<a class="button button-secondary" href="/recommenders/emails">Update emails</a>
 <a class="button button-primary" href="/recommenders/new">Add professor</a>
 {% endblock %}
 {% block main_attrs %}{% if created_note %} data-announce="{{ created_note }}"{% endif %}{% endblock %}
 {% block content %}
 {% if created_note %}<p class="notice" role="status">{{ created_note }}</p>{% endif %}
+{% if emails_updated is not none %}<p class="notice" role="status">Updated the email of {{ emails_updated }} professor{{ "" if emails_updated == 1 else "s" }}.</p>{% endif %}
 {% if imported is not none %}<p class="notice" role="status">{{ imported }} professor{{ "" if imported == 1 else "s" }} imported.</p>{% endif %}
 {% if action_error %}<div class="form-error" role="alert" tabindex="-1" autofocus><strong>Nothing was saved.</strong> {{ action_error }} The sheet shows what is stored.</div>{% endif %}
 {% include "partials/recommender_totals.html" %}

@@ -176,17 +176,17 @@ def test_us20_create_professors_from_the_document(
     expect(page.locator("#professors-preview input[type=checkbox]:checked")).to_have_count(
         0
     )  # nothing ticked
-    berg = page.locator("[data-lecturer='van-den-berg-a']")
+    berg = page.locator("[data-lecturer^='van-den-berg-a-']")
     expect(berg).to_contain_text("Prof. dr. A. van den Berg")
     expect(berg).to_contain_text("Mathematics II")
     expect(berg).to_contain_text("8,5")
-    smit = page.locator("[data-lecturer='smit-j']")
+    smit = page.locator("[data-lecturer^='smit-j-']")
     expect(smit).to_contain_text("Link to Dr. Jan Smit")
     assert not _serious(page), _serious(page)
     before = sorted(p.name for p in (data_dir / "professors").glob("*.yaml"))
     berg.get_by_role("checkbox").check()
     smit.get_by_role("checkbox").check()
-    page.locator("[data-lecturer='odegaard-l']").get_by_role("checkbox").check()
+    page.locator("[data-lecturer^='odegaard-l-']").get_by_role("checkbox").check()
     assert sorted(p.name for p in (data_dir / "professors").glob("*.yaml")) == before  # nothing yet
     page.get_by_role("button", name="Create ticked professors").click()
     page.wait_for_url("**/recommenders**")

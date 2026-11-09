@@ -245,6 +245,7 @@ def build_router(web: Web) -> APIRouter:
             status_code=409,
             p=p,
             summary=summarise(p, snapshot.professors, web.clock(), config),
+            reminder_counts=web.reminder_counts(snapshot, p),
             interviews=[
                 InterviewView.of(i) for i in sorted(p.interviews, key=lambda i: (i.start_local, i.id))
             ],

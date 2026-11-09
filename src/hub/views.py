@@ -7,13 +7,14 @@ text by the ``when`` / ``school_time`` filters or the ``_time.html`` macros (C-1
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 
 from hub.config import Config
 from hub.models.common import Verification
 from hub.models.professor import Professor
 from hub.models.programme import Deadline, Interview, Programme
 from hub.rules import alerts, letters
+from hub.rules import reminders as engine
 from hub.rules.countdown import Countdown, countdown
 from hub.rules.programmes import (
     Badge,
@@ -23,7 +24,7 @@ from hub.rules.programmes import (
     primary_deadline,
     requirements_progress,
 )
-from hub.rules.timezones import to_instant
+from hub.rules.timezones import local_today, to_instant
 
 PROGRAMME_STATUS = {"not_started": "Not started", "in_progress": "In progress", "submitted": "Submitted"}
 DOCUMENT_STATUS = {
@@ -138,6 +139,8 @@ class Dashboard:
     alert: alerts.Alert | None
     alert_programme: ProgrammeSummary | None
     tiles: Tiles
+    upcoming: list[engine.Reminder]  # the next reminders from the engine (docs/03 §4.1)
+    by_id: dict[str, ProgrammeSummary]  # each reminder's programme (a deadline row prints its deadline)
 
 
 def dashboard(
@@ -146,9 +149,13 @@ def dashboard(
     now_utc: datetime,
     config: Config,
     display_tz: str,
+    reminder_tz: str | None = None,
 ) -> Dashboard:
     rows = [summarise(p, professors, now_utc, config) for p in dashboard_order(programmes, now_utc)]
-    alert = alerts.most_urgent(programmes, professors, now_utc, config, today_tz=display_tz)
+    rtz = reminder_tz or display_tz
+    alert = alerts.most_urgent(programmes, professors, now_utc, config, today_tz=display_tz, reminder_tz=rtz)
+    today = local_today(now_utc, display_tz)
+    reminders_soon = engine.reminders(programmes, professors, rtz, config, today, now_utc)
     by_id = {r.programme.id: r for r in rows}
     upcoming = [r for r in rows if not r.countdown.passed and r.programme.status != "submitted"]
     tiles = Tiles(
@@ -161,4 +168,26 @@ def dashboard(
         essays_evaluated=0,
         essays_total=sum(len(r.programme.essays) for r in rows),
     )
-    return Dashboard(rows, alert, by_id.get(alert.programme_id) if alert else None, tiles)
+    return Dashboard(
+        rows,
+        alert,
+        by_id.get(alert.programme_id) if alert else None,
+        tiles,
+        reminders_soon[: config.reminders.dashboard_upcoming],
+        by_id,
+    )
+
+
+def reminder_counts(
+    programme: Programme,
+    professors: list[Professor],
+    reminder_tz: str,
+    today: date,
+    now_utc: datetime,
+    config: Config,
+) -> tuple[int, int]:
+    """(upcoming, overdue) reminders of one programme, for its page's Linked items (docs/03 §4.2). Every route
+    that renders the programme page uses this one helper."""
+    soon = engine.reminders([programme], professors, reminder_tz, config, today, now_utc)
+    late = engine.overdue([programme], professors, reminder_tz, config, today, now_utc)
+    return len(soon), len(late)

@@ -93,6 +93,13 @@ Dates are computed on the deadline's **local date in the school zone** (D). Rule
 
 Offsets come from `config.reminders`. Reminders dated before `today` are not produced. When a
 programme becomes `submitted`, all its reminders disappear except interviews.
+Refinements (DECISIONS #106): D is the **primary** deadline (Q9); "fewer letters than required" counts the
+letters not declined; `letter_follow_up` uses `letters.follow_up_days`. **Overdue** (Q2): the same rules
+without the date floor give the past *tasks* (`letters_request_due`, `documents_due`, `letters_check`,
+`essay_final`, `letter_follow_up`) whose condition still holds while the deadline's date is today or
+later; they go to the dashboard alert and the digest's Overdue section, never to the calendar. Deadline
+alerts and interviews are never overdue. When every deadline has passed, only scheduled interviews remain
+(and only while they are ahead).
 
 ### 5.2 Event shape
 - Rule reminders: timed events at `reminders.time_of_day` (09:00) in `settings.reminder_tz`, 15 min, one popup at 0 min.
@@ -103,6 +110,15 @@ programme becomes `submitted`, all its reminders disappear except interviews.
 ID = `<rule>:<programme_id>` plus `:<subject_id>` for `letter_follow_up` (professor id) and interviews
 (interview id). Title pattern: `[Hub] Princeton MFin: request letters (3 needed)`; description lists the
 facts and the local app link `http://127.0.0.1:8765/programmes/<id>`.
+Titles (DECISIONS #106): request letters (N needed[, assumed]) · send documents (k not sent) · check
+letters (s of N submitted) · finalise essays (n essays) · deadline in N days · <deadline label> ·
+follow up with <professor> · <interview label> / <label> tomorrow, each with " (estimated)" for an
+estimated interview. While the deadline is unverified (programme or deadline) the deadline and deadline-
+alert titles end with " (unverified)" (rule 11, Q4). Descriptions: the programme and school, the deadline
+with its local time and zone, letters (confirmed, requested, required), "Data: Verified" or "Data:
+Unverified · <reason>", the deadline's source URL (rule 10) and the app link; documents add the ones not
+sent, a follow-up the date asked. Deadline and interview event lengths: `reminders.deadline_event_minutes`
+(30) and `interview_event_minutes` (60).
 
 ### 5.4 Worked example and golden table (C-3-01)
 Fixture `tests/fixtures/reminders/`: today 2026-10-30; `reminder_tz` America/New_York.
@@ -182,7 +198,9 @@ Lecturer names are parsed in Python from the name as written (`config.names`):
    mr., …) are stripped. The professor's `title` is pre-filled from the highest-ranked stripped token
    (`names.title_precedence`; "prof." → "Professor", "dr." → "Dr."); with no token it defaults to "Professor".
    The user can edit it.
-2. **Initials** are tokens of one letter followed by a full stop, possibly joined ("J.A." = J, A).
+2. **Initials** are tokens of one letter followed by a full stop, possibly joined ("J.A." = J, A). A name
+   without any takes them from its first names ("Jan de Vries" → J), so "Jan de Vries" and "J. de Vries" match
+   (DECISIONS #64 (7)).
 3. **Particles** (`names.particles`: van, van der, van den, de, den, der, ter, te, ten, 't, in 't, op de, von, …)
    belong to the surname: "Prof. dr. A.B. van den Berg" → surname "van den Berg", initials "A B", title
    "Professor".
@@ -190,7 +208,10 @@ Lecturer names are parsed in Python from the name as written (`config.names`):
    Berg"); standing alone, as in "Dear Professor Van den Berg,", the first particle is capitalised.
 5. **Matching** (lecturer ↔ existing professor, Add professor suggestions): surname plus initials, compared
    case-insensitively and with diacritics removed ("Müller" = "Muller"). A lecturer without initials matches on
-   surname only and is offered for linking, never merged silently.
+   surname only and is offered for linking, never merged silently. When both names have first names written out,
+   the first names must also agree (case- and diacritic-insensitive), else the match is surname-only: "Lise
+   Ødegaard" and "Prof. Lars Ødegaard" share the initial L but are offered, never matched exactly (DECISIONS #105).
+   The same rule decides Update emails (#104) and "Professors from your courses" (#102).
 Worked examples (tests/test_names.py): "Prof. dr. A. van den Berg" → Professor · van den Berg · "Dear Professor
 Van den Berg,"; "Dr. J. de Vries" → Dr. · de Vries · "Dear Dr. De Vries,"; "S. Whitfield" → Professor ·
 Whitfield.

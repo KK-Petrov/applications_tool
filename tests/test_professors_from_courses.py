@@ -194,3 +194,79 @@ def test_a_failure_part_way_reports_the_counts(
     assert res.status_code == 409
     assert "1 of 2 professors were created, then it stopped" in res.text
     assert len(list((data_dir / "professors").glob("*.yaml"))) == 3  # jansen, whitfield + the first
+
+
+# ---- data-integrity Phase 3 r1 F1: one choice per lecturer, whatever the script (DECISIONS #105) -----------
+
+DISTINCT = """\
+courses:
+  - id: finance-a
+    name: Finance A
+    grade: "8,0"
+    lecturers: [Prof. I. Иванов]
+    description: ''
+    confirmed: true
+  - id: finance-b
+    name: Finance B
+    grade: "7,0"
+    lecturers: [Prof. P. Петров]
+    description: ''
+    confirmed: true
+  - id: stats-a
+    name: Statistics A
+    grade: "6,0"
+    lecturers: [Dr. A. Smith]
+    description: ''
+    confirmed: true
+  - id: stats-b
+    name: Statistics B
+    grade: "6,0"
+    lecturers: [Dr. A. Smith.]
+    description: ''
+    confirmed: true
+"""
+CREATE_ROW = re.compile(r'value="(create:[^"]+)"[^>]*><label for="[^"]+">Create (.+?) <span')
+
+
+@pytest.fixture
+def distinct(data_dir: Path) -> Path:
+    path = data_dir / "courses.yaml"
+    path.write_text(DISTINCT, encoding="utf-8", newline="\n")
+    return path
+
+
+def _new_professors(config) -> dict[str, list[str]]:
+    return {
+        p.name: p.course_ids
+        for p in Store.from_config(config).load_all().professors
+        if p.id not in ("jansen", "whitfield")
+    }
+
+
+def test_every_lecturer_gets_its_own_choice(client: FormClient, config, distinct: Path) -> None:
+    rows = dict((name, pick) for pick, name in CREATE_ROW.findall(_page(client)))
+    assert set(rows) == {"Prof. I. Иванов", "Prof. P. Петров", "Dr. A. Smith", "Dr. A. Smith."}
+    assert len(set(rows.values())) == 4  # Cyrillic names once all slugged to "lecturer"
+    res = client.post(URL, data=[("step", "create"), ("pick", rows["Prof. I. Иванов"])])
+    assert res.status_code == 303
+    assert _new_professors(config) == {"Prof. I. Иванов": ["finance-a"]}  # that one, with its course
+
+
+def test_tick_all_creates_each_lecturer_once(client: FormClient, config, distinct: Path) -> None:
+    html = client.post(URL, data={"select": "all"}).text
+    res = client.post(URL, data=[*form_fields(html, FORM), ("step", "create")])
+    assert res.status_code == 303 and res.headers["location"] == "/recommenders?created=4&linked=0"
+    assert _new_professors(config) == {
+        "Prof. I. Иванов": ["finance-a"],
+        "Prof. P. Петров": ["finance-b"],
+        "Dr. A. Smith": ["stats-a"],
+        "Dr. A. Smith.": ["stats-b"],
+    }
+
+
+def test_the_same_choice_twice_is_refused(client: FormClient, data_dir: Path, distinct: Path) -> None:
+    pick = CREATE_ROW.findall(_page(client))[0][0]
+    before = tree_digest(data_dir)
+    res = client.post(URL, data=[("step", "create"), ("pick", pick), ("pick", pick)])
+    assert res.status_code == 409 and "not valid" in res.text
+    assert tree_digest(data_dir) == before

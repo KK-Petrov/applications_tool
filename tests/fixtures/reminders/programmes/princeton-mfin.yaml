@@ -1,0 +1,36 @@
+# Test fixture for the reminder engine (docs/02 §5.4): invented data in the shape of the seed.
+id: princeton-mfin
+name: Princeton Master in Finance
+short_name: Princeton MFin
+school: Princeton University
+status: not_started
+verification: unverified
+verification_note: Last cycle's date
+sources:
+  - url: https://bcf.princeton.edu/academic-programs/master-in-finance
+    title: Master in Finance
+deadlines:
+  - id: main
+    label: Application deadline
+    due_local: 2026-12-15T23:59
+    tz: America/New_York
+    source_url: https://bcf.princeton.edu/academic-programs/master-in-finance
+letters_required: 3
+documents:
+  - id: transcript
+    label: Official transcript
+    status: not_requested
+  - id: gmat
+    label: GMAT score report
+    status: requested
+interviews:
+  - id: math-test
+    kind: assessment
+    label: Math test
+    start_local: 2026-12-19T10:00
+    tz: America/New_York
+    estimated: true
+    status: scheduled
+essays:
+  - id: purpose
+    title: Statement of academic purpose

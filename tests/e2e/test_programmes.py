@@ -266,7 +266,10 @@ def test_us1_dashboard_lists_programmes_sorted(page: Page, live_server: str) -> 
     expect(tiles).to_contain_text("4 unverified")
     expect(tiles).to_contain_text("Letters confirmed")
     expect(tiles).to_contain_text("Essays evaluated")
-    expect(page.locator("main")).to_contain_text("Reminders arrive in Phase 3")
+    # Phase 3 replaced the placeholder with the engine's next reminders (DECISIONS #106)
+    upcoming = page.locator("ul.upcoming li")
+    expect(upcoming).to_have_count(8)
+    expect(upcoming.first).to_contain_text("Princeton MFin: request letters (3 needed)")
 
 
 def test_us1_row_links_to_programme_page(page: Page, live_server: str) -> None:

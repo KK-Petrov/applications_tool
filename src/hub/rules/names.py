@@ -11,7 +11,8 @@ A name is parsed as written, with ``config.names``:
 4. **Salutation**: the surname keeps its particle in lower case after a first name or initials; standing
    alone ("Dear Professor Van den Berg,") the first letter is capitalised.
 5. **Matching**: surname plus initials, case- and diacritic-insensitive. A name without initials matches on
-   the surname only; that is offered for linking, never merged silently.
+   the surname only; that is offered for linking, never merged silently. With first names written on both
+   sides they must agree too, else the match is surname-only ("Lise" ≠ "Lars"; DECISIONS #105).
 """
 
 from __future__ import annotations
@@ -127,5 +128,10 @@ def match(a: ParsedName, b: ParsedName) -> str | None:
     if not sa or sa != sb:
         return None
     if ia and ib:
-        return "exact" if ia == ib else None
+        if ia != ib:
+            return None
+        # initials may be derived from first names (rule 2): "Lise" and "Lars" are not one person, so with
+        # first names written on both sides they must agree, else it is only offered (DECISIONS #105, D1 a)
+        fa, fb = (tuple(fold(n) for n in x.first_names) for x in (a, b))
+        return "exact" if not (fa and fb) or fa == fb else "surname"
     return "surname"

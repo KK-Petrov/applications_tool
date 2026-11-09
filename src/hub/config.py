@@ -101,8 +101,11 @@ class RemindersConfig(_Section):
     interview_eve_days: int
     time_of_day: str
     rule_event_minutes: int
+    deadline_event_minutes: int
+    interview_event_minutes: int
     deadline_popups_minutes: list[int]
     interview_popups_minutes: list[int]
+    dashboard_upcoming: int
 
 
 class EmailConfig(_Section):
@@ -235,6 +238,7 @@ class GoogleConfig(_Section):
     token_path: str
     timeout_s: int
     max_retries: int
+    backoff_s: list[float]
 
 
 class DigestConfig(_Section):

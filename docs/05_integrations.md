@@ -5,14 +5,18 @@
 2. OAuth consent screen: External, add the user's own address as a test user, then set publishing status
    to **In production**. Reason: refresh tokens of apps left in "Testing" expire after 7 days. The user
    will see an "unverified app" warning on first sign-in, which is expected for a personal app.
-   *Verify this behaviour against Google's current documentation in Phase 3 and record the result in DECISIONS.md.*
+   *Verified 2026-11-08 (DECISIONS #106): an External app in Testing gets refresh tokens that expire in 7 days
+   unless it asks only for name/email/profile scopes (https://developers.google.com/identity/protocols/oauth2),
+   so "In production" stays.*
 3. Create an OAuth client of type **Desktop app**; save the JSON as `.secrets/client_secret.json`.
 4. `hub connect-google` runs the installed-app flow (`google_auth_oauthlib.flow.InstalledAppFlow.run_local_server`),
    stores `.secrets/token.json`, sets `settings.google_connected: true`.
 - Scopes (from `config.google.scopes`): `https://www.googleapis.com/auth/calendar.app.created` (create and
   manage only calendars the app created) and `https://www.googleapis.com/auth/gmail.send`.
-  *Verify in Phase 3 that `calendar.app.created` allows creating the calendar and its events; if not,
-  fall back to `calendar` and log a decision.*
+  *Verified 2026-11-08 (DECISIONS #106): `calendar.app.created` = "Make secondary Google calendars, and see,
+  create, change, and delete events on them" (https://developers.google.com/workspace/calendar/api/auth), so
+  the scopes stay.* `hub connect-google` without `.secrets/client_secret.json` says what to create; a refused
+  refresh asks to run it again.
 - `.secrets/` is gitignored and never read into a Claude conversation; tests never touch it.
 
 ## 2. Calendar sync (`src/hub/google/calendar_sync.py`, CLI `hub sync [--dry-run]`)
@@ -30,6 +34,14 @@ overrides: [{method: popup, minutes: m}, …]}`, `extendedProperties.private.hub
 4. For each map entry not desired → delete the event, drop the entry.
 5. Save the map atomically after each successful call (a crash mid-run must not cause duplicates next run).
 6. Return counts `{created, updated, deleted, unchanged, errors}`; `--dry-run` computes them without calling Google.
+Refinements (DECISIONS #106): every run lists the calendar's events once (paged, with deleted ones) and
+reconciles the map with them first, so a mapped event that is gone (404), deleted (410) or `cancelled`
+(deleted on the phone) is inserted again, never patched in place; a patch answered 404/410 deletes the old
+id (ignoring "already gone") and inserts. Events carry `hub_hash` so a rebuilt map knows their contents.
+A programme, professor or settings file that can't be read stops the run before any call (its events would
+look resolved and be deleted). The calendar is recreated only when `calendars.get` on the stored id returns
+404, at most once per run, logged (Q8). 401/403 or a refused refresh stops the run ("Reconnect Google").
+Backoff waits are `google.backoff_s`. A run's counts go to `sync/last_sync.json`.
 ### 2.4 Rebuild
 List events in the Applications calendar with `privateExtendedProperty=hub_reminder_id=*` style filtering
 (list all events, keep those with the property); rebuild the map from them; delete duplicates sharing an ID.
@@ -57,6 +69,13 @@ the same method chain (`service.events().insert(...).execute()`), including 404 
   (reminders, dated, in display zone); Waiting on professors (> 7 days since request); Unverified
   programmes with deadlines in < 60 days; link `http://127.0.0.1:8765/`.
 - `--dry-run` prints the message instead of sending.
+- Format (DECISIONS #106): header "Application Hub · <weekday day month year>" and "N items in the next 14
+  days. Times are in <display zone>."; sections Overdue, Next 14 days (reminders dated today to 13 days
+  ahead), Waiting on professors, Unverified programmes (deadline instant within 60 days; submitted ones left
+  out), each "- …" lines or "- Nothing overdue." / "- Nothing due." / "- Nobody." / "- None."; deadlines
+  with their display-zone time, the school time when the zones differ, and the source. A data file that
+  can't be read is named in the header. The "items" count is the Next 14 days list. HTML: the same lines,
+  escaped; checked structurally (the golden file is the plain text).
 
 ## 5. Windows Task Scheduler (`hub install-schedule` / `hub uninstall-schedule`)
 Creates two tasks with `schtasks`:

@@ -1,0 +1,7 @@
+# Test fixture: invented owner (docs/02 §5.4 worked example). Never put real data here.
+owner_name: Alex Example
+owner_email: alex.owner@example.com
+display_tz: America/New_York
+reminder_tz: America/New_York
+calendar_id: null
+google_connected: false

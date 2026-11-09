@@ -124,6 +124,16 @@ def test_a_name_without_initials_matches_on_surname_only() -> None:
     assert names.match(_p("Prof. Smit"), _p("J. Jansen")) is None
 
 
+def test_different_written_first_names_are_never_an_exact_match() -> None:
+    """data-integrity Phase 3 r1 F2 (DECISIONS #105, D1 a): initials derived from first names made "Lise" and
+    "Lars" the same person; with first names written on both sides they must agree, else surname only."""
+    assert names.match(_p("Lise Ødegaard"), _p("Prof. Lars Ødegaard")) == "surname"
+    assert names.match(_p("Prof. Eva Jansen"), _p("Prof. Dr. Eva Jansen")) == "exact"
+    assert names.match(_p("EVA JANSEN"), _p("Eva Jänsen")) == "exact"  # case and diacritics still ignored
+    assert names.match(_p("Jan de Vries"), _p("J. de Vries")) == "exact"  # initials only on one side (#64)
+    assert names.match(_p("Lise Ødegaard"), _p("Dr. K. Ødegaard")) is None  # initials differ
+
+
 def test_the_matching_key_is_surname_plus_initials() -> None:
     assert _p("Prof. dr. A. van den Berg").key == ("van den berg", ("a",))
     assert _p("Jan de Vries").key == _p("J. de Vries").key

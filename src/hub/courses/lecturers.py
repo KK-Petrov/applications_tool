@@ -11,12 +11,13 @@ professor (exactly, or on the surname when either has no initials) is offered fo
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from hub.models.course import TranscriptCourse
-from hub.models.professor import Professor
+from hub.models.professor import ROUTE_WORDS, Professor
 from hub.programme_form import slugify, unique_slug
 from hub.rules import names
 
@@ -43,7 +44,7 @@ def grade_score(grade: str | None, cfg: CoursesConfig) -> float:
 class Lecturer:
     """One lecturer of the document, with their courses (and the owner's grades)."""
 
-    key: str  # stable form value, e.g. "van-den-berg-a"
+    key: str  # stable, unique form value, e.g. "van-den-berg-a-3f9c1e2b" (lecturer_key)
     parsed: names.ParsedName  # from the first way the name was written
     written: str
     also_written: list[str] = field(default_factory=list)
@@ -60,6 +61,15 @@ class Lecturer:
         return [c.id for c, _ in self.courses]
 
 
+def lecturer_key(parsed: names.ParsedName) -> str:
+    """The form value of one lecturer: a readable slug plus 8 hex digits of its matching key, so it is unique
+    (non-Latin names all slug to "lecturer"; "A. Smith" and "A. Smith." slug alike) and the same between the
+    page and its submit (data-integrity Phase 3 r1 F1, DECISIONS #105)."""
+    surname, initials = parsed.key
+    digest = hashlib.sha256("".join([surname, *initials]).encode("utf-8")).hexdigest()[:8]
+    return f"{slugify(f'{parsed.surname} {" ".join(parsed.initials)}', 'lecturer')}-{digest}"
+
+
 def group(
     courses: list[TranscriptCourse], names_cfg: NamesConfig, courses_cfg: CoursesConfig
 ) -> list[Lecturer]:
@@ -71,8 +81,7 @@ def group(
             key = parsed.key
             lecturer = by_key.get(key)
             if lecturer is None:
-                slug = slugify(f"{parsed.surname} {' '.join(parsed.initials)}", "lecturer")
-                lecturer = by_key[key] = Lecturer(key=slug, parsed=parsed, written=written)
+                lecturer = by_key[key] = Lecturer(key=lecturer_key(parsed), parsed=parsed, written=written)
             elif written != lecturer.written and written not in lecturer.also_written:
                 lecturer.also_written.append(written)
             if course.id not in lecturer.course_ids:
@@ -97,7 +106,7 @@ def match_professors(lecturers: list[Lecturer], professors: list[Professor], nam
 def professor_id(surname: str, taken: set[str]) -> str:
     """A new professor id from the whole surname ("van den Berg" → ``van-den-berg``), avoiding ``taken``
     case-insensitively (Windows treats ``Lee.yaml`` and ``lee.yaml`` as one file)."""
-    folded = {t.casefold() for t in taken}
+    folded = {t.casefold() for t in taken} | ROUTE_WORDS  # never a /recommenders/<word> route (#104)
     slug = unique_slug(slugify(surname, "professor"), folded)
     taken.add(slug)
     return slug

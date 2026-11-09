@@ -696,12 +696,14 @@ def test_linking_to_a_professor_deleted_since_the_preview_is_refused(
     _accept_all(client)
     Store.from_config(config).create_professor(Professor(id="smit", name="Dr. Jan Smit", university="RSM"))
     source = next((data_dir / "sources").glob("*.txt")).name
+    page = client.post("/courses/import/professors", data={"source": source}).text
+    pick = re.search(r'value="(link:[^"]+:smit)"', page).group(1)  # the key is no longer a bare slug (#105)
     (data_dir / "professors" / "smit.yaml").unlink()
     res = client.post(
         "/courses/import/professors",
-        data=[("source", source), ("step", "create"), ("pick", "link:smit-j:smit")],
+        data=[("source", source), ("step", "create"), ("pick", pick)],
     )
-    assert res.status_code == 409
+    assert res.status_code == 409 and "not valid" in res.text  # the lecturer is there, the professor isn't
 
 
 # ---- review round 2 (data-integrity): key/value cells, more date shapes, labels, credits, anchoring ------

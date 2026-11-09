@@ -20,6 +20,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, Response
 from starlette.datastructures import UploadFile
 
+from hub import email_update
 from hub import sheet as sheets
 from hub.ai.email_checks import anticipated_terms, app_warnings, unselected_terms
 from hub.ai.payloads import (
@@ -58,6 +59,7 @@ from hub.web import Page, Web, back_path, is_htmx, see_other
 
 SLUG = re.compile(r"^[a-z0-9-]{2,60}$")
 SHEET_PAGE = Page("recommenders", "/recommenders", "Recommenders", "Recommenders", wide=True)
+EMAILS_PAGE = Page("recommenders", "/recommenders/emails", "Recommenders", "Update emails")
 
 
 def build_router(web: Web) -> APIRouter:
@@ -179,6 +181,7 @@ def build_router(web: Web) -> APIRouter:
         if selected and (email_error or flashed):
             extra["email_error"] = email_error or flashed
         imported = params.get("imported", "")
+        emails = params.get("emails", "")
         created, linked = params.get("created", ""), params.get("linked", "")
         created_note = None
         if created.isdigit() or linked.isdigit():  # after "Create professors from this document" (US-20)
@@ -201,6 +204,7 @@ def build_router(web: Web) -> APIRouter:
             status_code=status_code,
             selected=selected,
             imported=int(imported) if imported.isdigit() else None,
+            emails_updated=int(emails) if emails.isdigit() else None,
             created_note=created_note,
             action_error=action_error,
             **common(sheet),
@@ -556,6 +560,158 @@ def build_router(web: Web) -> APIRouter:
             required=CSV_REQUIRED,
             optional=CSV_OPTIONAL,
         )
+
+    # ---- Update emails (Phase 3 pre-build, DECISIONS #104) ---------------------------------------
+
+    def render_emails(
+        request: Request,
+        snapshot: Snapshot,
+        *,
+        preview: email_update.Preview | None = None,
+        text: str = "",
+        pasted: str = "",
+        choices: dict[int, str] | None = None,
+        digest: str = "",
+        input_error: str | None = None,
+        save_error: str | None = None,
+        status_code: int = 200,
+    ) -> HTMLResponse:
+        return web.render(
+            request,
+            "pages/recommenders_emails.html",
+            EMAILS_PAGE,
+            snapshot,
+            status_code=status_code,
+            preview=preview,
+            text=text,
+            pasted=pasted,
+            choices=choices or {},
+            digest=digest,
+            input_error=input_error,
+            save_error=save_error,
+        )
+
+    def unreadable_professors(snapshot: Snapshot) -> str | None:
+        """A professor file the app can't read can't be checked for a shared email: refuse (fail closed)."""
+        broken = [e.path for e in snapshot.errors if e.path.startswith("professors/")]
+        if not broken:
+            return None
+        return (
+            f"{', '.join(broken)} can't be read, so the app can't check the emails against "
+            f"{'it' if len(broken) == 1 else 'them'}. Fix the file first (the sheet names the problem)."
+        )
+
+    @router.get("/recommenders/emails", response_class=HTMLResponse)
+    async def emails_form(request: Request) -> HTMLResponse:
+        return render_emails(request, store.load_all())
+
+    @router.post("/recommenders/emails", response_class=HTMLResponse)
+    async def emails_preview(request: Request) -> HTMLResponse:
+        snapshot, digest, _ = store.load_with_digest(store.professors_digest)  # the page carries "before"
+        form = await request.form()
+        upload = form.get("file")
+        pasted = str(form.get("text") or "")
+        has_file = isinstance(upload, UploadFile) and bool(upload.filename)
+        text: str | None = None
+        error: str | None = None
+        if has_file and pasted.strip():
+            error = "Choose a CSV file or paste the names and emails, not both."
+        elif has_file:
+            assert isinstance(upload, UploadFile)
+            text = decode_csv(await upload.read())
+            if text is None:
+                error = "The file is not UTF-8 text. In Excel, save it as “CSV UTF-8”."
+        elif pasted.strip():
+            text = pasted
+        else:
+            error = "Choose a CSV file or paste the names and emails first."
+        error = error or unreadable_professors(snapshot)
+        if error or text is None:
+            return render_emails(request, snapshot, pasted=pasted, input_error=error)
+        preview = email_update.propose(text, snapshot.professors, config.names)
+        if preview.error:
+            return render_emails(request, snapshot, pasted=pasted, input_error=preview.error)
+        ticked = {p.row.number: "fill" for p in preview.actionable if p.ticked}
+        return render_emails(
+            request,
+            snapshot,
+            preview=preview,
+            text=text,
+            pasted="" if has_file else pasted,
+            choices=ticked,
+            digest=digest,
+        )
+
+    @router.post("/recommenders/emails/save", response_class=HTMLResponse)
+    async def emails_save(request: Request) -> Response:
+        snapshot, digest, unchanged = store.load_with_digest(store.professors_digest)  # F6, DECISIONS #105
+        form = await request.form()
+        text = str(form.get("text") or "")
+        preview = email_update.propose(text, snapshot.professors, config.names)
+        posted = [(k, str(v)) for k, v in form.multi_items() if k.startswith("row-")]
+        by_row = {p.row.number: p for p in preview.actionable}
+        allowed = {email_update.Kind.FILL: {"fill"}, email_update.Kind.CONFLICT: {"keep", "use"}}
+        choices: dict[int, str] = {}
+        forged: list[str] = []
+        for key, value in posted:
+            number = int(key[4:]) if key[4:].isdigit() else -1
+            proposal = by_row.get(number)
+            if proposal is None or value not in allowed[proposal.kind] or number in choices:
+                forged.append(key)
+            else:
+                choices[number] = value
+
+        def refuse(message: str, keep: dict[int, str] | None = None) -> HTMLResponse:
+            if preview.error:  # no rows at all: the input form with its message
+                return render_emails(
+                    request, snapshot, input_error=f"{preview.error} Nothing was saved.", status_code=409
+                )
+            return render_emails(
+                request,
+                snapshot,
+                preview=preview,
+                text=text,
+                choices=choices if keep is None else keep,
+                digest=digest,
+                save_error=f"{message} Nothing was saved.",
+                status_code=409,
+            )
+
+        blocked = unreadable_professors(snapshot)
+        if preview.error or blocked:
+            return refuse(blocked or "")
+        if not unchanged or str(form.get("digest") or "") != digest:
+            return refuse(
+                "Your professors changed since this preview was shown (for example in another tab). "
+                "The preview below is worked out again from your current professors; check it and save again."
+            )
+        if forged:
+            return refuse(f"A choice in the form is not valid ({', '.join(forged)}).", keep={})
+        undecided = [
+            p
+            for p in preview.actionable
+            if p.kind == email_update.Kind.CONFLICT and p.row.number not in choices
+        ]
+        if undecided:
+            listed = " and ".join(f"row {p.row.number} ({p.row.name})" for p in undecided)
+            return refuse(f"Pick Keep or Use for {listed}.")
+        chosen = [p for p in preview.actionable if choices.get(p.row.number) in ("fill", "use")]
+        if not chosen:
+            return refuse("Nothing to save: tick an email to fill, or choose Use for a different one.")
+        for done, proposal in enumerate(chosen):
+            assert proposal.professor is not None
+            error = save(proposal.professor.model_copy(update={"email": proposal.row.email}))
+            if error:
+                return render_emails(
+                    request,
+                    store.load_all(),
+                    save_error=(
+                        f"{done} of {len(chosen)} professors were updated, then it stopped: "
+                        f"{error.rstrip('.')}. Preview the list again to see what is left."
+                    ),
+                    status_code=409,
+                )
+        return see_other(f"/recommenders?emails={len(chosen)}")
 
     @router.post("/recommenders/{pid}")
     async def update(request: Request, pid: str) -> Response:

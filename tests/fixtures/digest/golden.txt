@@ -1,0 +1,19 @@
+Application Hub · Saturday 14 November 2026
+2 items in the next 14 days. Times are in America/New_York.
+
+Overdue
+- 3 Nov 2026 · Princeton MFin: request letters (3 needed)
+- 5 Nov 2026 · Princeton MFin: follow up with Prof. A. Example
+
+Next 14 days
+- 24 Nov 2026 · Princeton MFin: send documents (2 not sent)
+- 26 Nov 2026 · Booth MiF: request letters (2 needed, assumed)
+
+Waiting on professors (asked more than 7 days ago)
+- Prof. A. Example · Princeton MFin, asked 29 Oct 2026 (16 days ago)
+
+Unverified programmes with a deadline in the next 60 days
+- Princeton MFin · 15 Dec 2026, 11:59 pm ET · Unverified: Last cycle's date · source: https://bcf.princeton.edu/academic-programs/master-in-finance
+- Booth MiF · 8 Jan 2027, 12:59 am ET (7 Jan 2027, 11:59 pm CT school time) · Unverified: Not checked · source: https://www.chicagobooth.edu/programs/masters-programs/mif
+
+Open Application Hub: http://127.0.0.1:8765/

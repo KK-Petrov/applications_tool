@@ -161,7 +161,7 @@ def data_snapshot(folder: Path) -> dict[str, bytes]:
 
 
 HUB_LOG = "logs/hub.log"
-# The store's save message as the app's logger writes it (app._configure_logging: "%(asctime)s %(levelname)s
+# The store's save message as the app's logger writes it (app.configure_logging: "%(asctime)s %(levelname)s
 # %(name)s: %(message)s"), e.g. "2026-11-06 21:26:12,779 INFO hub.store: saved professors/jansen.yaml".
 _SAVE_LINE = r"\d{{4}}-\d{{2}}-\d{{2}} \d{{2}}:\d{{2}}:\d{{2}},\d{{3}} INFO hub\.store: saved {file}"
 

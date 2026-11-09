@@ -22,9 +22,9 @@ from ruamel.yaml import YAML
 
 from hub.courses import importer, merging
 from hub.models.course import TranscriptCourse
-from hub.store import Store
+from hub.store import DataError, Store
 
-from helpers import FormClient, data_snapshot, form_fields, write_recording
+from helpers import FormClient, data_snapshot, form_fields, tree_digest, write_recording
 
 COURSES = """\
 courses:
@@ -857,3 +857,119 @@ def test_a_groups_own_button_still_merges_only_that_group(
     assert res.status_code == 303
     courses = _courses(data_dir)
     assert courses[ST2]["merged_into"] == ST1 and courses[CF2].get("deleted", False) is False
+
+
+# ---- data-integrity Phase 3 r1 F4, F5, F6 (DECISIONS #105) ----------------------------------------------
+
+
+def _decided(client: FormClient) -> list[tuple[str, str]]:
+    """Both groups decided, keeping the copies the professors below do not link (so both are repointed)."""
+    page = [(k, v) for k, v in _all(client.get("/courses/merge").text) if not k.endswith("-keep")]
+    return [*page, ("g0-keep", CF1), ("g1-keep", ST1), ("g0-term", CF2), ("g0-code", CF1)]
+
+
+def _link(config, pid: str, course_ids: list[str]) -> None:
+    store = Store.from_config(config)
+    prof = next(p for p in store.load_all().professors if p.id == pid)
+    store.save_professor(prof.model_copy(update={"course_ids": course_ids}))
+
+
+BROKEN = "id: broken\nname: Dr. B. Broken\nuniversity: Example\ncourse_ids: [{cid}]\nnot_a_field: 1\n"
+
+
+@pytest.mark.parametrize("how", ["batch", "own button", "merge all"])
+def test_merging_is_refused_while_a_professor_file_cannot_be_read(
+    client: FormClient, data_dir: Path, two_groups: Path, how: str
+) -> None:
+    """F4: an unreadable professor file linking a copy would keep linking it after the merge (docs/01 §10)."""
+    fields = _decided(client)
+    (data_dir / "professors" / "broken.yaml").write_text(BROKEN.format(cid=ST2), encoding="utf-8")
+    before = tree_digest(data_dir)
+    if how == "merge all":
+        res = client.post("/courses/merge-all")
+    else:
+        refreshed = [(k, v) for k, v in fields if k != "digest"] + [("digest", _digest_now(client))]
+        button = "decided" if how == "batch" else "1"
+        res = client.post("/courses/merge", data=[*refreshed, ("merge", button)])
+    assert res.status_code == 409 and "professors/broken.yaml" in res.text
+    assert "Nothing was merged" in res.text
+    assert tree_digest(data_dir) == before
+
+
+def _digest_now(client: FormClient) -> str:
+    return dict(_all(client.get("/courses/merge").text))["digest"]
+
+
+@pytest.mark.parametrize(
+    ("failing", "message"),
+    [
+        ("save_professor", "1 of 2 professors were repointed, then it stopped: professors/"),
+        ("save_courses", "2 of 2 professors were repointed, then it stopped: courses.yaml"),
+    ],
+)
+def test_a_write_failure_part_way_says_what_happened(
+    client: FormClient,
+    config,
+    data_dir: Path,
+    two_groups: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failing: str,
+    message: str,
+) -> None:
+    """F5: no bare 500; the professors already repointed point at active kept courses, no course is merged."""
+    _link(config, "jansen", [CF2])
+    _link(config, "whitfield", [ST2])
+    fields = _decided(client)
+    courses_before = two_groups.read_bytes()
+    real = getattr(Store, failing)
+    calls: list[str] = []
+
+    def fail(self, model):  # noqa: ANN001, ANN202
+        calls.append("x")
+        if failing == "save_courses" or len(calls) == 2:
+            raise DataError(
+                "courses.yaml" if failing == "save_courses" else f"professors/{model.id}.yaml",
+                None,
+                "could not be written: it is locked",
+            )
+        return real(self, model)
+
+    monkeypatch.setattr(Store, failing, fail)
+    res = _batch(client, fields)
+    assert res.status_code == 409 and message in res.text
+    assert "No course was merged yet" in res.text
+    assert two_groups.read_bytes() == courses_before  # no copy deleted, no merged values
+
+
+def _write_during_load(monkeypatch: pytest.MonkeyPatch, path: Path, when: str) -> None:
+    """Change ``path`` once, just before or just after the next ``Store.load_all`` reads the files (another
+    tab or OneDrive writing in between)."""
+    real = Store.load_all
+    state = {"done": False}
+
+    def load_all(self):  # noqa: ANN001, ANN202
+        def change() -> None:
+            if not state["done"]:
+                state["done"] = True
+                path.write_text(path.read_text(encoding="utf-8") + "# changed meanwhile\n", encoding="utf-8")
+
+        if when == "before":
+            change()
+        result = real(self)
+        if when == "after":
+            change()
+        return result
+
+    monkeypatch.setattr(Store, "load_all", load_all)
+
+
+def test_a_change_while_the_merge_page_loads_is_caught_on_submit(
+    client: FormClient, data_dir: Path, two_groups: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F6: the page must carry the digest of what it shows, taken before loading."""
+    _write_during_load(monkeypatch, data_dir / "professors" / "jansen.yaml", "after")
+    fields = _decided(client)
+    before = two_groups.read_bytes()
+    res = _batch(client, fields)
+    assert res.status_code == 409 and "changed since this page was shown" in res.text
+    assert two_groups.read_bytes() == before
