@@ -22,6 +22,27 @@ Actual ÷ estimated sessions over finished phases: 0.67 (Phase 0: 1 ÷ 1; Phase 
 ## Hand-offs
 <!-- /handoff writes a section here: Done / Half-done / Left / Open questions / Next first step -->
 
+### Phase 2c hand-off (2026-11-08, end of session 4)
+State at hand-off: everything committed (HEAD 28e3f7d, tree clean); `test-fast` 1706 passed (37.9 s); last full `tasks.py test` 1868 passed + 1 serial; lint clean; criteria guard OK (39 match the lock). Nothing half-written. Phase status: Done with known issues, **You check pending**.
+
+- **Done** (tested, committed; DECISIONS #88–#95):
+  - Session-3 open questions and reviews closed: F7 soft break in a .docx cell, "Label:<TAB><TAB>value", new labels and the "born"/"geboren" predicate (`src/hub/courses/extract.py`, `identifiers.py`, `config/project.yaml`; #88–#90, #92); ai-output r3 N1–N5 (`importer.py`, research SKILL.md, `tests/evals/courses/course_graders.py`; #88, #91); data-integrity r9 and r10 (#90, #92); ui r6 READY.
+  - Real-transcript finding (#93): owner-name, bracket and repeated-footer rules (`identifiers.strip(..., owner=)`, owner name passed by `routes/courses.py`), wrapped course names (`importer._wrapped_rows`), owner-entered institution (`institution_entered`), eval fixture with the footer on every page, `tests/evals/courses/wrapped.*`.
+  - Course follow-ups (#94, #95): edit (`src/hub/courses/editing.py`, `pages/course_edit.html`), delete/restore (`course_delete.html`, `courses_deleted.html`, `deleted`), merge (`src/hub/courses/merging.py`, `courses_merge.html`, `merged_into`), list selection and Merge all (`courses.html`, `courses_delete_selected.html`), import "Merge into" (`courses_import.html`). Tests: `tests/test_course_edit.py`, `tests/test_course_merge.py`, `tests/e2e/test_course_edit_ui.py`, `tests/e2e/test_course_merge_ui.py`.
+  - Criteria: C-5-01 PASS live on the current skill (2/2, $0.52); C-2c-02 PASS (32 us18 tests); C-2c-03 PASS (fast; live rerun 2026-11-08 on the footer fixture 3/3, 28/28, 0 identifiers sent, $0.27). Earlier criteria green in the full suite.
+- **Half-done:** nothing.
+- **Left:**
+  1. **You check (C-2c phase "You check")**, not yet confirmed: research one programme and open every source; re-research one of yours, reject one change and accept another; import your own transcript (footer number gone, no identifier in the data folder, "your own entry" institution); create professors (names, titles, particles, links); plus the course follow-ups: edit, delete/unlink/restore, merge a group, Delete selected, Merge all, "Merge into" at import.
+  2. Reviews of #92–#95 (not run; offered twice, no answer yet): ui-reviewer (new pages and templates) and data-integrity-reviewer (stored fields `institution_entered`, `edited`, `deleted`, `merged_into`; owner/bracket/footer stripping; merges repointing professors).
+  3. The "Add standard steps and documents" follow-up you named with the course edit request ("Follow-up before Phase 3 (with …)"): not specified or started.
+  4. After the You check: mark Phase 2c Done in the table, then Phase 3.
+- **Open questions (for you):**
+  1. Run ui-reviewer and data-integrity-reviewer on #92–#95 before Phase 3? Recommended: yes, one scoped round each, with the stopping rule you set in session 4.
+  2. "Add standard steps and documents": what should it do (which steps and documents, per programme or for all)? Needs your description before a plan.
+  3. Known limits to accept or fix: bringing back a merged-away copy doesn't re-link its professors; a row merged at import is not in that document's "Create professors" step; r10 F3 (a grade-less sibling's mention ends a lecturer block, a false flag); `row_problems` with siblings is O(rows²) (31.9 s at 200 rows). Recommended: accept for now.
+  4. Flaky e2e `tests/e2e/test_research_accept_all_ui.py::test_accept_all_ticks_in_place_and_the_count_follows` (failed once under parallel load on 2026-11-08, passed 3/3 alone and in the next full run). Recommended: watch; look for the cause if it fails again.
+- **Next first step:** `/resume 2c`; ask for the You-check results and answers to open questions 1–2; if 1 is yes, run ui-reviewer, then data-integrity-reviewer (scope #92–#95), one at a time, saving each report to `reports/review_2c_<reviewer>_r<round>.md`.
+
 ### Phase 2c hand-off (2026-11-07, end of session 3) — resolved in session 4 (see Phase notes)
 State at hand-off: full `uv run python tasks.py test` 1513 passed + 1 serial (75 s, exit 0); `test-fast` 1361 passed (29.8 s); lint clean; criteria guard OK (39 match the lock). Nothing half-written. Supersedes the "Left" of the session-2 hand-off below. Review reports in `reports/review_2c_*.md` are saved by the main session (reviewers stay read-only, user decision).
 
