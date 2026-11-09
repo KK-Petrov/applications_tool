@@ -91,6 +91,24 @@ def _course(
     return TranscriptCourse(id=cid, name=name, code=code, institution=institution, **kw)
 
 
+def _g(html: str, g: int = 0) -> list[tuple[str, str]]:
+    """Group ``g``'s fields in the merge form, without their ``g<n>-`` prefix, plus the form's digest (the
+    whole page is one form since the batch merge, DECISIONS #101)."""
+    out = []
+    for k, v in form_fields(html, "merge-form"):
+        if k == "digest":
+            out.append((k, v))
+        elif k.startswith(f"g{g}-"):
+            out.append((k[len(f"g{g}-") :], v))
+    return out
+
+
+def _post(client: FormClient, fields: list[tuple[str, str]], g: int = 0, **kw) -> object:  # noqa: ANN003
+    """Post group ``g``'s fields (un-prefixed, as ``_g`` returns them) with that group's own Merge button."""
+    data = [(k if k == "digest" else f"g{g}-{k}", v) for k, v in fields]
+    return client.post("/courses/merge", data=[*data, ("merge", str(g))], **kw)
+
+
 # ---- grouping -----------------------------------------------------------------------------------------
 
 
@@ -147,7 +165,7 @@ def test_the_preview_writes_nothing_and_preselects_only_case_only_conflicts(
         "Corporate Finance" in html
         and "Marketing" not in html.split("<main", 1)[1].split("Merge duplicates")[-1]
     )
-    fields = dict(form_fields(html, "merge-0"))
+    fields = dict(_g(html))
     assert fields["grade"] == CF2  # "PASS" vs "Pass": "Pass" stands in the sources/ text (CF2's form)
     assert "term" not in fields  # a real conflict: nothing pre-selected
     assert "name" in fields  # "Corporate Finance" vs "Corporate finance": case only, pre-set
@@ -156,15 +174,15 @@ def test_the_preview_writes_nothing_and_preselects_only_case_only_conflicts(
 
 def test_save_waits_for_a_pick_on_every_real_conflict(client: FormClient, stored: Path) -> None:
     before = stored.read_bytes()
-    fields = form_fields(client.get("/courses/merge").text, "merge-0")
-    res = client.post("/courses/merge", data=fields)
+    fields = _g(client.get("/courses/merge").text)
+    res = _post(client, fields)
     assert res.status_code == 409 and "Pick a value for Code" in res.text  # "FEB12003" vs "feb 12003"
     assert stored.read_bytes() == before
 
 
 def _merge(client: FormClient, **picks: str) -> object:
-    fields = [(k, v) for k, v in form_fields(client.get("/courses/merge").text, "merge-0") if k not in picks]
-    return client.post("/courses/merge", data=[*fields, *picks.items()], follow_redirects=True)
+    fields = [(k, v) for k, v in _g(client.get("/courses/merge").text) if k not in picks]
+    return _post(client, [*fields, *picks.items()], follow_redirects=True)
 
 
 def test_save_merges_repoints_professors_and_retires_the_other_copy(
@@ -198,12 +216,8 @@ def test_the_kept_copy_can_be_chosen(client: FormClient, data_dir: Path, stored:
 
 
 def test_an_unticked_copy_is_not_merged(client: FormClient, data_dir: Path, stored: Path) -> None:
-    fields = [
-        (k, v)
-        for k, v in form_fields(client.get("/courses/merge").text, "merge-0")
-        if not (k == "include" and v == CF2)
-    ]
-    res = client.post("/courses/merge", data=fields)
+    fields = [(k, v) for k, v in _g(client.get("/courses/merge").text) if not (k == "include" and v == CF2)]
+    res = _post(client, fields)
     assert res.status_code == 409 and "Tick at least two copies" in res.text
 
 
@@ -279,7 +293,8 @@ def test_merge_into_fills_only_empty_fields(
     assert mkt["description"] == "Consumer behaviour and pricing."  # was empty: filled
     assert mkt["term"] == "Block 1" and mkt["grade"] == "6,5"  # stored values kept
     assert "edited" not in mkt  # filled from a transcript: not owner-edited
-    assert len(_courses(data_dir)) == 3  # no new course
+    active = [c for c in _courses(data_dir).values() if not c.get("deleted")]
+    assert len(active) == 3  # no new active course (the row is kept as a retired copy, DECISIONS #96)
     assert "Merged into Marketing" in res.text
 
 
@@ -305,6 +320,140 @@ def test_merge_conflicts_are_shown(client: FormClient, stored: Path, tmp_path: P
     review = client.post("/courses/import", data={"pasted": paste})
     html = client.post("/courses/import/send", data=form_fields(review.text, "courses-send")).text
     assert "Lecturers differ" in html and "the stored value is kept" in html
+
+
+# ---- a merged row in that document's "Create professors" step (DECISIONS #96) -------------------------
+
+
+def _merge_row(client: FormClient) -> tuple[object, str]:
+    """Merge the one import row into the stored Marketing course; the response and the document's source."""
+    fields = form_fields(_preview(client), "courses-preview")
+    res = client.post("/courses/import/save", data=[*fields, ("accept", "merge-0")])
+    assert res.status_code == 200, res.text[-600:]
+    source = dict(form_fields(res.text, "professors-start"))["source"]
+    assert source and source != "transcript-a.txt"
+    return res, source
+
+
+def _retired(data_dir: Path, source: str) -> list[dict]:
+    return [c for c in _courses(data_dir).values() if c.get("source_document") == source]
+
+
+def test_merge_into_keeps_the_row_as_a_retired_copy_of_this_document(
+    client: FormClient, data_dir: Path, stored: Path, one_row: dict
+) -> None:
+    _, source = _merge_row(client)
+    copies = _retired(data_dir, source)
+    assert len(copies) == 1
+    copy = copies[0]
+    assert copy["deleted"] is True and copy["merged_into"] == MKT and copy["confirmed"] is True
+    assert copy["lecturers"] == ["drs. P. Jansen"] and copy["name"] == "Marketing"
+    assert copy["id"] not in {CF1, CF2, MKT}
+    assert _courses(data_dir)[MKT].get("deleted", False) is False
+    listed = client.get("/courses").text
+    assert listed.count(">Marketing<") <= 1 and copy["id"] not in listed  # the copy is not an active course
+
+
+def test_create_professors_lists_a_merged_rows_lecturers_linked_to_the_kept_course(
+    client: FormClient, config, data_dir: Path, stored: Path, one_row: dict
+) -> None:
+    res, source = _merge_row(client)
+    page = client.post("/courses/import/professors", data=form_fields(res.text, "professors-start"))
+    assert page.status_code == 200, page.text[-600:]
+    assert "drs. P. Jansen" in page.text and "Marketing" in page.text
+    assert "No accepted course from this document" not in page.text
+    fields = form_fields(page.text, "professors-preview")
+    pick = next(v for v in re.findall(r'name="pick" value="([^"]+)"', page.text) if v.startswith("create:"))
+    done = client.post("/courses/import/professors", data=[*fields, ("pick", pick)])
+    assert done.status_code == 303, done.text[-600:]
+    created = [p for p in Store.from_config(config).load_all().professors if p.name == "drs. P. Jansen"]
+    assert len(created) == 1 and created[0].course_ids == [MKT]  # the kept course, never the retired copy
+
+
+def test_the_rows_own_lecturers_are_listed_when_the_stored_course_has_others(
+    client: FormClient, data_dir: Path, stored: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    row = {
+        "name": "Marketing", "code": "FEB12002", "institution": "Example School of Economics",
+        "grade": "6,5", "credits": 4.0, "term": "2022-2023 block 1", "lecturers": ["Dr. J. Smit"],
+        "description": "",
+    }  # fmt: skip
+    monkeypatch.setenv(
+        "FAKE_CLAUDE_RECORDING",
+        str(write_recording(tmp_path, {"courses": [row], "warnings": []}, "courses.json")),
+    )
+    paste = (
+        "Courses at Example School of Economics\n"
+        "FEB12002\tMarketing\t6,5\t4\t2022-2023 block 1\tDr. J. Smit\n"
+    )
+    review = client.post("/courses/import", data={"pasted": paste})
+    html = client.post("/courses/import/send", data=form_fields(review.text, "courses-send")).text
+    fields = form_fields(html, "courses-preview")
+    res = client.post("/courses/import/save", data=[*fields, ("accept", "merge-0")])
+    assert res.status_code == 200, res.text[-600:]
+    assert _courses(data_dir)[MKT]["lecturers"] == ["drs. P. Jansen"]  # the stored value is kept
+    page = client.post("/courses/import/professors", data=form_fields(res.text, "professors-start")).text
+    assert "Dr. J. Smit" in page  # as this document writes them
+    assert "drs. P. Jansen" not in page  # the stored course's lecturer comes from another document
+
+
+def test_merging_the_same_row_again_adds_no_second_copy(
+    client: FormClient, data_dir: Path, stored: Path, one_row: dict
+) -> None:
+    _, source = _merge_row(client)
+    fields = form_fields(_preview(client), "courses-preview")  # the same document imported again
+    res = client.post("/courses/import/save", data=[*fields, ("accept", "merge-0")])
+    assert res.status_code == 200, res.text[-600:]
+    assert len(_retired(data_dir, source)) == 1
+
+
+def test_the_step_follows_a_later_merge_to_the_course_that_remains(
+    client: FormClient, data_dir: Path, stored: Path, one_row: dict
+) -> None:
+    res, source = _merge_row(client)
+    # Marketing is merged away later into Corporate Finance (owner's choice on the merge page)
+    html = client.post("/courses/selected", data=[("select", CF1), ("select", MKT), ("action", "merge")]).text
+    fields = _g(html)
+    picks = {n: CF1 for n in ("name", "code", "grade", "credits", "term", "lecturers", "description")}
+    picks["keep"] = CF1
+    saved = _post(client, [*[(k, v) for k, v in fields if k not in picks], *picks.items()])
+    assert saved.status_code in (200, 303), saved.text[-400:]
+    page = client.post("/courses/import/professors", data=form_fields(res.text, "professors-start")).text
+    assert "drs. P. Jansen" in page and "Corporate Finance" in page
+    assert 'value="create:' in page
+
+
+def test_a_copy_merged_away_on_the_merge_page_still_counts_for_its_document(
+    client: FormClient, config, data_dir: Path, stored: Path
+) -> None:
+    # CF1 (transcript-a, lecturer Ødegaard) merged into CF2 (transcript-b): transcript-a's step keeps Ødegaard
+    _merge(client, term=CF1, code=CF1, keep=CF2)
+    page = client.post("/courses/import/professors", data={"source": "transcript-a.txt"}).text
+    assert "Ødegaard" in page and "drs. P. Jansen" in page  # Marketing is still transcript-a's own course
+    fields = form_fields(page, "professors-preview")
+    pick = next(v for v in re.findall(r'name="pick" value="([^"]+)"', page) if "degaard" in v)
+    client.post("/courses/import/professors", data=[*fields, ("pick", pick)])
+    created = [p for p in Store.from_config(config).load_all().professors if "degaard" in p.name]
+    assert created and created[0].course_ids == [CF2]
+
+
+def test_a_deleted_course_stays_out_of_the_step(client: FormClient, data_dir: Path, stored: Path) -> None:
+    head = "    source_document: transcript-a.txt\n    confirmed: true\n  - id: corporate-finance-feb12003-2"
+    deleted = head.replace("confirmed: true\n", "confirmed: true\n    deleted: true\n", 1)
+    stored.write_text(COURSES.replace(head, deleted), encoding="utf-8")  # CF1 deleted, not merged
+    page = client.post("/courses/import/professors", data={"source": "transcript-a.txt"}).text
+    assert "Ødegaard" not in page and "drs. P. Jansen" in page
+
+
+def test_restoring_a_retired_import_copy_is_refused(
+    client: FormClient, data_dir: Path, stored: Path, one_row: dict
+) -> None:
+    _, source = _merge_row(client)
+    copy = _retired(data_dir, source)[0]
+    before = stored.read_bytes()
+    res = client.post("/courses/restore", data={"restore": copy["id"]})
+    assert res.status_code == 409 and "was merged into Marketing, which is still on your list" in res.text
+    assert stored.read_bytes() == before
 
 
 # ---- select on the list, Merge all (user request, #95) -----------------------------------------------
@@ -398,10 +547,10 @@ def test_merge_selected_previews_exactly_the_ticked_courses(
     before = stored.read_bytes()
     html = client.post("/courses/selected", data=[("select", CF1), ("select", MKT), ("action", "merge")]).text
     assert stored.read_bytes() == before  # a preview: nothing written
-    fields = form_fields(html, "merge-0")
+    fields = _g(html)
     assert sorted(v for k, v in fields if k == "ids") == sorted([CF1, MKT])
     picks = {name: CF1 for name in ("name", "code", "grade", "credits", "term", "lecturers")}
-    res = client.post("/courses/merge", data=[*[(k, v) for k, v in fields if k not in picks], *picks.items()])
+    res = _post(client, [*[(k, v) for k, v in fields if k not in picks], *picks.items()])
     assert res.status_code in (200, 303), res.text[-400:]
     assert _courses(data_dir)[MKT]["merged_into"] == CF1
 
@@ -417,3 +566,294 @@ def test_merge_all_merges_groups_without_a_real_conflict_only(
     assert courses[ST2]["merged_into"] == ST1 and courses[ST1]["description"] == "Regression."
     assert courses[ST1]["name"] == "Statistics II"  # case-only: the transcript's form (sources/ of copy a)
     assert courses[CF2].get("deleted", False) is False  # real conflicts: left for the merge page
+
+
+# ---- ui review round 7 (F1–F4) and the restore check (F2) ---------------------------------------------
+
+
+def test_restoring_a_merged_import_copy_that_differs_is_refused(
+    client: FormClient, data_dir: Path, stored: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # r7 F2: an import row with no institution and another grade and term matches Marketing by code only
+    row = {
+        "name": "Marketing", "code": "FEB12002", "institution": None, "grade": "7,0", "credits": 4.0,
+        "term": "2023-2024 block 1", "lecturers": [], "description": "",
+    }  # fmt: skip
+    monkeypatch.setenv(
+        "FAKE_CLAUDE_RECORDING",
+        str(write_recording(tmp_path, {"courses": [row], "warnings": []}, "courses.json")),
+    )
+    review = client.post(
+        "/courses/import", data={"pasted": "FEB12002\tMarketing\t7,0\t4\t2023-2024 block 1\n"}
+    )
+    html = client.post("/courses/import/send", data=form_fields(review.text, "courses-send")).text
+    res = client.post(
+        "/courses/import/save", data=[*form_fields(html, "courses-preview"), ("accept", "merge-0")]
+    )
+    assert res.status_code == 200, res.text[-600:]
+    copy = next(c for c in _courses(data_dir).values() if c.get("merged_into") == MKT)
+    before = stored.read_bytes()
+    refused = client.post("/courses/restore", data={"restore": copy["id"]})
+    assert refused.status_code == 409
+    assert "was merged into Marketing, which is still on your list" in refused.text
+    assert stored.read_bytes() == before
+
+
+def test_a_restored_copy_is_no_longer_merged_into(client: FormClient, data_dir: Path, stored: Path) -> None:
+    _merge(client, term=CF1, code=CF1, keep=CF1)  # CF2 merged into CF1
+    assert client.post(f"/courses/{CF1}/delete", data={}).status_code in (200, 303)
+    res = client.post("/courses/restore", data={"restore": CF2})
+    assert res.status_code == 303, res.text[-400:]
+    back = _courses(data_dir)[CF2]
+    assert back.get("deleted", False) is False and back.get("merged_into") is None
+
+
+def _selected_form(client: FormClient) -> list[tuple[str, str]]:
+    html = client.post("/courses/selected", data=[("select", CF1), ("select", MKT), ("action", "merge")]).text
+    return _g(html)
+
+
+def test_a_refused_merge_selected_comes_back_with_the_same_group_and_choices(
+    client: FormClient, stored: Path
+) -> None:
+    # r7 F1: the posted group, its keep and its picks come back with the message inside that form
+    fields = [(k, v) for k, v in _selected_form(client) if k != "keep"]
+    before = stored.read_bytes()
+    res = _post(client, [*fields, ("keep", MKT), ("name", MKT)])
+    assert res.status_code == 409 and stored.read_bytes() == before
+    back = _g(res.text)
+    assert sorted(v for k, v in back if k == "ids") == sorted([CF1, MKT])
+    assert ("keep", MKT) in back and ("name", MKT) in back
+    form = res.text[res.text.index('id="merge-0"') :]
+    form = form[: form.index("</form>")]
+    assert 'id="merge-0-error"' in form and "Pick a value" in form
+    assert 'data-focus="merge-0-error"' in res.text
+
+
+def test_a_refused_merge_keeps_unticked_copies_unticked(client: FormClient, stored: Path) -> None:
+    fields = [(k, v) for k, v in _g(client.get("/courses/merge").text)]
+    fields = [(k, v) for k, v in fields if not (k == "include" and v == CF2)]
+    res = _post(client, fields)
+    assert res.status_code == 409 and "Tick at least two copies" in res.text
+    back = _g(res.text)
+    assert ("include", CF1) in back and ("include", CF2) not in back
+    assert sorted(v for k, v in back if k == "ids") == sorted([CF1, CF2])
+
+
+def test_each_copys_controls_are_described_by_that_copy(client: FormClient, stored: Path) -> None:
+    # r7 F3: "Include in the merge" and "Keep this one" are told apart by the copy they belong to
+    html = client.get("/courses/merge").text
+    for cid, term in ((CF1, "2022-2023 block 2"), (CF2, "2023-2024 block 2")):
+        for name in ("include", "keep"):
+            tag = re.search(rf'<input[^>]*name="g0-{name}" value="{cid}"[^>]*>', html).group(0)
+            described = re.search(r'aria-describedby="([^"]+)"', tag).group(1)
+            text = re.search(rf'id="{described}"[^>]*>(.*?)</', html, re.S).group(1)
+            assert term in text
+
+
+HAND_ADDED = """\
+  - id: investments-feb12006
+    name: Investments
+    code: FEB12006
+    institution: Example School of Economics
+    grade: "9,0"
+    credits: 6.0
+    term: 2022-2023 block 3
+    lecturers: []
+    description: ''
+    source_document: transcript-a.txt
+    confirmed: true
+  - id: investments
+    name: Investments
+    grade: "8,5"
+    description: Typed by hand.
+    source_document: null
+    confirmed: false
+"""
+
+
+def test_a_hand_added_copy_is_named_so_never_by_its_id(client: FormClient, stored: Path) -> None:
+    # r7 F4
+    stored.write_text(COURSES + HAND_ADDED, encoding="utf-8")
+    html = client.get("/courses/merge").text
+    group = html[html.index("Investments: 2 copies") :]
+    assert "(investments)" not in group and "(added by hand)" in group
+    assert "added by hand" in re.search(r'id="merge-\d+-copy-1"[^>]*>(.*?)</', group, re.S).group(1)
+
+
+# ---- data-integrity review round 11, F2: ticked courses are checked against each other ---------------
+
+PAIR_DELETED = """courses:
+  - id: marketing-feb12002
+    name: Marketing
+    code: FEB12002
+    institution: Example School of Economics
+    grade: "6,5"
+    credits: 4.0
+    term: 2022-2023 block 1
+    lecturers: []
+    description: ''
+    source_document: transcript-a.txt
+    confirmed: true
+    deleted: true
+  - id: marketing
+    name: Marketing
+    code: FEB12002
+    grade: "7,0"
+    credits: 4.0
+    term: 2023-2024 block 1
+    lecturers: []
+    description: ''
+    source_document: master-profile.txt
+    confirmed: true
+    deleted: true
+    merged_into: marketing-feb12002
+"""
+
+
+def test_restoring_a_course_with_its_merged_copy_is_refused(client: FormClient, stored: Path) -> None:
+    stored.write_text(PAIR_DELETED, encoding="utf-8")
+    before = stored.read_bytes()
+    res = client.post("/courses/restore", data=[("restore", "marketing-feb12002"), ("restore", "marketing")])
+    assert res.status_code == 409 and "Nothing was restored" in res.text
+    assert "Marketing" in res.text and "the same course" in res.text
+    assert stored.read_bytes() == before
+
+
+def test_restoring_either_one_alone_still_works(client: FormClient, data_dir: Path, stored: Path) -> None:
+    stored.write_text(PAIR_DELETED, encoding="utf-8")
+    assert client.post("/courses/restore", data={"restore": "marketing-feb12002"}).status_code == 303
+    assert _courses(data_dir)["marketing-feb12002"].get("deleted", False) is False
+
+
+# ---- batch merge: "Merge all decided groups" (user request, DECISIONS #101) ---------------------------
+
+
+@pytest.fixture
+def two_groups(stored: Path) -> Path:
+    """Corporate Finance (real conflicts on code and term: undecided until picked) and Statistics II (only a
+    case-only name difference, pre-set: decided as shown)."""
+    stored.write_text(COURSES + CLEAN_PAIR, encoding="utf-8")
+    return stored
+
+
+def _all(html: str) -> list[tuple[str, str]]:
+    return form_fields(html, "merge-form")
+
+
+def _batch(client: FormClient, fields: list[tuple[str, str]], **kw) -> object:  # noqa: ANN003
+    return client.post("/courses/merge", data=[*fields, ("merge", "decided")], **kw)
+
+
+def test_the_merge_page_is_one_form_with_a_batch_button(client: FormClient, two_groups: Path) -> None:
+    html = client.get("/courses/merge").text
+    assert html.count("<form") - html.count('id="zone-form"') >= 1
+    fields = _all(html)
+    assert {k.split("-", 1)[0] for k, _ in fields if k != "digest"} == {"g0", "g1"}
+    assert 'name="merge" value="decided"' in html and "Merge all decided groups" in html
+    assert html.count('name="merge" value="0"') == 1 and html.count('name="merge" value="1"') == 1
+
+
+def test_only_decided_groups_merge(client: FormClient, data_dir: Path, two_groups: Path) -> None:
+    res = _batch(client, _all(client.get("/courses/merge").text))
+    assert res.status_code == 200, res.text[-400:]
+    courses = _courses(data_dir)
+    assert courses[ST2]["merged_into"] == ST1 and courses[ST1]["description"] == "Regression."
+    assert courses[CF2].get("deleted", False) is False and courses[CF1]["term"] == "2022-2023 block 2"
+    assert "Merged 1 group; 1 still needs a choice." in res.text
+    assert 'data-focus="merge-notice"' in res.text and 'data-announce="Merged 1 group' in res.text
+
+
+def test_an_undecided_group_comes_back_with_the_posted_choices(
+    client: FormClient, data_dir: Path, two_groups: Path
+) -> None:
+    fields = [(k, v) for k, v in _all(client.get("/courses/merge").text) if k != "g0-keep"]
+    fields += [("g0-keep", CF2), ("g0-term", CF2)]  # the term picked, the code not
+    res = _batch(client, fields)
+    back = _all(res.text)
+    assert ("g0-keep", CF2) in back and ("g0-term", CF2) in back  # the owner's choices kept
+    assert "Pick a value for Code" in res.text  # what the group still needs, inside it
+    assert not any(k.startswith("g1-") for k, _ in back)  # the merged group is gone from the page
+
+
+def test_a_group_is_all_or_nothing(client: FormClient, data_dir: Path, two_groups: Path) -> None:
+    fields = [*_all(client.get("/courses/merge").text), ("g0-term", CF2)]  # code still missing
+    _batch(client, fields)
+    courses = _courses(data_dir)
+    assert courses[CF1]["term"] == "2022-2023 block 2"  # nothing of the undecided group written
+    assert courses[CF2].get("deleted", False) is False
+
+
+def test_every_decided_group_merges_and_the_list_says_how_many(
+    client: FormClient, data_dir: Path, two_groups: Path
+) -> None:
+    fields = [*_all(client.get("/courses/merge").text), ("g0-term", CF2), ("g0-code", CF1)]
+    res = _batch(client, fields)
+    assert res.status_code == 303 and res.headers["location"] == "/courses?merged_all=2&waiting=0"
+    assert "Merged 2 groups of duplicates." in client.get(res.headers["location"]).text
+    courses = _courses(data_dir)
+    assert courses[CF2]["merged_into"] == CF1 and courses[ST2]["merged_into"] == ST1
+
+
+def test_nothing_decided_writes_nothing(client: FormClient, data_dir: Path, two_groups: Path) -> None:
+    fields = [(k, v) for k, v in _all(client.get("/courses/merge").text) if k != "g1-keep"]
+    before = two_groups.read_bytes()
+    res = _batch(client, fields)
+    assert res.status_code == 409 and "Merged 0 groups; 2 still need a choice." in res.text
+    assert two_groups.read_bytes() == before
+
+
+def test_professors_are_repointed_once(
+    client: FormClient, config, data_dir: Path, two_groups: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = Store.from_config(config)
+    jansen = next(p for p in store.load_all().professors if p.id == "jansen")
+    store.save_professor(jansen.model_copy(update={"course_ids": [CF2, ST2]}))
+    calls: list[str] = []
+    real = Store.save_professor
+
+    def counting(self, professor):  # noqa: ANN001, ANN202
+        calls.append(professor.id)
+        return real(self, professor)
+
+    monkeypatch.setattr(Store, "save_professor", counting)
+    page = [(k, v) for k, v in _all(client.get("/courses/merge").text) if not k.endswith("-keep")]
+    # keep the copies Jansen does not link (by default the linked copy is kept: nothing would move)
+    fields = [*page, ("g0-keep", CF1), ("g1-keep", ST1), ("g0-term", CF2), ("g0-code", CF1)]
+    assert _batch(client, fields).status_code == 303
+    assert calls == ["jansen"]  # one write for both groups
+    assert next(p for p in store.load_all().professors if p.id == "jansen").course_ids == [CF1, ST1]
+
+
+@pytest.mark.parametrize("changed", ["courses.yaml", "professors/jansen.yaml"])
+def test_a_stale_page_is_refused_and_writes_nothing(
+    client: FormClient, data_dir: Path, two_groups: Path, changed: str
+) -> None:
+    fields = [*_all(client.get("/courses/merge").text), ("g0-term", CF2), ("g0-code", CF1)]
+    path = data_dir / changed
+    path.write_text(path.read_text(encoding="utf-8") + "# changed in another tab\n", encoding="utf-8")
+    before = data_snapshot(data_dir)
+    res = _batch(client, fields)
+    assert res.status_code == 409 and "changed since this page was shown" in res.text
+    assert "Nothing was merged" in res.text
+    assert {k: v for k, v in data_snapshot(data_dir).items() if not k.startswith("logs/")} == {
+        k: v for k, v in before.items() if not k.startswith("logs/")
+    }
+    back = _all(res.text)
+    assert ("g0-term", CF2) in back and ("g0-code", CF1) in back  # the choices shown again
+
+
+def test_a_post_without_the_digest_is_refused(client: FormClient, two_groups: Path) -> None:
+    fields = [(k, v) for k, v in _all(client.get("/courses/merge").text) if k != "digest"]
+    before = two_groups.read_bytes()
+    assert _batch(client, fields).status_code == 409
+    assert two_groups.read_bytes() == before
+
+
+def test_a_groups_own_button_still_merges_only_that_group(
+    client: FormClient, data_dir: Path, two_groups: Path
+) -> None:
+    res = client.post("/courses/merge", data=[*_all(client.get("/courses/merge").text), ("merge", "1")])
+    assert res.status_code == 303
+    courses = _courses(data_dir)
+    assert courses[ST2]["merged_into"] == ST1 and courses[CF2].get("deleted", False) is False

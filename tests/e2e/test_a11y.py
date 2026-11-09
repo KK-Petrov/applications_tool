@@ -27,12 +27,15 @@ PAGES = [
     "/programmes/columbia-msfe",
     "/programmes/new",
     "/programmes/princeton-mfin/edit",
+    "/programmes/princeton-mfin/standard",  # nothing to add (#97; rows: tests/e2e/test_standard_items_ui.py)
+    "/programmes/booth-mif/standard",  # one row and the items already there (#97)
     "/recommenders",
     "/recommenders?selected=jansen",
     "/recommenders?selected=whitfield",  # a stored email in the panel (2b)
     "/recommenders/new",
     "/recommenders/jansen/edit",
     "/recommenders/import",
+    "/recommenders/from-courses",  # empty state (#102; rows: tests/e2e/test_professors_from_courses_ui.py)
     "/courses",  # empty state (2c)
     "/courses/import",  # upload form (2c; preview, professors and suggestions in tests/e2e/test_courses.py)
     "/courses/merge",  # empty state (#95; groups, selection, Merge into: tests/e2e/test_course_merge_ui.py)

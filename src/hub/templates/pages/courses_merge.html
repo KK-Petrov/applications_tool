@@ -1,8 +1,11 @@
 {% extends "base.html" %}
-{#- Merge duplicate courses (DECISIONS #95; docs/03 §4.8). One form per group; nothing is written until its
-    Save. A field one copy fills is taken from it; where copies disagree the owner picks (nothing pre-selected,
-    except a case-only difference, pre-set to the transcript's form). -#}
-{% block main_attrs %}{% if error %} data-focus="merge-error"{% endif %}{% endblock %}
+{#- Merge duplicate courses (DECISIONS #95, #98, #101; docs/03 §4.8). One form for every group: each group has
+    its own "Merge these copies"; "Merge all decided groups" merges every group with a kept copy and every
+    real conflict picked, and shows the others again with the owner's choices. Nothing is written before a
+    Merge button. A field one copy fills is taken from it; where copies disagree the owner picks (nothing
+    pre-selected, except a case-only difference, pre-set to the transcript's form). Field names carry the
+    group: g<n>-ids, g<n>-include, g<n>-keep, g<n>-<field>. -#}
+{% block main_attrs %}{% if error %} data-focus="merge-error" data-announce="{{ error }}"{% elif notice %} data-focus="merge-notice" data-announce="{{ notice }}"{% elif errors %} data-focus="merge-{{ errors | list | first }}-error"{% endif %}{% endblock %}
 {% block before_title %}
 <nav class="breadcrumb" aria-label="Breadcrumb"><a href="/recommenders">Recommenders</a> <span aria-hidden="true">›</span> <a href="/courses">Courses</a> <span aria-hidden="true">›</span> <span aria-current="page">Merge duplicates</span></nav>
 {% endblock %}
@@ -11,43 +14,60 @@
 {%- endmacro %}
 {% block content %}
 {% if error %}<p class="form-error" role="alert" id="merge-error" tabindex="-1">{{ error }}</p>{% endif %}
+{% if notice %}<p class="notice" role="status" id="merge-notice" tabindex="-1">{{ notice }}</p>{% endif %}
 {% if not plans %}
 <section class="card"><p class="empty">No duplicate courses: no two of your courses share a code, or a name with the same (or an empty) institution.</p></section>
-{% endif %}
-{% for p in plans %}
-{% set g = loop.index0 %}
-<form method="post" action="/courses/merge" id="merge-{{ g }}" class="card">
-  <h2 id="merge-{{ g }}-title">{{ p.copies[0].name }}: {{ p.copies | length }} copies</h2>
-  {% for c in p.copies %}<input type="hidden" name="ids" value="{{ c.id }}">{% endfor %}
-  <fieldset>
-    <legend>Copies</legend>
-    <ul class="plain">
-    {% for c in p.copies %}
-      <li>
-        <label><input type="checkbox" name="include" value="{{ c.id }}" checked> Include in the merge</label>
-        <label><input type="radio" name="keep" value="{{ c.id }}"{% if c.id == p.keep %} checked{% endif %}> Keep this one</label>
-        <span class="sub">{{ c.name }}{% if c.code %} · {{ c.code }}{% endif %}{% if c.term %} · {{ c.term }}{% endif %}{% if c.source_document %} · from {{ c.source_document }}{% endif %} · linked by {{ counts.get(c.id, 0) }} professor{{ "" if counts.get(c.id, 0) == 1 else "s" }}{% if c.edited %} · edited by you{% endif %}</span>
-      </li>
-    {% endfor %}
-    </ul>
-    <p class="hint">Untick a copy to keep it as its own course, for example a course you took twice.</p>
-  </fieldset>
-  {% for f in p.fields if f.options %}
-    {% if f.conflict %}
-    <fieldset class="merge-choice">
-      <legend>{{ labels[f.name] }}: the copies differ{% if not f.preset %}; pick one{% endif %}</legend>
-      {% for c, value in f.options %}
-        <label><input type="radio" name="{{ f.name }}" value="{{ c.id }}"{% if f.preset == c.id %} checked{% endif %}> {{ shown(f.name, value) }} <span class="sub">({{ c.source_document or c.id }})</span></label>
+{% else %}
+<form method="post" action="/courses/merge" id="merge-form">
+  <input type="hidden" name="digest" value="{{ digest }}">
+  {% for p in plans %}
+  {% set g = loop.index0 %}
+  {% set pp = posted[g] if posted else none %}
+  <section class="card merge-group" id="merge-{{ g }}" aria-labelledby="merge-{{ g }}-title">
+    <h2 id="merge-{{ g }}-title">{{ p.copies[0].name }}: {{ p.copies | length }} copies</h2>
+    {% if errors.get(g) %}<p class="form-error" role="alert" id="merge-{{ g }}-error" tabindex="-1">{{ errors[g] }}</p>{% endif %}
+    {% for c in p.copies %}<input type="hidden" name="g{{ g }}-ids" value="{{ c.id }}">{% endfor %}
+    <fieldset>
+      <legend>Copies</legend>
+      <ul class="plain">
+      {% for c in p.copies %}
+        {#- each copy's controls are described by that copy, so the two "Include in the merge" are told apart
+            (ui review round 7, F3); posted groups show the owner's ticks and kept copy (F1, #101) -#}
+        {% set copy_id = "merge-" ~ g ~ "-copy-" ~ loop.index0 %}
+        {% set included = (c.id in pp.include) if pp else true %}
+        {% set kept = (c.id == pp.keep) if pp else (c.id == p.keep) %}
+        <li>
+          <label><input type="checkbox" name="g{{ g }}-include" value="{{ c.id }}" aria-describedby="{{ copy_id }}"{% if included %} checked{% endif %}> Include in the merge</label>
+          <label><input type="radio" name="g{{ g }}-keep" value="{{ c.id }}" aria-describedby="{{ copy_id }}"{% if kept %} checked{% endif %}> Keep this one</label>
+          <span class="sub" id="{{ copy_id }}">{{ c.name }}{% if c.code %} · {{ c.code }}{% endif %}{% if c.term %} · {{ c.term }}{% endif %}{% if c.source_document %} · from {{ c.source_document }}{% else %} · added by hand{% endif %} · linked by {{ counts.get(c.id, 0) }} professor{{ "" if counts.get(c.id, 0) == 1 else "s" }}{% if c.edited %} · edited by you{% endif %}</span>
+        </li>
       {% endfor %}
+      </ul>
+      <p class="hint">Untick a copy to keep it as its own course, for example a course you took twice.</p>
     </fieldset>
-    {% else %}
-    <p class="merge-same"><strong>{{ labels[f.name] }}:</strong> {{ shown(f.name, f.options[0][1]) }}</p>
-    {% endif %}
+    {% for f in p.fields if f.options %}
+      {% if f.conflict %}
+      {% set picked = pp.picks.get(f.name) if pp else f.preset %}
+      <fieldset class="merge-choice"{% if errors.get(g) and not picked %} aria-describedby="merge-{{ g }}-error"{% endif %}>
+        <legend>{{ labels[f.name] }}: the copies differ{% if not f.preset %}; pick one{% endif %}</legend>
+        {% for c, value in f.options %}
+          <label><input type="radio" name="g{{ g }}-{{ f.name }}" value="{{ c.id }}"{% if picked == c.id %} checked{% endif %}> {{ shown(f.name, value) }} <span class="sub">({{ c.source_document or "added by hand" }})</span></label>
+        {% endfor %}
+      </fieldset>
+      {% else %}
+      <p class="merge-same"><strong>{{ labels[f.name] }}:</strong> {{ shown(f.name, f.options[0][1]) }}</p>
+      {% endif %}
+    {% endfor %}
+    <div class="form-actions">
+      <button class="button button-secondary" type="submit" name="merge" value="{{ g }}">Merge these copies<span class="visually-hidden"> ({{ p.copies[0].name }})</span></button>
+    </div>
+  </section>
   {% endfor %}
-  <div class="form-actions">
-    <button class="button button-primary" type="submit">Merge these copies</button>
+  <div class="form-actions merge-batch">
+    <button class="button button-primary" type="submit" name="merge" value="decided">Merge all decided groups</button>
     <a class="button button-secondary" href="/courses">Cancel</a>
+    <p class="hint">Merges every group with a kept copy and every difference picked; the others stay here with your choices.</p>
   </div>
 </form>
-{% endfor %}
+{% endif %}
 {% endblock %}

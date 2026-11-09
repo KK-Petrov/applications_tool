@@ -93,7 +93,7 @@
     <legend>Course {{ loop.index }}{% if r.name %}: {{ r.name }}{% endif %}</legend>
     {#- the problems stand right under the course's name, so both are in view where Check again lands (F1) -#}
     {% if r.merge and not r.saved %}<div class="row-merge" id="row-{{ i }}-merge">
-      <p>Matches your course <strong>{{ r.merge.name }}</strong>. Merging fills only its empty fields; nothing new is added.</p>
+      <p>Matches your course <strong>{{ r.merge.name }}</strong>. Merging fills only its empty fields; no course is added to your list.</p>
       {% if r.merge.differs %}<ul>{% for label, stored, new in r.merge.differs %}<li>{{ label }} differ: yours {{ shown_value(stored) }} · this document {{ shown_value(new) }} (the stored value is kept)</li>{% endfor %}</ul>{% endif %}
     </div>{% endif %}
     {% if r.problems and not r.saved %}<div class="row-problems">{% for m in r.problems %}<p class="refusal" id="row-{{ i }}-problem-{{ loop.index0 }}">{{ m }}</p>{% endfor %}</div>{% endif %}

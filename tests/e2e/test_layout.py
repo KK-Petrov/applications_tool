@@ -39,8 +39,10 @@ NO_JS_PAGES = [
     "/courses/merge",
     "/recommenders",
     "/recommenders/new",
+    "/recommenders/from-courses",  # #102
     "/programmes/new",
     "/programmes/princeton-mfin",
+    "/programmes/booth-mif/standard",  # #97
     "/usage",  # ui review round 5 note: the 320 px guard reuses this list
     "/settings",
 ]

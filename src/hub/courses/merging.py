@@ -6,7 +6,9 @@ both cases the institutions must be equal or one empty. On /courses/merge each g
 course: a field filled in one copy only is taken from it; where copies disagree the owner picks (a case-only
 difference is pre-set to the form in that course's sources/ text), and a picked field counts as owner-edited.
 At import, a row matching a stored course is offered "Merge into <course>": only the course's empty fields are
-filled, conflicts are shown and the stored value is kept.
+filled, conflicts are shown and the stored value is kept; the row itself is kept as a retired copy of its
+document (``deleted``, ``merged_into``), so that document's "Create professors" step still lists the lecturers
+as the document writes them, linked to the course that remains (DECISIONS #96).
 """
 
 from __future__ import annotations
@@ -182,3 +184,45 @@ def fill_empty(course: TranscriptCourse, row: dict[str, Any]) -> tuple[Transcrip
         elif stored != new:
             differs.append(name)
     return (course.model_copy(update=update) if update else course), differs
+
+
+def resolve(course_id: str | None, by_id: dict[str, TranscriptCourse]) -> TranscriptCourse | None:
+    """The active course a ``merged_into`` chain ends at; None when it ends at a course deleted without a
+    merge, at a missing id, or loops."""
+    seen: set[str] = set()
+    current = by_id.get(course_id) if course_id else None
+    while current is not None and current.deleted:
+        if not current.merged_into or current.id in seen:
+            return None
+        seen.add(current.id)
+        current = by_id.get(current.merged_into)
+    return current
+
+
+def document_courses(courses: list[TranscriptCourse], source: str) -> list[TranscriptCourse]:
+    """The courses a document's "Create professors" step lists (US-20; DECISIONS #96): its own confirmed
+    active courses, and for each of its copies merged into another course (at import or on /courses/merge) the
+    course that remains, carrying the copy's lecturers as this document writes them. Courses deleted
+    without a merge are left out. ``courses`` is every course in courses.yaml, deleted ones included."""
+    by_id = {c.id: c for c in courses}
+    out: list[TranscriptCourse] = []
+    for course in courses:
+        if not source or course.source_document != source or not course.confirmed:
+            continue
+        if not course.deleted:
+            out.append(course)
+        elif course.merged_into and (kept := resolve(course.merged_into, by_id)) is not None:
+            out.append(kept.model_copy(update={"lecturers": list(course.lecturers)}))
+    return out
+
+
+def has_copy(courses: list[TranscriptCourse], row: Any, source: str, target_id: str) -> bool:
+    """True when ``source`` already holds a retired copy of ``row`` merged into ``target_id`` (the same
+    document merged again adds no second copy)."""
+    by_id = {c.id: c for c in courses}
+    for course in courses:
+        if course.deleted and course.source_document == source and same_course(course, row):
+            kept = resolve(course.merged_into, by_id)
+            if kept is not None and kept.id == target_id:
+                return True
+    return False

@@ -72,6 +72,7 @@ letters_required: 3                         # int or null (null → config defau
 letters_note: Without full-time work experience, two must be academic
 requirements: [{id: cv, label: Resume / CV, note: null, done: false}]
 steps: [{order: 1, label: Create an account on the Graduate School portal, note: null, done: false}]
+                                            # a step may carry `requirement_ids: [letters]` (optional; DECISIONS #97)
 documents:
   - {id: gmat, label: GMAT official score report, method: GMAC → Princeton, status: not_requested, updated: null, note: null}
 interviews:
@@ -88,7 +89,13 @@ The **primary deadline** is the earliest deadline whose date has not passed; if 
 `official_domains` entries are lowercase host names (`columbia.edu`), unique; research accepts a source only on
 these domains, their subdomains or `config.research.official_shared_domains` (docs/04 §7).
 Validation: every deadline needs `tz` and `source_url`; `due_local` must parse; a programme with
-`verification: verified` must have at least one source.
+`verification: verified` must have at least one source; a step's `requirement_ids` must name requirements of
+the programme. **Step links (DECISIONS #97):** `requirement_ids` (default empty, written only when set) say which
+requirements a step is for; "Add standard steps and documents" sets them; Edit programme keeps them, and when a
+requirement is removed it drops the link and says so ("<step> is no longer linked to <requirement>."); the key is
+removed when no link is left. **Edit programme saves only over the version it showed** (DECISIONS #99): the form
+carries the file's sha256, and a save is refused (409, nothing written) when the file changed since, because steps
+and documents are rebuilt from the posted rows.
 
 ## 4. professors/<id>.yaml
 ```yaml
@@ -199,7 +206,7 @@ courses:
   lecturers and description; each changed field joins `edited` (values are then the owner's, not the
   transcript's). A course linked by a professor can't be deleted until it is unlinked. A deleted course stays in
   the file with `deleted: true`, is left out of every page, suggestion and email payload, and its id is never
-  given to a new course; restoring clears `deleted`. Saves go through the store (shape and comments kept; an
+  given to a new course; restoring clears `deleted` and `merged_into`, and is refused while an active course is the same course by the merge rule below (DECISIONS #98). Saves go through the store (shape and comments kept; an
   unchanged save writes nothing).
 - **Merge (DECISIONS #95):** courses are the same course when both have a code and the codes match (case, spaces
   and punctuation ignored), or, when not both have one, their names match (case and punctuation ignored); the
@@ -207,7 +214,12 @@ courses:
   taken from it; where copies differ the owner picks, and a picked field joins `edited`; every professor's
   `course_ids` pointing at a merged-away copy is repointed to the kept course (no duplicates); the other copies
   get `deleted: true` and `merged_into`. At import, a row matching a stored course fills only that course's
-  empty fields (from a transcript, so not owner-edited).
+  empty fields (from a transcript, so not owner-edited), and the row itself is stored as a retired copy of its
+  document (`source_document` that document, `deleted: true`, `merged_into` the stored course, lecturers as the
+  document writes them; not added again when the same document is merged again; DECISIONS #96).
+- **A document's "Create professors" step (DECISIONS #96)** lists the lecturers of its confirmed active courses
+  and of its copies merged into another course (at import or on /courses/merge), each copy's lecturers linked
+  to the active course its `merged_into` chain ends at. Courses deleted without a merge are left out.
 
 ## 11. logs/ai_usage.jsonl: AI usage log (DECISIONS #60)
 One JSON object per line, appended by `run_skill` for every AI call, whether it succeeds or fails. Lines

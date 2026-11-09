@@ -534,6 +534,17 @@ class Store:
         path = self.data_dir / COURSES_FILE
         return self._load(path, Courses) if path.exists() else Courses()
 
+    def courses_and_professors_digest(self) -> str:
+        """sha256 over courses.yaml and every professors/*.yaml (names and exact bytes): the merge page
+        refuses a submit when any of them changed since it was shown (batch merge, DECISIONS #101)."""
+        digest = hashlib.sha256()
+        folder = self.data_dir / PROFESSORS_DIR
+        paths = [self.data_dir / COURSES_FILE, *(sorted(folder.glob("*.yaml")) if folder.is_dir() else [])]
+        for path in paths:
+            digest.update(self._rel(path).encode("utf-8") + b"\0")
+            digest.update((self._read_bytes(path) if path.exists() else b"<missing>") + b"\0")
+        return digest.hexdigest()
+
     def add_courses(self, new: list[TranscriptCourse]) -> None:
         """Append courses to ``courses.yaml`` (created if missing). An id already in the file is refused:
         ids are never reused (docs/01 §1)."""

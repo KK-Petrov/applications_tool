@@ -400,6 +400,7 @@ def build_programme(
         limit = _int(row["word_limit"], f"essays[{i}].word_limit", errors)
         essays.append({"id": eid, "title": row["title"], "prompt": _opt(row["prompt"]), "word_limit": limit})
     old_steps = {s.order: s for s in existing.steps} if existing else {}
+    kept_requirements = {r["id"] for r in requirements}
     steps = []
     kept_orders = {int(r["order"]) for r in rows["steps"] if r.get("order", "").isdigit()} & set(old_steps)
     next_order = max([*old_steps, 0]) + 1
@@ -413,14 +414,18 @@ def build_programme(
         else:
             order, next_order = next_order, next_order + 1
             old = None
-        steps.append(
-            {
-                "order": order,
-                "label": row["label"],
-                "note": _opt(row["note"]),
-                "done": old.done if old else False,
-            }
-        )
+        step: dict[str, Any] = {
+            "order": order,
+            "label": row["label"],
+            "note": _opt(row["note"]),
+            "done": old.done if old else False,
+        }
+        # not on the form: kept, except links to a requirement removed in this edit (the route says which;
+        # DECISIONS #97); the key is written only when a link is left (docs/01 §3; data-integrity r11 F4)
+        links = [r for r in old.requirement_ids if r in kept_requirements] if old else []
+        if links:
+            step["requirement_ids"] = links
+        steps.append(step)
     sources = []
     for i, row in enumerate(rows["sources"]):
         if not row["url"]:

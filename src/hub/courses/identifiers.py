@@ -125,6 +125,9 @@ def _patterns(
             before += [rf"(?<!(?<![\w]){t} )", rf"(?<!(?<![\w]){t}\. )", rf"(?<!(?<![\w]){t}\.)"]
         word_after = rf"[ \t]*(?:\([^)\n]*\))?[ \t;,.\-–#=]*(?!(?:{month})(?![^\W\d_]))[^\W\d_]"
         alternatives += rf"|{''.join(before)}(?:{dated})(?!{word_after})"
+        # a colon directly after it always makes it a label, also after a title, an initial or a particle
+        # ("Dr. Born: 12-03-2001"; user decision on data-integrity r11 F3, DECISIONS #100)
+        alternatives += rf"|(?:{dated})(?=[ \t]*:)"
     # the label, then an optional bracketed abbreviation such as "(BSN)"; never a bracket holding a digit or
     # the marker, which is the label's value ("Student number ([removed])" at Send; round 8, F3)
     label = re.compile(rf"(?<![\w])(?:{alternatives})(?![\w])(?:\s*\([^)\n\d\[\]]{{0,30}}\))?", re.IGNORECASE)
@@ -268,6 +271,7 @@ def strip(
     marker = cfg.removed_marker
     lines = normalise(text).split(NEWLINE)
     spans: dict[int, list[tuple[int, int]]] = {}
+    born_re = _date_label_pattern(tuple(cfg.date_labels.all))
     i = 0
     while i < len(lines):
         labels = list(p.label.finditer(lines[i]))
@@ -277,6 +281,9 @@ def strip(
         try:
             found, i = (_tabbed if TAB in lines[i] else _untabbed)(lines, i, labels, p)
         except _Outside as outside:
+            if outside.lines == [i] and _born_settles(lines[i], labels, born_re, cfg.born_date_max_words, p):
+                i += 1  # "geboren te Sofia op 12-03-2001": rule 4 below removes the date (#100)
+                continue
             if strict:
                 raise _unresolved(i + 1, outside.label) from None
             # a field Claude returned: every candidate on the lines involved goes, and on the next text line
@@ -292,11 +299,13 @@ def strip(
         for n, line_spans in found.items():
             spans.setdefault(n, []).extend(line_spans)
     # beyond labels (real transcript, DECISIONS #93): a line naming the owner, a repeated page header/footer
-    # and a bracket holding only an ID-shaped token lose their ID-shaped tokens (fail closed)
+    # and a bracket holding only an ID-shaped token lose their ID-shaped tokens (fail closed); and a date
+    # within a few words after "born"/"geboren" on its line goes, whatever stands before the word or between
+    # (user decision on data-integrity r11 F3, DECISIONS #100)
     owner_re = _owner_pattern(owner)
     footers = _footer_lines(lines)
     for n, line in enumerate(lines):
-        extra = _bracketed_ids(line, p)
+        extra = _bracketed_ids(line, p) + _born_dates(line, born_re, cfg.born_date_max_words, p)
         if n in footers or (owner_re is not None and owner_re.search(line)):
             extra += _id_spans(line, p)
         if extra:
@@ -311,10 +320,14 @@ def strip(
 Found = tuple[dict[int, list[tuple[int, int]]], int]  # spans per line, and the line to go on from
 
 # ID-shaped for the owner, bracket and footer rules (#93, user decision): a run of 5+ digits (groups of 2–4
-# after a space or full stop allowed), at most one letter in front and a suffix of up to 3 letters
-# (512345, 598 431, S2034567, 512345ab), or a date. Never a course code ("FEB11001", "FIN 3010"), a year
-# range ("2021-2022"), credits ("20.0") or a page number ("1/9").
-_ID_TOKEN = re.compile(r"(?<![\w.,/\-])[A-Za-z]?\d{2,}(?:[ .]\d{2,4})*[A-Za-z]{0,3}(?![\w])(?![.,/\-]\d)")
+# after a space or full stop allowed), at most one letter in front, a suffix of up to 3 letters and then an
+# optional hyphen with 1–3 digits (512345, 598 431, S2034567, 512345ab, 512345-01; #100), or a date. The 5+
+# digits are counted before the hyphen suffix. Never a course code ("FEB11001", "FIN 3010", "3010-01"), a
+# year range ("2021-2022"), credits ("20.0") or a page number ("1/9").
+_ID_TOKEN = re.compile(
+    r"(?<![\w.,/\-])[A-Za-z]?\d{2,}(?:[ .]\d{2,4})*[A-Za-z]{0,3}(?:-\d{1,3})?(?![\w])(?![.,/\-]\d)"
+)
+_HYPHEN_SUFFIX = re.compile(r"-\d{1,3}$")
 _BRACKET = re.compile(r"\(([^()\n]*)\)")
 # a page number: "1/9", "1 / 9", "page 1", "Page 1 of 9", "pagina 1 van 9", "blz. 1"
 _PAGE_TOKEN = re.compile(
@@ -333,7 +346,9 @@ def _is_date(token: str) -> bool:
 def _id_spans(line: str, p: _Patterns) -> list[tuple[int, int]]:
     """Every ID-shaped token on ``line`` (see ``_ID_TOKEN``): numbers of 5+ digits and dates."""
     out = [
-        m.span() for m in _ID_TOKEN.finditer(line) if sum(ch.isdigit() for ch in m.group(0)) >= MIN_ID_DIGITS
+        m.span()
+        for m in _ID_TOKEN.finditer(line)
+        if sum(ch.isdigit() for ch in _HYPHEN_SUFFIX.sub("", m.group(0))) >= MIN_ID_DIGITS
     ]
     out += [m.span() for m in p.value.finditer(line) if m.group(0) != p.marker and _is_date(m.group(0))]
     return out
@@ -353,6 +368,58 @@ def _bracketed_ids(line: str, p: _Patterns) -> list[tuple[int, int]]:
         if any(a == 0 and b == len(token) for a, b in spans):
             out.append((start, start + len(token)))
     return out
+
+
+@cache
+def _date_label_pattern(words: tuple[str, ...]) -> re.Pattern[str] | None:
+    """The date labels ("born", "geboren") as whole words, any case."""
+    if not words:
+        return None
+    alternatives = "|".join(re.escape(w) for w in sorted(set(words), key=len, reverse=True))
+    return re.compile(rf"(?<![\w])(?:{alternatives})(?![\w])", re.IGNORECASE)
+
+
+def _born_dates(
+    line: str, born: re.Pattern[str] | None, max_words: int, p: _Patterns
+) -> list[tuple[int, int]]:
+    """Rule 4 (#100, user decision on data-integrity r11 F3): after each "born"/"geboren" on ``line``, the
+    first date with at most ``max_words`` words between ("Born Rotterdam, 12-03-2001", "geboren te Sofia op
+    12-03-2001", "Prof. M. Born<TAB>12-01-2022"); a lecturer named Born before a completion date loses that
+    date too (accepted: the row is flagged, the safe side)."""
+    return [span for span, is_marker in _born_slots(line, born, max_words, p) if not is_marker]
+
+
+def _born_slots(
+    line: str, born: re.Pattern[str] | None, max_words: int, p: _Patterns
+) -> list[tuple[tuple[int, int], bool]]:
+    """After each "born"/"geboren" on ``line``, the first date (or, in the Send mode, the marker that
+    replaced it) with at most ``max_words`` words between: (span, is the marker)."""
+    if born is None:
+        return []
+    out = []
+    for word in born.finditer(line):
+        for m in p.value.finditer(line, word.end()):
+            is_marker = m.group(0) == p.marker
+            if not is_marker and not _is_date(m.group(0)):
+                continue
+            if len(re.findall(r"[^\W_]+", line[word.end() : m.start()])) <= max_words:
+                out.append((m.span(), is_marker))
+            break
+    return out
+
+
+def _born_settles(
+    line: str, labels: list[re.Match[str]], born: re.Pattern[str] | None, max_words: int, p: _Patterns
+) -> bool:
+    """True when a "born …"/"geboren …" label outside the four layouts is settled by rule 4 (#100, user
+    decision: "geboren te Sofia op 12-03-2001" loses the date instead of stopping): every label on the line is
+    a date label, rule 4 finds the date (or its marker), and nothing else ID-shaped stands on the line."""
+    if born is None or not all(born.match(label.group(0).strip()) for label in labels):
+        return False
+    slots = {span for span, _ in _born_slots(line, born, max_words, p)}
+    if not slots:
+        return False
+    return all(m.span() in slots for m in _values(line, p, SAME_LINE_MIN_DIGITS))
 
 
 def _footer_lines(lines: list[str]) -> set[int]:

@@ -11,6 +11,8 @@
         <input type="checkbox" id="step-{{ s.order }}" name="done" value="1"{% if s.done %} checked{% endif %}>
         <label for="step-{{ s.order }}">{{ s.label }}</label>
         {% if s.note %}<span class="note">{{ s.note }}</span>{% endif %}
+        {% set linked = p.requirements | selectattr("id", "in", s.requirement_ids) | map(attribute="label") | list %}
+        {% if linked %}<span class="note">For: {{ linked | join("; ") }}</span>{% endif %}
         <noscript><button class="button button-small" type="submit">Save<span class="visually-hidden"> {{ s.label }}</span></button></noscript>
       </form>
     </li>

@@ -39,7 +39,14 @@ COURSES_PAGE = Page("recommenders", "/courses", "Recommenders", "Courses")
 IMPORT_PAGE = Page("recommenders", "/courses/import", "Recommenders", "Import courses")
 DELETED_PAGE = Page("recommenders", "/courses/deleted", "Recommenders", "Deleted courses")
 MERGE_PAGE = Page("recommenders", "/courses/merge", "Recommenders", "Merge duplicate courses")
+MERGE_PAGE_STALE = (
+    "Your courses or professors changed since this page was shown (for example in another tab). "
+    "Nothing was merged; your choices are shown again."
+)
 PROFESSORS_PAGE = Page("recommenders", "/courses/import/professors", "Recommenders", "Create professors")
+FROM_COURSES_PAGE = Page(
+    "recommenders", "/recommenders/from-courses", "Recommenders", "Professors from your courses"
+)
 ROW_TEXT = ("name", "code", "institution", "grade", "credits", "term", "lecturers", "description", "merged")
 NOTHING_GIVEN = "Choose a file or paste the text of your transcript. Nothing was read."
 # the Save step found the hidden text no longer strips: it was changed after Send (DECISIONS #82, #83)
@@ -181,15 +188,34 @@ def build_router(web: Web) -> APIRouter:
 
         if not chosen:
             return refuse("Tick at least one course to bring back. Nothing was restored.")
-        for course in chosen:  # the course was imported again after the delete: restoring would duplicate it
-            row = course.model_dump()
-            twin = next((c for c in snapshot.courses if importer.same_course(c.model_dump(), row)), None)
+        by_id = {c.id: c for c in current.courses}
+        # two ticked courses that are the same course (a course and its merged copy) would come back as
+        # duplicates: refused, naming both (data-integrity r11 F2)
+        for i, course in enumerate(chosen):
+            other = next((c for c in chosen[i + 1 :] if merging.same_course(c, course)), None)
+            if other is not None:
+                return refuse(
+                    f"{course.name} and {other.name} are the same course: bring back only one. "
+                    "Nothing was restored."
+                )
+        for course in chosen:  # an active course is the same course: restoring would duplicate it
+            # the merge rule (code, or name, institutions equal or one empty), as "Merge into" at import
+            # matches: an import copy differing in term or institution is still that course (ui r7 F2)
+            twin = next((c for c in snapshot.courses if merging.same_course(c, course)), None)
+            kept = merging.resolve(course.merged_into, by_id)
+            if twin is not None and kept is not None and twin.id == kept.id:
+                return refuse(
+                    f"{course.name} was merged into {kept.name}, which is still on your list. "
+                    "Nothing was restored."
+                )
             if twin is not None:
                 return refuse(
                     f"{course.name} is already among your courses (imported again). Nothing was restored."
                 )
+        # a course brought back is its own course again: no longer merged into another (ui r7 F2)
+        back = {x.id for x in chosen}
         current.courses = [
-            c.model_copy(update={"deleted": False}) if c.id in {x.id for x in chosen} else c
+            c.model_copy(update={"deleted": False, "merged_into": None}) if c.id in back else c
             for c in current.courses
         ]
         store.save_courses(current)
@@ -213,12 +239,29 @@ def build_router(web: Web) -> APIRouter:
         status: int = 200,
         error: str | None = None,
         selected: list[Any] | None = None,
+        posted: list[dict[str, Any]] | None = None,
+        errors: dict[int, str] | None = None,
+        notice: str | None = None,
     ) -> HTMLResponse:
-        """Every group of duplicates, or (``selected``, from "Merge selected") one group of the ticked
-        courses."""
+        """The merge page, one form for every group (batch merge, DECISIONS #101): every group of duplicates,
+        or (``selected``, from "Merge selected") one group of the ticked courses, or (``posted``) the groups
+        that were posted, with the owner's ticks, kept copies and picks (ui review round 7, F1); ``errors``
+        holds a message per group, shown inside it. The form carries a digest of courses.yaml and the
+        professor files, so a submit after either changed is refused."""
         counts = link_counts(snapshot)
-        found = [selected] if selected else merging.groups(snapshot.courses)
-        plans = [merging.plan(g, counts, source_of) for g in found]
+        if posted is not None:
+            plans = [
+                merging.plan(
+                    g["copies"],
+                    counts,
+                    source_of,
+                    g["keep"] if g["keep"] in {c.id for c in g["copies"]} else None,
+                )
+                for g in posted
+            ]
+        else:
+            found = [selected] if selected else merging.groups(snapshot.courses)
+            plans = [merging.plan(g, counts, source_of) for g in found]
         return web.render(
             request,
             "pages/courses_merge.html",
@@ -229,6 +272,10 @@ def build_router(web: Web) -> APIRouter:
             counts=counts,
             labels=editing.LABELS,
             error=error,
+            errors=errors or {},
+            notice=notice,
+            posted=posted,
+            digest=store.courses_and_professors_digest(),
         )
 
     def apply_merges(snapshot: Snapshot, merges: list[tuple[Any, set[str]]]) -> None:
@@ -335,39 +382,103 @@ def build_router(web: Web) -> APIRouter:
         """Every group of duplicate courses with what merging them gives; nothing is written."""
         return render_merge(request, store.load_all())
 
+    def posted_groups(form: Any, by_id: dict[str, Any]) -> list[dict[str, Any]] | None:
+        """The groups of the merge form (``g<n>-ids``, ``-include``, ``-keep`` and a pick per field), or None
+        when a course is gone or stands in two groups (the page is out of date)."""
+        indexes = sorted(
+            {int(m.group(1)) for key in form if (m := re.fullmatch(r"g(\d{1,3})-ids", str(key)))}
+        )
+        groups: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for n in indexes:
+            ids = [str(v) for v in form.getlist(f"g{n}-ids")]
+            if not ids or any(i not in by_id for i in ids) or seen & set(ids):
+                return None
+            seen |= set(ids)
+            groups.append(
+                {
+                    "copies": [by_id[i] for i in ids],
+                    "include": {str(v) for v in form.getlist(f"g{n}-include")},
+                    "keep": str(form.get(f"g{n}-keep", "")),
+                    "picks": {f: str(form.get(f"g{n}-{f}")) for f in editing.FIELDS if form.get(f"g{n}-{f}")},
+                }
+            )
+        return groups or None
+
+    def decide(snapshot: Snapshot, group: dict[str, Any]) -> tuple[tuple[Any, set[str]] | None, str | None]:
+        """A group is decided when at least two copies are ticked, a ticked copy is kept and every real
+        conflict is picked: then (kept course with the merged values, ids merged away), else the message."""
+        copies = [c for c in group["copies"] if c.id in group["include"]]
+        if len(copies) < 2:
+            return None, "Tick at least two copies to merge. Nothing was merged."
+        keep = group["keep"]
+        if keep not in {c.id for c in copies}:
+            return None, "Choose a ticked copy to keep. Nothing was merged."
+        plan = merging.plan(copies, link_counts(snapshot), source_of, keep)
+        try:
+            kept = merging.merged(plan, group["picks"])
+        except merging.MergeRefused as err:
+            return None, str(err)
+        return (kept, {c.id for c in copies if c.id != keep}), None
+
+    def batch_notice(done: int, waiting: int) -> str:
+        return (
+            f"Merged {done} group{'' if done == 1 else 's'}; "
+            f"{waiting} still need{'s' if waiting == 1 else ''} a choice."
+        )
+
     @router.post("/courses/merge", response_class=HTMLResponse)
     async def merge_save(request: Request) -> Response:
-        """Merge one group: the kept course takes the merged values, every professor linking a merged-away
-        copy is repointed to it (no duplicates), and the other copies go to Deleted courses with
-        ``merged_into`` (their ids are never reused)."""
+        """A group's own button (``merge=<n>``) merges that group; "Merge all decided groups"
+        (``merge=decided``) merges every decided group and shows the others again with the owner's choices
+        (a group is all or nothing; DECISIONS #101). Merging: the kept course takes the merged values, every
+        professor linking a merged-away copy is repointed to it (each professor written once), and the other
+        copies go to Deleted courses with ``merged_into`` (their ids are never reused). The whole submit is
+        refused, nothing written, when courses.yaml or a professor file changed since the page was shown."""
         form = await request.form()
         snapshot = store.load_all()
-        by_id = {c.id: c for c in snapshot.courses}
-        ids = [str(v) for v in form.getlist("ids")]
-        if not ids or any(i not in by_id for i in ids):
+        groups = posted_groups(form, {c.id: c for c in snapshot.courses})
+        if groups is None:
             return render_merge(
                 request, snapshot, 409, "These courses changed since the page was shown. Nothing was merged."
             )
-        include = {str(v) for v in form.getlist("include")}
-        copies = [by_id[i] for i in ids if i in include]
-        if len(copies) < 2:
+        if form.get("digest") != store.courses_and_professors_digest():
+            return render_merge(request, snapshot, 409, MERGE_PAGE_STALE, posted=groups)
+        action = str(form.get("merge", ""))
+        if action.isdigit() and int(action) < len(groups):  # one group's own button
+            n = int(action)
+            result, message = decide(snapshot, groups[n])
+            if result is None:
+                return render_merge(request, snapshot, 409, posted=groups, errors={n: message or ""})
+            apply_merges(snapshot, [result])
+            kept, away = result
+            return see_other(f"/courses?merged={kept.id}&count={len(away)}")
+        if action != "decided":
             return render_merge(
-                request, snapshot, 409, "Tick at least two copies to merge. Nothing was merged."
+                request, snapshot, 409, "Choose a Merge button. Nothing was merged.", posted=groups
             )
-        keep = str(form.get("keep", ""))
-        if keep not in {c.id for c in copies}:
-            return render_merge(request, snapshot, 409, "Choose a ticked copy to keep. Nothing was merged.")
-        group = merging.plan(
-            copies, link_counts(snapshot), lambda c: store.source_text(c.source_document), keep
+        decisions = [decide(snapshot, g) for g in groups]
+        merges = [result for result, _ in decisions if result is not None]
+        waiting = [
+            (g, message or "")
+            for g, (result, message) in zip(groups, decisions, strict=True)
+            if result is None
+        ]
+        if merges:
+            apply_merges(snapshot, merges)  # one write per professor for every group together
+        if not waiting:
+            return see_other(f"/courses?merged_all={len(merges)}&waiting=0")
+        fresh = store.load_all()  # the undecided groups' courses are unchanged; shown with the posted choices
+        by_id = {c.id: c for c in fresh.courses}
+        left = [dict(g, copies=[by_id[c.id] for c in g["copies"]]) for g, _ in waiting]
+        return render_merge(
+            request,
+            fresh,
+            200 if merges else 409,
+            posted=left,
+            errors={n: message for n, (_, message) in enumerate(waiting)},
+            notice=batch_notice(len(merges), len(waiting)),
         )
-        picks = {name: str(form.get(name)) for name in editing.FIELDS if form.get(name)}
-        try:
-            kept = merging.merged(group, picks)
-        except merging.MergeRefused as err:
-            return render_merge(request, snapshot, 409, str(err))
-        away = {c.id for c in copies if c.id != keep}
-        apply_merges(snapshot, [(kept, away)])
-        return see_other(f"/courses?merged={keep}&count={len(away)}")
 
     @router.get("/courses/{course_id}/edit", response_class=HTMLResponse)
     async def course_edit_form(request: Request, course_id: str) -> HTMLResponse:
@@ -698,7 +809,14 @@ def build_router(web: Web) -> APIRouter:
             updated, _ = merging.fill_empty(target, row)
             filled = [f for f in editing.FIELDS if getattr(updated, f) != getattr(target, f)]
             source = source_file(source, original, sha, text, snapshot)
-            current.courses = [updated if c.id == target.id else c for c in current.courses]
+            courses = [updated if c.id == target.id else c for c in current.courses]
+            if not merging.has_copy(current.courses, row, source, target.id):
+                # the row kept as a retired copy of this document: its lecturers stay in the document's
+                # Create professors step, linked to the course that remains (DECISIONS #96)
+                taken = {c.id for c in current.courses} | set(snapshot.all_course_ids)
+                copy = importer.to_course(row, importer.course_id(row, taken), source)
+                courses.append(copy.model_copy(update={"deleted": True, "merged_into": target.id}))
+            current.courses = courses
             store.save_courses(current)
         except DataError as err:
             return refuse(f"{err.path} {err.message}")
@@ -851,16 +969,27 @@ def build_router(web: Web) -> APIRouter:
             owner_institution=owner_institution,
         )
 
-    # ---- professors from the document (US-20) ------------------------------------------------------
+    # ---- professors from the document (US-20) and from every course (DECISIONS #102) -----------------
 
-    def lecturer_groups(snapshot: Snapshot, source: str) -> list[lecturers.Lecturer]:
-        courses = [c for c in snapshot.courses if c.source_document == source and c.confirmed]
+    def matched(courses: list[Any], snapshot: Snapshot) -> list[lecturers.Lecturer]:
         groups = lecturers.group(courses, config.names, cfg)
         lecturers.match_professors(groups, snapshot.professors, config.names)
         return groups
 
+    def lecturer_groups(snapshot: Snapshot, source: str) -> list[lecturers.Lecturer]:
+        # its own courses and the courses its merged copies went into (DECISIONS #96); deleted ones are read
+        return matched(merging.document_courses(store.load_courses().courses, source), snapshot)
+
+    def all_course_groups(snapshot: Snapshot) -> list[lecturers.Lecturer]:
+        """Every lecturer of the active courses once (#102): ``Snapshot.courses`` leaves deleted ones out."""
+        return matched([c for c in snapshot.courses if c.lecturers], snapshot)
+
     def render_professors(
-        request: Request, source: str, status: int = 200, error: str | None = None
+        request: Request,
+        source: str,
+        status: int = 200,
+        error: str | None = None,
+        ticked: set[str] | None = None,
     ) -> HTMLResponse:
         snapshot = store.load_all()
         return web.render(
@@ -872,41 +1001,63 @@ def build_router(web: Web) -> APIRouter:
             source=source,
             groups=lecturer_groups(snapshot, source),
             error=error,
+            ticked=ticked or set(),
+            action="/courses/import/professors",
+            everything=False,
         )
 
-    @router.post("/courses/import/professors", response_class=HTMLResponse)
-    async def professors(request: Request) -> Response:
-        form = await request.form()
-        source = str(form.get("source", ""))
+    def render_from_courses(
+        request: Request, status: int = 200, error: str | None = None, ticked: set[str] | None = None
+    ) -> HTMLResponse:
         snapshot = store.load_all()
-        groups = {g.key: g for g in lecturer_groups(snapshot, source)}
-        if not groups:
-            return render_professors(
-                request, source, 409, "No confirmed course from this document has a lecturer."
-            )
-        if form.get("step") != "create":
-            return render_professors(request, source)
+        return web.render(
+            request,
+            "pages/courses_professors.html",
+            FROM_COURSES_PAGE,
+            snapshot,
+            status_code=status,
+            source="",
+            groups=all_course_groups(snapshot),
+            error=error,
+            ticked=ticked or set(),
+            action=FROM_COURSES_PAGE.href,
+            everything=True,
+        )
+
+    async def create_or_link(
+        form: Any,
+        groups: dict[str, lecturers.Lecturer],
+        snapshot: Snapshot,
+        render: Any,
+        gone: str,
+    ) -> Response:
+        """The ticked choices (``pick``: ``create:<key>`` or ``link:<key>:<professor id>``) checked first,
+        then the new professors created in one batch through ``Store.create_professor`` (ids chosen first,
+        never over a file; a failure part way says how many were created) and the links added (US-20,
+        #102)."""
         picks = [str(p) for p in form.getlist("pick")]
         creates, links, problems = [], [], []
         for pick in picks:
             kind, _, rest = pick.partition(":")
             key, _, pid = rest.partition(":")
             group = groups.get(key)
-            if group is None:
-                problems.append("a ticked lecturer is no longer in this document")
+            if kind not in ("create", "link"):
+                problems.append("a ticked choice is not valid")
+            elif group is None:
+                problems.append(f"a ticked lecturer is no longer {gone}")
             elif kind == "create" and group.matches:
                 problems.append(
                     f"{group.written} matches {group.matches[0][0].name}; link instead of creating"
                 )
             elif kind == "create":
                 creates.append(group)
-            elif kind == "link" and any(p.id == pid for p, _ in group.matches):
+            elif any(p.id == pid for p, _ in group.matches):
                 links.append((group, pid))
             else:
                 problems.append("a ticked choice is not valid")
         if problems or not (creates or links):
             message = problems[0] if problems else "Tick at least one lecturer"
-            return render_professors(request, source, 409, f"Nothing was saved: {message}.")
+            return render(409, f"Nothing was saved: {message}.", set(picks))
         folder = store.data_dir / "professors"
         taken = {p.id for p in snapshot.professors}
         if folder.is_dir():
@@ -927,13 +1078,8 @@ def build_router(web: Web) -> APIRouter:
             try:
                 store.create_professor(professor)
             except DataError as err:
-                return render_professors(
-                    request,
-                    source,
-                    409,
-                    f"{done} of {len(new)} professors were created, then it stopped: "
-                    f"{err.path} {err.message}.",
-                )
+                stopped = f"{done} of {len(new)} professors were created, then it stopped"
+                return render(409, f"{stopped}: {err.path} {err.message}.", None)
             done += 1
         for group, pid in links:
             professor = next(p for p in store.load_professors()[0] if p.id == pid)
@@ -943,10 +1089,60 @@ def build_router(web: Web) -> APIRouter:
                 try:
                     store.save_professor(professor)
                 except DataError as err:
-                    return render_professors(
-                        request, source, 409, f"{professor.name}: {err.path} {err.message}."
-                    )
+                    return render(409, f"{professor.name}: {err.path} {err.message}.", None)
         return see_other(f"/recommenders?created={done}&linked={len(links)}")
+
+    @router.post("/courses/import/professors", response_class=HTMLResponse)
+    async def professors(request: Request) -> Response:
+        form = await request.form()
+        source = str(form.get("source", ""))
+        snapshot = store.load_all()
+        groups = {g.key: g for g in lecturer_groups(snapshot, source)}
+        if not groups:
+            return render_professors(
+                request, source, 409, "No confirmed course from this document has a lecturer."
+            )
+        if form.get("step") != "create":
+            return render_professors(request, source)
+        return await create_or_link(
+            form,
+            groups,
+            snapshot,
+            lambda status, error, ticked: render_professors(request, source, status, error, ticked),
+            "in this document",
+        )
+
+    @router.get("/recommenders/from-courses", response_class=HTMLResponse)
+    async def from_courses(request: Request) -> HTMLResponse:
+        """Professors from your courses (#102): every lecturer of the active courses once; nothing ticked,
+        nothing written."""
+        return render_from_courses(request)
+
+    @router.post("/recommenders/from-courses", response_class=HTMLResponse)
+    async def from_courses_save(request: Request) -> Response:
+        """ "Tick all" / "Clear all" (``select``; the page again, nothing written) or Create
+        (``step=create``)."""
+        form = await request.form()
+        snapshot = store.load_all()
+        groups = all_course_groups(snapshot)
+        select = str(form.get("select", ""))
+        if select in ("all", "none"):
+            ticked: set[str] = set()
+            if select == "all":  # every Create and every exact-match Link; a "same surname only" link stays
+                for g in groups:
+                    if not g.matches:
+                        ticked.add(f"create:{g.key}")
+                    ticked |= {f"link:{g.key}:{p.id}" for p, kind in g.matches if kind == "exact"}
+            return render_from_courses(request, ticked=ticked)
+        if form.get("step") != "create":
+            return render_from_courses(request, ticked={str(p) for p in form.getlist("pick")})
+        return await create_or_link(
+            form,
+            {g.key: g for g in groups},
+            snapshot,
+            lambda status, error, ticked: render_from_courses(request, status, error, ticked),
+            "among your courses",
+        )
 
     # ---- Add professor suggestions (US-21) --------------------------------------------------------
 

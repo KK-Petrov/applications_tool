@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{#- Add standard steps and documents (DECISIONS #97; docs/03 §4.2): a preview of the template steps and of the
+    documents the requirements call for, every new row ticked; nothing is written until "Add ticked items".
+    Items already on the programme are listed without a checkbox. No AI call. -#}
+{% block main_attrs %}{% if error %} data-focus="standard-error" data-announce="{{ error }}"{% endif %}{% endblock %}
+{% block before_title %}
+<nav class="breadcrumb" aria-label="Breadcrumb"><a href="/programmes">Programmes</a> <span aria-hidden="true">›</span> <a href="/programmes/{{ p.id }}">{{ p.short_name }}</a> <span aria-hidden="true">›</span> <span aria-current="page">Add standard steps and documents</span></nav>
+{% endblock %}
+{% macro row(x) -%}
+<span class="standard-label">{{ x.label }}</span>
+{%- if x.requirements %}<span class="sub">{% if x.kind == "step" %}Linked to: {% else %}From: {% endif %}{{ x.requirements | map(attribute="label") | join("; ") }}</span>{% endif %}
+{%- if x.existing %}<span class="sub">Already there as: {{ x.existing }}</span>{% endif %}
+{%- endmacro %}
+{% block content %}
+{% if error %}<p class="form-error" role="alert" id="standard-error" tabindex="-1">{{ error }}</p>{% endif %}
+{% if new %}
+<form method="post" action="/programmes/{{ p.id }}/standard" id="standard-form" class="card">
+  <p>The usual application steps, and the documents your stored requirements call for. Untick what you don't need. New steps go after your last step; new documents start as Not requested, with How sent left empty. Nothing is saved until you press Add ticked items.</p>
+  {% for kind, title in (("step", "Steps"), ("document", "Documents and score reports")) %}
+  {% set rows = new | selectattr("kind", "equalto", kind) | list %}
+  {% if rows %}
+  <fieldset class="standard-group">
+    <legend>{{ title }}</legend>
+    <ul class="plain checklist">
+      {% for x in rows %}
+      <li class="field-check"><input type="checkbox" id="add-{{ x.key | replace(':', '-') }}" name="add" value="{{ x.key }}" checked><label for="add-{{ x.key | replace(':', '-') }}">{{ row(x) }}</label></li>
+      {% endfor %}
+    </ul>
+  </fieldset>
+  {% endif %}
+  {% endfor %}
+  <div class="research-actions"><button class="button button-primary" type="submit">Add ticked items</button>
+    <a class="button button-secondary" href="/programmes/{{ p.id }}">Cancel</a></div>
+</form>
+{% else %}
+<p class="empty card">Nothing to add: every standard step and document is already on this programme. <a href="/programmes/{{ p.id }}">Back to {{ p.short_name }}</a></p>
+{% endif %}
+{% if there %}
+<section class="card" aria-labelledby="there-title">
+  <h2 id="there-title">Already on this programme</h2>
+  <ul class="plain standard-there">
+    {% for x in there %}<li>{{ row(x) }}</li>{% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endblock %}

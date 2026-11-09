@@ -5,7 +5,7 @@
 {% block before_title %}
 <nav class="breadcrumb" aria-label="Breadcrumb"><a href="/programmes">Programmes</a> <span aria-hidden="true">›</span> <span aria-current="page">{{ p.short_name }}</span></nav>
 {% endblock %}
-{% block main_attrs %}{% if research_error %} data-focus="research-error" data-announce="Research failed: {{ research_error }}"{% endif %}{% endblock %}
+{% block main_attrs %}{% if research_error %} data-focus="research-error" data-announce="Research failed: {{ research_error }}"{% elif notice %} data-focus="programme-notice" data-announce="{{ notice }}"{% endif %}{% endblock %}
 {% block title_area %}
 <h1>{{ page.title }}</h1>
 <p class="subtitle">
@@ -14,6 +14,7 @@
 </p>
 <div class="actions page-actions">
   <a class="button button-secondary" href="/programmes/{{ p.id }}/edit" data-writes>Edit</a>
+  <a class="button button-secondary" href="/programmes/{{ p.id }}/standard" data-writes>Add standard steps and documents</a>
   <form method="post" action="/programmes/{{ p.id }}/research" hx-post="/programmes/{{ p.id }}/research" hx-sync="this:drop" class="inline-form" id="reresearch-form" data-working data-notice="reresearch-notice">
     <button class="button button-secondary" type="submit" data-busy-text="Researching…">Re-research</button>
   </form>
@@ -27,6 +28,7 @@
 {% endblock %}
 {% block content %}
 {% if research_error %}<div class="form-error" role="alert" tabindex="-1" id="research-error"><p>{{ research_error }}</p></div>{% endif %}
+{% if notice %}<p class="notice{% if notice_warning %} notice-warning{% endif %}" role="status" id="programme-notice" tabindex="-1">{{ notice }}</p>{% endif %}
 <div class="chips">
   {{ countdown_chip(summary.countdown) }}
   {{ deadline(summary.deadline, original=true) }}

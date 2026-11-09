@@ -2191,7 +2191,6 @@ def test_session_4_identifier_labels_strip(text: str, gone: str, mode: str) -> N
         "PHY 2010\tBorn Rule Seminar\t8\t2\tProf. dr. M. Born\n",  # a lecturer named Born, a course name
         "PHY 2010 Born Rule Seminar 8 2 Prof. dr. M. Born\n",
         "Description: covers the 1926 Born rule and its uses.\n",
-        "PHY 2010\tQuantum Mechanics\t8\t2\tProf. M. Born\t12-01-2022\n",  # Born, then a cell with a date
         "Lecturer: Dr. K. Geboren\n",
     ],
 )
@@ -2874,3 +2873,123 @@ def test_an_owner_entered_institution_survives_check_again_and_is_never_flagged(
     assert 'value="Invented Institute"' in again
     assert calls.read_text(encoding="utf-8") == sent  # nothing more sent to Claude
     assert "Invented Institute" not in sent
+
+
+# ---- user decision on data-integrity r11 F3 and F6 (session 5, DECISIONS #100) -------------------------
+
+
+@pytest.mark.parametrize("mode", list(MODES))
+@pytest.mark.parametrize(
+    ("line", "gone", "kept"),
+    [
+        ("Born Rotterdam, 12-03-2001\n", "12-03-2001", "Born Rotterdam,"),
+        ("Born Rotterdam 12 March 2001\n", "12 March 2001", "Born Rotterdam"),
+        ("Born - Rotterdam - 12-03-2001\n", "12-03-2001", "Rotterdam"),
+        ("Born, Rotterdam, 12-03-2001\n", "12-03-2001", "Rotterdam"),
+        ("geboren te Sofia op 12-03-2001\n", "12-03-2001", "Sofia"),
+        ("Geboren in Den Haag op 12 maart 2001\n", "12 maart 2001", "Den Haag"),
+        ("born in Utrecht city centre 2001-03-12\n", "2001-03-12", "Utrecht"),  # 4 words between
+        # a lecturer named Born, then a completion date: the date goes (user: accepted, the row is flagged)
+        ("PHY 2010\tQuantum Mechanics\t8\t2\tProf. M. Born\t12-01-2022\n", "12-01-2022", "Prof. M. Born"),
+    ],
+)
+def test_a_date_within_four_words_after_born_goes(line: str, gone: str, kept: str, mode: str) -> None:
+    """r11 F3 (user decision): a date that follows "born"/"geboren" on the same line within 4 words is
+    removed, whatever stands before the word (a title, an initial) or between (a place)."""
+    first = identifiers.strip(line, CFG.courses, owner=OWNER)
+    out = (
+        first
+        if mode == "read"
+        else identifiers.strip(first, CFG.courses, marker_fills_slot=True, owner=OWNER)
+    )
+    assert out == first
+    assert gone not in out and CFG.courses.removed_marker in out and kept in out, out
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "Born to a family of farmers near the sea, 12-03-2001\n",  # 8 words between: not this rule
+        "Prof. M. Born\tQuantum Mechanics\t8\t2\n",  # no date
+        "The Born rule (1926) was covered.\n",  # a year is no date shape
+        "Lecturer: Dr. K. Geboren, office 12\n",
+    ],
+)
+def test_born_without_a_near_date_is_left_alone(line: str) -> None:
+    assert identifiers.strip(line, CFG.courses, owner=OWNER) == line
+
+
+@pytest.mark.parametrize("mode", list(MODES))
+@pytest.mark.parametrize(
+    "line",
+    [
+        "Dr. Born: 12-03-2001\n",
+        "Prof. M. Born: 12-03-2001\n",
+        "M. van Born : 12-03-2001\n",
+        "Dr. K. Geboren: 12 maart 2001\n",
+    ],
+)
+def test_a_colon_after_born_always_makes_it_a_label(line: str, mode: str) -> None:
+    """r11 F3 (user decision): as the config comment says, a colon directly after "born"/"geboren" makes it a
+    label even after a title, an initial or a particle; its value goes."""
+    first = identifiers.strip(line, CFG.courses, owner=OWNER)
+    out = (
+        first
+        if mode == "read"
+        else identifiers.strip(first, CFG.courses, marker_fills_slot=True, owner=OWNER)
+    )
+    assert "2001" not in out and CFG.courses.removed_marker in out, out
+
+
+@pytest.mark.parametrize("mode", list(MODES))
+@pytest.mark.parametrize(
+    ("line", "gone", "kept"),
+    [
+        ("N. Example 512345-01\n", "512345-01", "N. Example"),  # rule 1, a line naming the owner
+        ("Ref. (512345-01)\n", "512345-01", "Ref. ("),  # rule 2, a bracket holding only it
+        ("Ref. (5123456-123) on file\n", "5123456-123", "on file"),
+        (
+            "Transcript for 512345-01   page 1\nFEB11001\tMathematics I\t8,0\t4\n"
+            "Transcript for 512345-01   page 2\n",
+            "512345-01",
+            "page 2",
+        ),  # rule 3, a repeated footer
+    ],
+)
+def test_an_id_with_a_short_hyphen_suffix_goes(line: str, gone: str, kept: str, mode: str) -> None:
+    """r11 F6 (user decision): the #93 ID shape takes an optional hyphen and 1–3 digits ("512345-01")."""
+    first = identifiers.strip(line, CFG.courses, owner=OWNER)
+    out = (
+        first
+        if mode == "read"
+        else identifiers.strip(first, CFG.courses, marker_fills_slot=True, owner=OWNER)
+    )
+    assert out == first
+    assert gone not in out and kept in out, out
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "N. Example: FEB11001 2021-2022 ( 20.0 )\n",  # a year range, a course code, credits
+        "Ref. (2021-2022)\n",
+        "Ref. (FEB-11001)\n",
+        "Ref. (512345-2022)\n",  # a 4-digit suffix is not this shape
+        "Ref. (3010-01)\n",  # a course code with a section: 4 digits before the suffix
+    ],
+)
+def test_year_ranges_and_codes_stay_with_the_suffix_shape(line: str) -> None:
+    assert identifiers.strip(line, CFG.courses, owner=OWNER) == line
+
+
+def test_a_born_label_with_its_date_beyond_four_words_still_stops() -> None:
+    """Control for #100: "born in" is a label (#89); with the date 5 words on, rule 4 doesn't settle it and
+    the import stops as before (nothing is sent)."""
+    with pytest.raises(identifiers.UnresolvedIdentifier):
+        identifiers.strip("born in the city of Utrecht 2001-03-12\n", CFG.courses, owner=OWNER)
+
+
+def test_born_settles_only_when_nothing_else_id_shaped_is_on_the_line() -> None:
+    """Control for #100: another 5+ digit number on the line keeps the stop (fail closed)."""
+    with pytest.raises(identifiers.UnresolvedIdentifier):
+        identifiers.strip("geboren te Sofia op 12-03-2001 598431\n", CFG.courses, owner=OWNER)

@@ -70,6 +70,9 @@ class Step(DataModel):
     label: str
     note: str | None = None
     done: bool = False
+    # the requirements this step is for (set by "Add standard steps and documents", DECISIONS #97); each must
+    # be one of the programme's requirement ids
+    requirement_ids: list[Slug] = Field(default_factory=list)
 
 
 class Document(DataModel):
@@ -176,5 +179,13 @@ class Programme(DataModel):
 
     @field_validator("steps")
     @classmethod
-    def _orders_unique(cls, items: list[Step]) -> list[Step]:
-        return unique_ids(items, "order")
+    def _orders_unique(cls, items: list[Step], info: ValidationInfo) -> list[Step]:
+        items = unique_ids(items, "order")
+        known = {r.id for r in info.data.get("requirements", [])}
+        for step in items:
+            unknown = [r for r in step.requirement_ids if r not in known]
+            if unknown:
+                raise ValueError(
+                    f"step {step.order} is linked to no requirement of this programme: {unknown}"
+                )
+        return items

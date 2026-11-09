@@ -88,6 +88,48 @@ evaluation:
 research:
   official_shared_domains: [mba.com]   # official non-university bodies accepted as sources (GMAC); source: user (DECISIONS #37)
 
+standard_items:                   # "Add standard steps and documents" on a programme page (DECISIONS #97); source: user
+  # Words are matched whole and in any case: requirement_words against a requirement's id and label,
+  # exists_words against the labels of the programme's existing documents or steps ("already there").
+  documents:                      # one per template whose words a stored requirement has; method left empty
+    - key: transcript
+      label: Official transcript
+      requirement_words: [transcript, transcripts]
+      exists_words: [transcript, transcripts]
+    - key: gmat
+      label: GMAT score report
+      requirement_words: [gmat]
+      exists_words: [gmat]
+    - key: gre
+      label: GRE score report
+      requirement_words: [gre]
+      exists_words: [gre]
+    - key: english
+      label: English test score report
+      requirement_words: [english, toefl, ielts, duolingo]
+      exists_words: [english, toefl, ielts, duolingo]
+  steps:                          # the fixed template, in this order; linked to every requirement it names
+    - key: portal
+      label: Create an account on the application portal
+      requirement_words: []
+      exists_words: [account, portal]
+    - key: recommendations
+      label: Request the recommendation letters
+      requirement_words: [letters, recommendation, recommendations, recommenders]
+      exists_words: [letters, recommendation, recommendations, recommenders]
+    - key: essays
+      label: Finalise the essays
+      requirement_words: [essay, essays, statement, statements]
+      exists_words: [essay, essays, statement, statements]
+    - key: fee
+      label: Pay the application fee
+      requirement_words: [fee]
+      exists_words: [fee]
+    - key: submit
+      label: Submit the application
+      requirement_words: []
+      exists_words: [submit]
+
 names:                            # lecturer and professor names (docs/02 §9; DECISIONS #44); source: recommended
   # Particles belong to the surname ("A. van den Berg" → "van den Berg"); a run of them before the last word.
   particles: [van, de, der, den, het, ter, te, ten, "'t", in, op, von, zu, du, da, di, la, le, del, della, dos, das]
@@ -116,7 +158,8 @@ courses:                          # course import (docs/02 §10, docs/04 §9; DE
          diplomaregisternummer, documentnummer]
   date_labels:                    # a label by default; none right after a title token, initial or particle
     en: [born]                    # (`names`: "Prof. M. Born") or before a word that is not a month ("the Born
-    nl: [geboren]                 # rule"); a colon after it always makes it one (DECISIONS #89, #90, #92)
+    nl: [geboren]                 # rule"); a colon after it always makes it one (DECISIONS #89, #90, #92, #100)
+  born_date_max_words: 4          # a date this many words or fewer after "born"/"geboren" on its line is removed (#100); source: user
   month_names:                    # for dates such as "12 March 2001" or "12 maart 2001"
     en: [january, february, march, april, may, june, july, august, september, october, november, december,
          jan, feb, mar, apr, jun, jul, aug, sep, sept, oct, nov, dec]

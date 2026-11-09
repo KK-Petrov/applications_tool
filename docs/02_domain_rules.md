@@ -229,7 +229,7 @@ Rule 13: both checks run in Python, never in the model.
    cell reads as a space, so "Student⏎number" in a cell is one label. The rules below describe how a value is found and taken whole inside these
    layouts. A number or date is removed only when an identifier label (`courses.identifier_labels`, English and Dutch:
    student number / nr. / ID / identification number, matriculation or registration number, date of birth, DOB,
-   SSN, BSN, diploma register (number), document number / nr. / no. / nummer, passport no., ID card number, matrikelnummer, born on / in, studentnummer, stud.nr., geboortedatum, geboren op / in, burgerservicenummer, diplomaregisternummer, documentnummer, …) anchors it; "born" and "geboren" alone (`courses.date_labels`) are labels by default and none only right after a title token, an initial or a particle (config `names`: "Prof. M. Born", "Dr. K. Geboren", "M. van Born") or when the first thing after them, past an optional "(…)" and separators, is a word that is not a month ("the Born rule", "Born Rule Seminar"); a colon after them always makes them labels (#89, #90, #92); "born at" and "geboren te" are labels, so "Geboren te Rotterdam op 12-03-2001" stops as before #89:
+   SSN, BSN, diploma register (number), document number / nr. / no. / nummer, passport no., ID card number, matrikelnummer, born on / in, studentnummer, stud.nr., geboortedatum, geboren op / in, burgerservicenummer, diplomaregisternummer, documentnummer, …) anchors it; "born" and "geboren" alone (`courses.date_labels`) are labels by default and none only right after a title token, an initial or a particle (config `names`: "Prof. M. Born", "Dr. K. Geboren", "M. van Born") or when the first thing after them, past an optional "(…)" and separators, is a word that is not a month ("the Born rule", "Born Rule Seminar"); a colon directly after them always makes them labels, also after a title, an initial or a particle ("Dr. Born: 12-03-2001", #100) (#89, #90, #92); "born at" and "geboren te" are labels, so "Geboren te Rotterdam" stops as before #89, except when rule (d) below removes a date on that line (#100):
    - **same line:** the first number of 2+ digits (a letter prefix and digit groups such as "123 456 782" allowed),
      date (numeric either way round; with a month name in English or Dutch, also abbreviated and with a 2-digit or
      'YY year: 12-MAR-01, 2001-Mar-12, 12 maart '01; with an ordinal "12th"/"3rd of"; a Roman month 12.III.2001;
@@ -250,10 +250,20 @@ Rule 13: both checks run in Python, never in the model.
    as whole words, any case, which covers the full name and "J.A. Example"), (b) on a page header or footer (a
    line holding a page number such as "1/9", "Page 1 of 9", "pagina 1 van 9" whose text apart from it stands
    on 2+ lines), and (c) inside a bracket holding nothing else, every ID-shaped token goes. ID-shaped here: a
-   run of 5+ digits (digit groups allowed), at most one letter in front and up to 3 letters after (512345,
-   598 431, S2034567, 512345ab), or a date; never a course code ("FEB11001", "FIN 3010"), a year range,
+   run of 5+ digits (digit groups allowed), at most one letter in front, up to 3 letters after and then an
+   optional hyphen with 1–3 digits, the 5+ digits counted before that suffix (512345, 598 431, S2034567,
+   512345ab, 512345-01; #100), or a date; never a course code ("FEB11001", "FIN 3010", "3010-01"), a year range,
    credits ("( 20.0 )") or a page number. Known consequences (fail closed): a 5-digit programme code alone in
-   brackets ("(50952)") is removed; on a line naming the owner a 5+ digit number of any kind goes. Course codes, grades, credits and years are kept. Each removed value
+   brackets ("(50952)") is removed; on a line naming the owner a 5+ digit number of any kind goes.
+   **(d) A date after "born"/"geboren" (DECISIONS #100, user decision on data-integrity r11 F3):** on any line, the
+   first date with at most `courses.born_date_max_words` (4) words between it and "born"/"geboren" goes,
+   whatever stands before the word or between ("Born Rotterdam, 12-03-2001", "geboren te Sofia op 12-03-2001",
+   "Prof. M. Born<TAB>12-01-2022"). A "born …"/"geboren …" label outside the four layouts no longer stops the
+   import when (d) removes such a date and every label on the line is a date label and nothing else ID-shaped
+   stands on it; otherwise it stops as before. Known consequences: a lecturer named Born followed by a
+   completion date loses that date (the row is flagged; accepted, safe side); a date more than 4 words after
+   "born" on a line where "born" is no label (e.g. "Born to a family of farmers near the sea, 12-03-2001") is
+   not removed. Course codes, grades, credits and years are kept. Each removed value
    becomes `courses.removed_marker` ("[removed]"). Stripping runs on the text when it is read, again (strictly) when the user presses Send to Claude after reviewing it (DECISIONS #70; a label followed by the marker counts as already removed, so stripping stripped text changes nothing), and on every returned field (there, an unresolved label is left alone). The original
    file's name (stored in the source header) loses every date pattern and every run of 6 or more digits, and is
    kept on one line; the header's sha256 is written only if it is 64 hex digits.

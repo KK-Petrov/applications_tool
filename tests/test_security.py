@@ -185,6 +185,13 @@ NEW_WRITE_ROUTES = {
     "course merge": ("/courses/merge", {"data": {"ids": "x-1", "include": "x-1", "keep": "x-1"}}),
     "courses selected": ("/courses/selected", {"data": {"select": "x-1", "action": "delete", "unlink": "1"}}),
     "courses merge all": ("/courses/merge-all", {"data": {}}),
+    # follow-up before Phase 3: add standard steps and documents (#97)
+    "standard items": ("/programmes/princeton-mfin/standard", {"data": {"add": "step:fee"}}),
+    # professors from every active course (#102)
+    "professors from courses": (
+        "/recommenders/from-courses",
+        {"data": {"step": "create", "pick": "create:x"}},
+    ),
 }
 
 

@@ -51,6 +51,7 @@
 {% endif %}
 {% set f = state.fields %}
 <form id="programme-form" class="programme-form" method="post" action="{{ action }}">
+  {% if existing %}<input type="hidden" name="digest" value="{{ digest }}">{% endif %}
   {% if state.errors %}
   <div class="form-error" role="alert" tabindex="-1" id="form-errors">
     <h2>Nothing was saved. Please fix:</h2>

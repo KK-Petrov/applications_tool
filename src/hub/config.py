@@ -148,6 +148,36 @@ class ResearchConfig(_Section):
     official_shared_domains: list[str]
 
 
+class StandardItem(_Section):
+    """One template row of "Add standard steps and documents" (DECISIONS #97)."""
+
+    key: str = Field(pattern=r"^[a-z0-9-]{1,40}$")
+    label: str = Field(min_length=1)
+    # whole words in a requirement's id or label (documents: derived from it; steps: linked to it)
+    requirement_words: list[str]
+    exists_words: list[str] = Field(min_length=1)  # whole words in an existing item's label: already there
+
+    @model_validator(mode="after")
+    def _lower_case(self) -> StandardItem:
+        for word in [*self.requirement_words, *self.exists_words]:
+            if word != word.casefold() or not word.isalnum():
+                raise ValueError(f"{self.key}: words are lower-case letters and digits, got {word!r}")
+        return self
+
+
+class StandardItemsConfig(_Section):
+    documents: list[StandardItem]
+    steps: list[StandardItem]
+
+    @model_validator(mode="after")
+    def _keys_unique(self) -> StandardItemsConfig:
+        for name, items in (("documents", self.documents), ("steps", self.steps)):
+            keys = [i.key for i in items]
+            if len(set(keys)) != len(keys):
+                raise ValueError(f"standard_items.{name}: keys must be unique")
+        return self
+
+
 class NamesConfig(_Section):
     """Parsing names (docs/02 §9): particles that belong to the surname, title tokens and their ranking."""
 
@@ -177,6 +207,7 @@ class CoursesConfig(_Section):
 
     identifier_labels: IdentifierLabels
     date_labels: IdentifierLabels  # labels only before a colon or a date ("Born: …"; DECISIONS #89)
+    born_date_max_words: int = Field(ge=0)  # a date within this many words after a date label goes (#100)
     month_names: IdentifierLabels
     allowed_types: list[str]
     max_upload_bytes: int = Field(gt=0)
@@ -238,6 +269,7 @@ class Config(_Section):
     claude: ClaudeConfig
     evaluation: EvaluationConfig
     research: ResearchConfig
+    standard_items: StandardItemsConfig
     names: NamesConfig
     courses: CoursesConfig
     wrong_school: WrongSchoolConfig

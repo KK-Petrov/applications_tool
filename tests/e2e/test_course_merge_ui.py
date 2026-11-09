@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 from axe_playwright_python.sync_playwright import Axe
-from playwright.sync_api import Page, expect
+from playwright.sync_api import Browser, Page, expect
 from ruamel.yaml import YAML
 
 from helpers import write_recording
@@ -155,3 +155,82 @@ def test_import_offers_merge_into_a_stored_course(
     expect(page.get_by_text("Merged into Marketing").first).to_be_visible()
     assert _serious(page) == []
     assert _stored(data_dir)["marketing-feb12002"]["description"] == "Consumer behaviour."
+    # DECISIONS #96: the merged row's lecturer is in this document's Create professors step, under Marketing
+    page.get_by_role("button", name="Create professors from this document").click()
+    lecturer = page.locator("fieldset.lecturer", has_text="drs. P. Jansen")
+    expect(lecturer).to_contain_text("Marketing")
+    assert _serious(page) == []
+
+
+def test_a_refused_merge_selected_keeps_the_group_and_focuses_its_error(
+    page: Page, live_server: str, data_dir: Path, with_courses: Path
+) -> None:
+    # ui review round 7, F1: the same group comes back with the owner's choices, the message inside it
+    page.goto(f"{live_server}/courses")
+    page.get_by_label("Select Investments (FEB12006)").check()
+    page.get_by_label("Select Marketing (FEB12002)").check()
+    page.get_by_role("button", name="Merge selected").click()
+    form = page.locator("#merge-0")
+    form.get_by_role("radio", name="Keep this one").nth(1).check()
+    form.get_by_role("button", name="Merge these copies").click()
+    error = page.locator("#merge-0 #merge-0-error")
+    expect(error).to_contain_text("Pick a value")
+    expect(error).to_be_focused()
+    expect(page.locator("#merge-0-title")).to_contain_text("2 copies")
+    expect(page.locator("#merge-0").get_by_role("radio", name="Keep this one").nth(1)).to_be_checked()
+    assert _serious(page) == []
+
+
+STATISTICS_PAIR = """\
+  - id: statistics-ii-feb13010
+    name: Statistics II
+    code: FEB13010
+    institution: Example School of Economics
+    grade: "8,0"
+    credits: 4.0
+    term: 2023-2024 block 1
+    lecturers: []
+    description: ''
+    source_document: transcript-a.txt
+    confirmed: true
+  - id: statistics-ii-feb13010-2
+    name: Statistics II
+    code: FEB13010
+    institution: ''
+    grade: "8,0"
+    credits: 4.0
+    term: 2023-2024 block 1
+    lecturers: []
+    description: Regression.
+    source_document: transcript-b.txt
+    confirmed: true
+"""
+
+
+@pytest.mark.parametrize("js", [True, False])
+def test_merge_all_decided_groups(
+    browser: Browser, live_server: str, data_dir: Path, with_courses: Path, js: bool
+) -> None:
+    """DECISIONS #101: the decided group (Statistics II) merges; Corporate Finance (its term differs) stays
+    with the owner's choices and its message; the notice is focused and announced (with JS)."""
+    with_courses.write_text(COURSES + STATISTICS_PAIR, encoding="utf-8")
+    context = browser.new_context(java_script_enabled=js, viewport={"width": 1280, "height": 720})
+    try:
+        page = context.new_page()
+        page.goto(f"{live_server}/courses/merge")
+        cf = page.locator("section.merge-group", has_text="Corporate Finance")
+        cf.get_by_role("radio", name="Keep this one").nth(1).check()
+        page.get_by_role("button", name="Merge all decided groups").click()
+        notice = page.locator("#merge-notice")
+        expect(notice).to_have_text("Merged 1 group; 1 still needs a choice.")
+        if js:
+            expect(notice).to_be_focused()
+        group = page.locator("section.merge-group", has_text="Corporate Finance")
+        expect(group.locator(".form-error")).to_contain_text("Pick a value")
+        expect(group.get_by_role("radio", name="Keep this one").nth(1)).to_be_checked()  # choice kept
+        expect(page.locator("section.merge-group", has_text="Statistics II")).to_have_count(0)
+        assert _stored(data_dir)["statistics-ii-feb13010-2"]["merged_into"] == "statistics-ii-feb13010"
+        if js:
+            assert _serious(page) == []
+    finally:
+        context.close()

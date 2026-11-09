@@ -125,7 +125,9 @@ def test_reresearch_busy_state_locks_the_page_and_shows_a_timer(
         for i in range(locator.count()):
             expect(locator.nth(i)).to_have_attribute("aria-disabled", "true")
     page.locator("#requirements input[type=checkbox]").first.click(force=True, no_wait_after=True)
-    page.locator("main a[data-writes]").click(force=True, no_wait_after=True)
+    links = page.locator("main a[data-writes]")  # Edit, Add standard steps and documents (#97, #100)
+    for i in range(links.count()):  # each locked link is inert: the page stays (checked by the notice below)
+        links.nth(i).click(force=True, no_wait_after=True)
     # The notice: below the actions, with the limit, what leaving does, and a timer that advances.
     notice = page.locator("#reresearch-notice")
     expect(notice).to_be_visible()

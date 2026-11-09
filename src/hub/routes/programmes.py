@@ -8,14 +8,16 @@ back to the programme page (no-JS fallback).
 from __future__ import annotations
 
 import re
+import secrets
 from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, Response
 from pydantic import ValidationError
 
+from hub import standard_items
 from hub.models.common import Verification
 from hub.models.programme import (
     DocumentStatus,
@@ -40,6 +42,10 @@ from hub.views import VERIFICATION_REASONS, DeadlineView, InterviewView, dashboa
 from hub.web import Page, Web, is_htmx, see_other
 
 SLUG = re.compile(r"^[a-z0-9-]{2,60}$")
+FORM_CHANGED = (
+    "This programme changed since the form was shown (for example in another tab), so nothing was saved. "
+    "The form now shows the stored version; make your change again."
+)
 PROGRAMMES_PAGE = Page("programmes", "/programmes", "Programmes", "Programmes")
 INTERVIEW_LABELS = {
     "kind": "Kind",
@@ -91,6 +97,8 @@ def build_router(web: Web) -> APIRouter:
             "verify_error": None,
             "card_error": None,  # (card, message): a failed action, shown inside that card
             "focus": None,  # id of the element to focus after an HTMX swap (keyboard users stay in place)
+            "notice": None,  # a whole-page notice: standard items added, a step link dropped (#97)
+            "notice_warning": False,
             **extra,
         }
 
@@ -149,16 +157,94 @@ def build_router(web: Web) -> APIRouter:
         return render_form(request, snapshot, new_state(config), None)
 
     @router.get("/programmes/{pid}", response_class=HTMLResponse)
-    async def programme_page(request: Request, pid: str, interview: str | None = None) -> HTMLResponse:
+    async def programme_page(
+        request: Request,
+        pid: str,
+        interview: str | None = None,
+        added_steps: int | None = Query(default=None, ge=0, le=1000),
+        added_documents: int | None = Query(default=None, ge=0, le=1000),
+        notice: str | None = Query(default=None, max_length=64),
+    ) -> HTMLResponse:
         snapshot = store.load_all()
         p = find(snapshot, pid)
         form = interview_form_values(p, interview) if interview else None
-        return render_programme(request, snapshot, p, interview_form=form)
+        dropped = pending.get(notice or "")
+        if dropped is not None and dropped[0] == p.id:
+            pending.pop(notice or "", None)  # shown once
+            return render_programme(
+                request, snapshot, p, interview_form=form, notice=dropped[1], notice_warning=True
+            )
+        return render_programme(
+            request, snapshot, p, interview_form=form, notice=added_notice(added_steps, added_documents)
+        )
+
+    # ---- standard steps and documents (DECISIONS #97) -------------------------------------------------
+
+    def added_notice(steps: int | None, documents: int | None) -> str | None:
+        """What the programme page says after "Add ticked items" (counts from the redirect)."""
+        if steps is None and documents is None:
+            return None
+        parts = [
+            f"{n} {noun}{'s' if n != 1 else ''}"
+            for n, noun in ((steps or 0, "step"), (documents or 0, "document"))
+            if n
+        ]
+        if not parts:
+            return "Nothing was added: every ticked item is already on this programme."
+        return "Added " + " and ".join(parts) + "."
+
+    def render_standard(
+        request: Request, snapshot: Snapshot, p: Programme, status: int = 200, error: str | None = None
+    ) -> HTMLResponse:
+        proposals = standard_items.propose(p, config.standard_items)
+        page = Page(
+            "programmes", f"/programmes/{p.id}/standard", "Programmes", "Add standard steps and documents"
+        )
+        return web.render(
+            request,
+            "pages/programme_standard.html",
+            page,
+            snapshot,
+            status_code=status,
+            p=p,
+            new=[x for x in proposals if x.existing is None],
+            there=[x for x in proposals if x.existing is not None],
+            error=error,
+        )
+
+    @router.get("/programmes/{pid}/standard", response_class=HTMLResponse)
+    async def standard_preview(request: Request, pid: str) -> HTMLResponse:
+        """The preview: every new standard item ticked, the ones already there listed; nothing written."""
+        snapshot = store.load_all()
+        return render_standard(request, snapshot, find(snapshot, pid))
+
+    @router.post("/programmes/{pid}/standard", response_class=HTMLResponse)
+    async def standard_save(request: Request, pid: str) -> Response:
+        """Add the ticked items that are still new, worked out again from the file (never from the form's
+        labels), through the store; refused with nothing written for an unknown key or nothing ticked."""
+        form = await request.form()
+        keys = {str(v) for v in form.getlist("add")}
+        snapshot = store.load_all()
+        p = find(snapshot, pid)
+        if not keys:
+            return render_standard(request, snapshot, p, 409, "Nothing was saved: Tick at least one item.")
+        try:
+            updated, steps, documents = standard_items.apply(p, keys, config.standard_items)
+        except standard_items.UnknownItem as err:
+            return render_standard(request, snapshot, p, 409, f"Nothing was saved: {err}.")
+        if (steps or documents) and (error := try_save(updated)) is not None:
+            return render_standard(request, store.load_all(), p, 409, f"Nothing was saved: {error}.")
+        return see_other(f"/programmes/{p.id}?added_steps={len(steps)}&added_documents={len(documents)}")
 
     # ---- add / edit ------------------------------------------------------------------------------
 
     def render_form(
-        request: Request, snapshot: Snapshot, state: FormState, existing: Programme | None
+        request: Request,
+        snapshot: Snapshot,
+        state: FormState,
+        existing: Programme | None,
+        digest: str = "",
+        status: int = 200,
     ) -> HTMLResponse:
         if existing is None:
             page = Page("programmes", "/programmes/new", "Programmes", "Add programme")
@@ -179,36 +265,65 @@ def build_router(web: Web) -> APIRouter:
             groups=GROUPS,
             reasons=VERIFICATION_REASONS,
             config_assumed_time=config.time.assumed_deadline_time,
+            digest=digest,
+            status_code=status,
         )
 
     @router.get("/programmes/{pid}/edit", response_class=HTMLResponse)
     async def edit_form(request: Request, pid: str) -> HTMLResponse:
         snapshot = store.load_all()
         p = find(snapshot, pid)
-        return render_form(request, snapshot, state_from_programme(p), p)
+        return render_form(request, snapshot, state_from_programme(p), p, store.programme_digest(p.id))
+
+    # one-time page notices after a redirect (post/redirect/get), keyed by a random token; in memory only
+    # (a single-user local app: a restart just drops an unread notice; data-integrity r11 F1)
+    pending: dict[str, tuple[str, str]] = {}
+
+    def remember_notice(pid: str, text: str) -> str:
+        while len(pending) >= 32:
+            pending.pop(next(iter(pending)))
+        token = secrets.token_urlsafe(9)
+        pending[token] = (pid, text)
+        return token
 
     async def submit(request: Request, existing: Programme | None) -> Response:
         snapshot = store.load_all()
-        state, add = state_from_form(await request.form())
+        form = await request.form()
+        state, add = state_from_form(form)
+        digest = str(form.get("digest", ""))
         if add:  # "Add … row": show the form again with one more row; nothing is saved
-            return render_form(request, snapshot, state, existing)
+            return render_form(request, snapshot, state, existing, digest)
+        if existing is not None and digest != store.programme_digest(existing.id):
+            # the file changed since this form was shown (another tab added standard items, a toggle, a
+            # reload re-posting an old form): saving would rebuild steps and documents from stale rows and
+            # drop what was added since (data-integrity r11 F1). Refused like re-research's apply; the form
+            # shows the stored version.
+            current = find(snapshot, existing.id)
+            fresh = state_from_programme(current)
+            fresh.errors = [("file", FORM_CHANGED)]
+            return render_form(request, snapshot, fresh, current, store.programme_digest(current.id), 409)
         taken = {p.id for p in snapshot.programmes} | {
             e.path.removeprefix("programmes/").removesuffix(".yaml") for e in snapshot.errors
         }
         programme, errors = build_programme(state, existing, taken, config)
         if programme is None:
             state.errors = errors
-            return render_form(request, snapshot, state, existing)
+            return render_form(request, snapshot, state, existing, digest)
         if existing is None and (store.data_dir / "programmes" / f"{programme.id}.yaml").exists():
             state.errors = [("id", f"a programme file {programme.id}.yaml already exists; choose another")]
-            return render_form(request, snapshot, state, existing)
+            return render_form(request, snapshot, state, existing, digest)
         try:
             store.save_programme(programme)
         except DataError as err:
             state.errors = [
                 (err.field or "file", f"{err.path} {err.message}")
             ]  # header says "Nothing was saved"
-            return render_form(request, snapshot, state, existing)
+            return render_form(request, snapshot, state, existing, digest)
+        if existing is not None and (lost := standard_items.dropped_links(existing, programme)):
+            # a step lost its link with the requirement removed in this edit: said, never silent (#97); shown
+            # after a redirect, so a reload never posts the form again (data-integrity r11 F1)
+            token = remember_notice(programme.id, "; ".join(lost) + ".")
+            return see_other(f"/programmes/{programme.id}?notice={token}")
         return see_other(f"/programmes/{programme.id}")
 
     @router.post("/programmes")
